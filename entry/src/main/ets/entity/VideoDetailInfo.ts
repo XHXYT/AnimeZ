@@ -9,7 +9,7 @@ export default interface VideoDetailInfo extends VideoInfo {
     /**
      * 封面链接
      */
-    coverUrl?: string
+    coverUrl: string
     /**
      * 视频描述
      */
@@ -25,10 +25,21 @@ export default interface VideoDetailInfo extends VideoInfo {
     /**
      * 播放列表
      */
-    episodes?: EpisodeList[];
+    episodes: EpisodeList[];
     /**
      * 推荐视频
      */
-    recommends?: VideoInfo[];
+    recommends: VideoInfo[];
 
+}
+
+/**
+ * 路由时的视频信息
+ */
+export interface VideoNavigateInfo {
+    id: number | null, // 新增时 id 设置为 null ，可实现 id 自增
+    url: string,
+    sourceKey: string,
+    title: string,
+    cover: string
 }

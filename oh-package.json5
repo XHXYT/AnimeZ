@@ -3,9 +3,13 @@
   "devDependencies": {
     "@ohos/hypium": "1.0.6"
   },
+  "modelVersion": "5.0.2",
   "name": "animez",
   "description": "example description",
   "repository": {},
   "version": "1.0.1",
-  "dependencies": {}
+  "dynamicDependencies": {},
+  "dependencies": {
+    "@ohos/ijkplayer": "^2.0.5"
+  }
 }

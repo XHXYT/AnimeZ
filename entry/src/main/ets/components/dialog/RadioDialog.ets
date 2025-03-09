@@ -1,15 +1,13 @@
-import { getTheme } from '../../utils/Themes';
 import DataStore from '../../utils/DataStore';
 
 @CustomDialog
 export struct RadioDialog {
-  @StorageLink('theme') theme: number = 0
   @State checkIndex: number = 0
   private controller: CustomDialogController
-  private title: string
-  private prefKey: string
-  private values: string[]
-  private onSelect: (index) => void
+  private title: ResourceStr = ''
+  private prefKey: string = ''
+  private values: string[] = []
+  private onSelect: (index: number) => void = (index: number) => {}
 
   aboutToAppear() {
     this.checkIndex = DataStore.getInt(this.prefKey, 0)
@@ -19,14 +17,14 @@ export struct RadioDialog {
     Column() {
       Text(this.title)
         .fontSize(18)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .fontWeight(FontWeight.Medium)
         .margin({ left: 16, top: 16 })
         .alignSelf(ItemAlign.Start)
 
       Column() {
 
-        ForEach(this.values, (item, i) => {
+        ForEach(this.values, (item: string, i) => {
           Row() {
             Radio({ value: item, group: 'radioGroup' })
               .checked(this.checkIndex === i)
@@ -39,7 +37,7 @@ export struct RadioDialog {
                 }
               })
             Text(item).fontSize(14)
-              .fontColor(getTheme(this.theme).color_text_major)
+              .fontColor($r('app.color.color_text_major'))
           }
           .width('100%')
           .padding({ top: 8, bottom: 8 })
@@ -56,7 +54,7 @@ export struct RadioDialog {
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
           .fontSize(14)
-          .fontColor(getTheme(this.theme).color_text_normal)
+          .fontColor($r('app.color.color_text_normal'))
           .onClick(() => {
             this.controller.close();
           })
@@ -79,7 +77,7 @@ export struct RadioDialog {
       .height(46)
       .width('100%')
     }
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor($r('app.color.background_color'))
     .borderRadius(16)
     .width('80%')
   }

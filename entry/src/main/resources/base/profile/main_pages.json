@@ -1,15 +1,5 @@
 {
   "src": [
-    "pages/Index",
-    "pages/VideoDetailPage",
-    "pages/SearchPage",
-    "pages/SettingsPage",
-    "pages/AboutMePage",
-    "pages/AppInfoPage",
-    "pages/VideoHistoryPage",
-    "pages/VideoCollectionPage",
-    "pages/DownloadManagerPage",
-    "pages/LocalVideoPlayerPage",
-    "pages/WebPage"
+    "pages/Index"
   ]
 }

@@ -3,7 +3,7 @@ import http from '@ohos.net.http';
 import { parse } from '../thirdpart/htmlsoup';
 import { AnyNode } from '../thirdpart/htmlsoup/parse';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36 Edg/94.0.992.50'
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36 HBPC/12.1.4.300'
 
 /**
  * 网络工具类

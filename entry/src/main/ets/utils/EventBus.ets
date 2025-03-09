@@ -27,7 +27,7 @@ export class EventImpl implements Event {
     emitter.once({ eventId: this.eventId, priority: priority }, callback);
   }
 
-  emit(priority: emitter.EventPriority = emitter.EventPriority.LOW, data: emitter.EventData = undefined): void {
+  emit(priority: emitter.EventPriority = emitter.EventPriority.LOW, data: emitter.EventData): void {
     if (data) {
       emitter.emit({ eventId: this.eventId, priority: priority }, data)
     } else {

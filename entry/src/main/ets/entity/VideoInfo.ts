@@ -11,7 +11,7 @@ export default interface VideoInfo {
     /**
      * 视频标题
      */
-    title?: string;
+    title: string;
     /**
      * 图片链接
      */

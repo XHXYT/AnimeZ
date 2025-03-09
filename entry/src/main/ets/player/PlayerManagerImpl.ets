@@ -1,5 +1,5 @@
 import media from '@ohos.multimedia.media';
-import IPlayer from './IPlayer';
+import { IPlayer, nullIPlayer } from './IPlayer';
 import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from './IPlayerManager';
 import window from '@ohos.window';
 import EpisodeInfo from '../entity/EpisodeInfo';
@@ -9,7 +9,7 @@ import Logger from '../utils/Logger';
  * 播放器管理
  */
 export default class PlayerManagerImpl implements IPlayerManager {
-  private url: string
+  private url: string = ''
 //  private episode: EpisodeInfo
   private episodeList: EpisodeInfo[] = []
   private episodeIndex: number = 0
@@ -21,7 +21,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private currentTime: number = 0
   private videoSpeed: number = PlaybackSpeed.Speed_Forward_1_00_X
 
-  private player: IPlayer;
+  private player: IPlayer = new nullIPlayer()
 
   private playAfterInit: boolean = false
 
@@ -54,7 +54,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
 //      l.onEpisodeChanged(episode)
 //    })
     Logger.e(this, '')
-    await this.setPlayerUrl(episode.videoUrl)
+    await this.setPlayerUrl(episode.videoUrl as string)
     await this.start()
   }
 
@@ -136,7 +136,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
         await this.player.setDataSource(this.url)
       } else {
         await this.player.setSpeed(this.videoSpeed)
-        await this.player.seekTo(this.currentTime)
+        await this.player.seekTo(this.currentTime.toString())
         await this.player.start()
       }
     } else {
@@ -161,15 +161,15 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
   }
 
-  async seekTo(value: number) {
+  async seekTo(value: string) {
     if (this.player) {
       await this.player.seekTo(value)
       this.notifyBuffering(media.BufferingInfoType.BUFFERING_START, 0)
-      this.notifyCurrentTime(value)
+      this.notifyCurrentTime(Number(value))
     }
   }
 
-  async setSpeed(speed: PlaybackSpeed) {
+  async setSpeed(speed: media.PlaybackSpeed) {
     if (this.videoSpeed == speed) {
       return
     }
@@ -182,7 +182,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     })
   }
 
-  getSpeed(): PlaybackSpeed {
+  getSpeed(): media.PlaybackSpeed {
     return this.videoSpeed
   }
 

@@ -1,4 +1,4 @@
-import IPlayer from './IPlayer';
+import { IPlayer } from './IPlayer';
 import Logger from '../utils/Logger';
 /*
  * Copyright (C) 2022 Huawei Device Co., Ltd.
@@ -14,7 +14,7 @@ import Logger from '../utils/Logger';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { OnPreparedListener } from "@ohos/ijkplayer";
+import { AudioInterrupt, InterruptEvent, OnPreparedListener } from "@ohos/ijkplayer";
 import { OnCompletionListener } from "@ohos/ijkplayer";
 import { OnVideoSizeChangedListener } from "@ohos/ijkplayer";
 import { OnBufferingUpdateListener } from "@ohos/ijkplayer";
@@ -26,12 +26,14 @@ import { MessageType } from "@ohos/ijkplayer";
 import { PropertiesType } from "@ohos/ijkplayer";
 import { LogUtils } from "@ohos/ijkplayer";
 import window from '@ohos.window';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { IjkPlayerNapi } from '@ohos/ijkplayer/src/main/ets/ijkplayer/utils/IjkPlayerNapi';
 
 /**
- * 将@ohos/ijkplayer中IjkMediaPlayer源码copy过来并去除原始代码中的单例
+ * 将@ohos/ijkplayer中IjkMediaPlayer源码copy过来并去除原始代码中的单例及ijkplayer_audio_napi相关
  */
 export class IjkMediaPlayer {
-
+  private static instance: IjkMediaPlayer;
   public static OPT_CATEGORY_FORMAT: string = "1";
   public static OPT_CATEGORY_CODEC: string = "2";
   public static OPT_CATEGORY_SWS: string = "3";
@@ -40,94 +42,142 @@ export class IjkMediaPlayer {
   private mVideoHeight: number = 0;
   private mVideoSarNum: number = 0;
   private mVideoSarDen: number = 0;
-  private mOnVideoSizeChangedListener: OnVideoSizeChangedListener;
-  private mOnPreparedListener: OnPreparedListener;
-  private mOnCompletionListener: OnCompletionListener;
-  private mOnBufferingUpdateListener: OnBufferingUpdateListener;
-  private mOnErrorListener: OnErrorListener;
-  private mOnInfoListener: OnInfoListener;
-  private mOnSeekCompleteListener: OnSeekCompleteListener;
-  private mOnTimedTextListener: OnTimedTextListener;
-  private ijkplayer_napi = null;
+  private mOnVideoSizeChangedListener: OnVideoSizeChangedListener | null = null;
+  private mOnPreparedListener: OnPreparedListener | null = null;
+  private mOnCompletionListener: OnCompletionListener | null = null;
+  private mOnBufferingUpdateListener: OnBufferingUpdateListener | null = null;
+  private mOnErrorListener: OnErrorListener | null = null;
+  private mOnInfoListener: OnInfoListener | null = null;
+  private mOnSeekCompleteListener: OnSeekCompleteListener | null = null;
+  private mOnTimedTextListener: OnTimedTextListener | null = null;
+  private ijkplayer_napi: IjkPlayerNapi | null = null;
+  private id: string = '';
+  private callback: Callback<InterruptEvent> | null = null;
+
+  public constructor(id?: string) {
+    if (id) {
+      this.id = id;
+    }
+  };
+
+  public static getInstance(): IjkMediaPlayer {
+    if (!IjkMediaPlayer.instance) {
+      IjkMediaPlayer.instance = new IjkMediaPlayer();
+    }
+    return IjkMediaPlayer.instance;
+  }
 
   isInit(): boolean {
     return this.ijkplayer_napi ? true : false
   }
 
-  setContext(context: object) {
-    this.ijkplayer_napi = context;
+  setContext(context: IjkPlayerNapi, id?: string): void {
+    this.ijkplayer_napi = context
+    if(id) {
+      this.id = id
+    }
   }
 
-  setDebug(open: boolean) {
+  setAudioId(id: string) {
+    // this.ijkplayer_audio_napi = new newIjkPlayerAudio(id, false)
+    this.id = id
+  }
+
+  setDebug(open: boolean): void {
     LogUtils.getInstance().setLogSwitch(open);
-    if (open) {
-      this.ijkplayer_napi._nativeOpenlog();
+    if (open && !!this.ijkplayer_napi) {
+      this.ijkplayer_napi._nativeOpenlog(this.id);
     }
   }
 
-  setDataSource(url: string) {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._setDataSource(url);
+  setDataSource(url: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setDataSource(this.id, url)
     }
   }
 
-  setOption(category: string, key: string, value: string) {
-    this.ijkplayer_napi._setOption(category, key, value);
-  }
-
-  setOptionLong(category: string, key: string, value: string) {
-    this.ijkplayer_napi._setOptionLong(category, key, value);
-  }
-
-  prepareAsync() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._prepareAsync();
+  setDataSourceHeader(headers: Map<string, string>): void {
+    if (headers) {
+      let builder: string = '';
+      headers.forEach((value, key) => {
+        let param = key.trim() + ":";
+        if (value)
+          param += value.trim();
+        param += "\r\n";
+        builder += param;
+      });
+      if (!!this.ijkplayer_napi) {
+        this.ijkplayer_napi._setOption(this.id, IjkMediaPlayer.OPT_CATEGORY_FORMAT, "headers", builder);
+        this.ijkplayer_napi._setOption(this.id, IjkMediaPlayer.OPT_CATEGORY_FORMAT, "protocol_whitelist", "async,cache,crypto,file,http,https,ijkhttphook,ijkinject,ijklivehook,ijklongurl,ijksegment,ijktcphook,pipe,rtp,tcp,tls,udp,ijkurlhook,data");
+      }
     }
   }
 
-  start() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._start();
+  setOption(category: string, key: string, value: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setOption(this.id, category, key, value);
     }
   }
 
-  stop() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._stop();
+  setOptionLong(category: string, key: string, value: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setOptionLong(this.id, category, key, value);
     }
   }
 
-  pause() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._pause();
+  prepareAsync(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._prepareAsync(this.id);
     }
   }
 
-  reset() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._reset();
+  start(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._start(this.id);
     }
   }
 
-  release() {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._release();
+  stop(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._stop(this.id);
     }
   }
 
-  seekTo(msec: number) {
-    if (this.ijkplayer_napi) {
-      this.ijkplayer_napi._seekTo('' + msec);
+  pause(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._pause(this.id);
     }
   }
 
-  setScreenOnWhilePlaying(on: boolean) {
-    window.getTopWindow(getContext(this), (err, data) => {
-      data.setKeepScreenOn(on);
+  reset(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._reset(this.id);
+    }
+  }
+
+  release(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._release(this.id);
+    }
+  }
+
+  seekTo(msec: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._seekTo(this.id, msec);
+    }
+  }
+
+  setScreenOnWhilePlaying(on: boolean): void {
+    window.getLastWindow(getContext(this)).then((data: window.Window) => {
+      if (data) {
+        data.setWindowKeepScreenOn(on);
+      }
+    }).catch((err: BusinessError) => {
+      LogUtils.getInstance().LOGI(`getLastWindow error: ${JSON.stringify(err)}`);
     });
   }
 
-  setSpeed(speed: string) {
+  setSpeed(speed: string): void {
     this._setPropertyFloat(PropertiesType.FFP_PROP_FLOAT_PLAYBACK_RATE, speed);
   }
 
@@ -136,45 +186,55 @@ export class IjkMediaPlayer {
   }
 
   isPlaying(): boolean {
-    if (this.ijkplayer_napi) {
-      return this.ijkplayer_napi._isPlaying();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._isPlaying(this.id);
     }
-    return false;
+    else {
+      return false
+    }
   }
 
-  setOnVideoSizeChangedListener(listener: OnVideoSizeChangedListener) {
+  public on(type: AudioInterrupt,  callback: Callback<InterruptEvent>) : void {
+    this.callback= callback;
+  }
+
+  public off(type: AudioInterrupt): void {
+    this.callback = null;
+  }
+
+  setOnVideoSizeChangedListener(listener: OnVideoSizeChangedListener): void {
     this.mOnVideoSizeChangedListener = listener;
   }
 
-  setOnPreparedListener(listener: OnPreparedListener) {
+  setOnPreparedListener(listener: OnPreparedListener): void {
     this.mOnPreparedListener = listener;
   }
 
-  setOnCompletionListener(listener: OnCompletionListener) {
+  setOnCompletionListener(listener: OnCompletionListener): void {
     this.mOnCompletionListener = listener;
   }
 
-  setOnInfoListener(listener: OnInfoListener) {
+  setOnInfoListener(listener: OnInfoListener): void {
     this.mOnInfoListener = listener;
   }
 
-  setOnErrorListener(listener: OnErrorListener) {
+  setOnErrorListener(listener: OnErrorListener): void {
     this.mOnErrorListener = listener;
   }
 
-  setOnBufferingUpdateListener(listener: OnBufferingUpdateListener) {
+  setOnBufferingUpdateListener(listener: OnBufferingUpdateListener): void {
     this.mOnBufferingUpdateListener = listener;
   }
 
-  setOnSeekCompleteListener(listener: OnSeekCompleteListener) {
+  setOnSeekCompleteListener(listener: OnSeekCompleteListener): void {
     this.mOnSeekCompleteListener = listener;
   }
 
-  setOnTimedTextListener(listener: OnTimedTextListener) {
+  setOnTimedTextListener(listener: OnTimedTextListener): void {
     this.mOnTimedTextListener = listener;
   }
 
-  setMessageListener() {
+  setMessageListener(): void {
     LogUtils.getInstance().LOGI("setMessageListener start");
     let that = this;
     let onVideoSizeChangedListener = this.mOnVideoSizeChangedListener;
@@ -185,12 +245,12 @@ export class IjkMediaPlayer {
     let onInfoListener = this.mOnInfoListener;
     let onSeekCompleteListener = this.mOnSeekCompleteListener;
     let onTimedTextListener = this.mOnTimedTextListener;
-    let messageCallBack = function (what, arg1, arg2, obj) {
+    let messageCallBack = (what: number, arg1: number, arg2: number, obj: string) => {
       LogUtils.getInstance()
         .LOGI("setMessageListener callback what:" + what + ", arg1:" + arg1 + ",arg2:" + arg2 + ",obj:" + obj);
-      Logger.e(this, "setMessageListener callback what:" + what + ", arg1:" + arg1 + ",arg2:" + arg2 + ",obj:" + obj)
       if (what == MessageType.MEDIA_PREPARED) {
-        onPreparedListener.onPrepared();
+        if (onPreparedListener !== null)
+          onPreparedListener.onPrepared();
       }
       if (what == MessageType.MEDIA_SET_VIDEO_SAR) {
         if (arg1 != undefined && arg2 != undefined) {
@@ -210,14 +270,18 @@ export class IjkMediaPlayer {
         onCompletionListener.onCompletion();
       }
 
-      if (what == MessageType.MEDIA_BUFFERING_UPDATE && onBufferingUpdateListener != null) {
+      if ((!!that.ijkplayer_napi && what == MessageType.MEDIA_BUFFERING_UPDATE && onBufferingUpdateListener != null) ||
+        (what == MessageType.MEDIA_BUFFERING_UPDATE && onBufferingUpdateListener != null)) {
         let bufferPosition = arg1;
         if (bufferPosition < 0) {
           bufferPosition = 0;
         }
         let percent = 0;
-        let duration = that.ijkplayer_napi._getDuration();
-        if (duration > 0) {
+        let duration: number | undefined = 0
+        if (!!this.ijkplayer_napi) {
+          duration = that.ijkplayer_napi?._getDuration(this.id);
+        }
+        if (typeof duration === 'number' && duration > 0) {
           percent = bufferPosition * 100 / duration;
         }
         if (percent >= 100) {
@@ -238,8 +302,19 @@ export class IjkMediaPlayer {
       if (what == MessageType.MEDIA_TIMED_TEXT && onTimedTextListener != null) {
         onTimedTextListener.onTimedText(obj);
       }
+      if (what == MessageType.MEDIA_AUDIO_INTERRUPT && onCompletionListener != null) {
+        if (this.callback){
+          let event: InterruptEvent = {
+            forceType: arg1,
+            hintType: arg2,
+          }
+          this.callback(event);
+        }
+      }
     };
-    this.ijkplayer_napi._setMessageListener(messageCallBack);
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setMessageListener(this.id, messageCallBack);
+    }
   }
 
   getVideoWidth(): number {
@@ -259,58 +334,96 @@ export class IjkMediaPlayer {
   }
 
   getDuration(): number {
-    return this.ijkplayer_napi._getDuration();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getDuration(this.id);
+    }
+    else {
+      return 0
+    }
   }
 
   getCurrentPosition(): number {
-    return this.ijkplayer_napi._getCurrentPosition();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getCurrentPosition(this.id);
+    }
+    else {
+      return 0
+    }
   }
 
   getAudioSessionId(): number {
-    return this.ijkplayer_napi._getAudioSessionId();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getAudioSessionId(this.id);
+    }
+    else {
+      return 0
+    }
   }
 
-  private _setPropertyFloat(property: string, value: string) {
-    this.ijkplayer_napi._setPropertyFloat(property, value);
+  private _setPropertyFloat(property: string, value: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setPropertyFloat(this.id, property, value);
+    }
   }
 
   private _getPropertyFloat(property: string, value: string): number {
-    return this.ijkplayer_napi._getPropertyFloat(property, value);
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getPropertyFloat(this.id, property, value);
+    }
+    else {
+      return 0
+    }
   }
 
-  private _setPropertyLong(property: string, value: string) {
-    this.ijkplayer_napi._setPropertyLong(property, value);
+  private _setPropertyLong(property: string, value: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setPropertyLong(this.id, property, value);
+    }
   }
 
   private _getPropertyLong(property: string, value: string): number {
-    return this.ijkplayer_napi._getPropertyLong(property, value);
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getPropertyLong(this.id, property, value);
+    }
+    else {
+      return 0
+    }
   }
 
-  setVolume(leftVolume: string, rightVolume: string) {
-    this.ijkplayer_napi._setVolume(leftVolume, rightVolume);
+  setVolume(leftVolume: string, rightVolume: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setVolume(this.id, leftVolume, rightVolume);
+    }
   }
 
-  setLoopCount(looping: boolean) {
+  setLoopCount(looping: boolean): void {
     let loopCount = looping ? "0" : "1";
     this.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "loop", loopCount);
-    this.ijkplayer_napi._setLoopCount(loopCount);
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setLoopCount(this.id, loopCount);
+    }
   }
 
   isLooping(): boolean {
-    let loopCount = this.ijkplayer_napi._getLoopCount();
+    let loopCount: number = 0
+    if (!!this.ijkplayer_napi) {
+      loopCount = this.ijkplayer_napi._getLoopCount(this.id);
+    }
     return loopCount != 1;
   }
 
-  selectTrack(track: string) {
+  selectTrack(track: string): void {
     this._setStreamSelected(track, "true");
   }
 
-  deselectTrack(track: string) {
+  deselectTrack(track: string): void {
     this._setStreamSelected(track, "false");
   }
 
-  private _setStreamSelected(stream: string, select: string) {
-    this.ijkplayer_napi._setStreamSelected(stream, select);
+  private _setStreamSelected(stream: string, select: string): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._setStreamSelected(this.id, stream, select);
+    }
   }
 
   getVideoDecoder(): number {
@@ -406,27 +519,48 @@ export class IjkMediaPlayer {
   }
 
   private _getVideoCodecInfo(): string {
-    return this.ijkplayer_napi._getVideoCodecInfo();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getVideoCodecInfo(this.id);
+    }
+    else {
+      return ''
+    }
   }
 
   private _getAudioCodecInfo(): string {
-    return this.ijkplayer_napi._getAudioCodecInfo();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getAudioCodecInfo(this.id);
+    }else {
+      return ''
+    }
   }
 
   private _getMediaMeta(): string {
-    return this.ijkplayer_napi._getMediaMeta();
+    if (!!this.ijkplayer_napi) {
+      return this.ijkplayer_napi._getMediaMeta(this.id);
+    } else {
+      return ''
+    }
   }
 
   getMediaInfo(): object {
+    interface mediaInfoType {
+      audioDecoder: string
+      videoDecoder: string
+      meta: string
+    }
+
     let mAudioDecoder = this._getAudioCodecInfo();
     let mVideoDecoder = this._getVideoCodecInfo();
     let mMeta = this._getMediaMeta();
-    let mediaInfo = { audioDecoder: mAudioDecoder, videoDecoder: mVideoDecoder, meta: mMeta };
+    let mediaInfo: mediaInfoType = { audioDecoder: mAudioDecoder, videoDecoder: mVideoDecoder, meta: mMeta };
     return mediaInfo;
   }
 
-  native_setup() {
-    this.ijkplayer_napi._native_setup();
+  native_setup(): void {
+    if (!!this.ijkplayer_napi) {
+      this.ijkplayer_napi._native_setup(this.id);
+    }
   }
 }
 

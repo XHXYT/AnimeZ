@@ -1,30 +1,36 @@
 import IPlayerManager, { VideoFit } from '../player/IPlayerManager';
 import PlayerManagerImpl from '../player/PlayerManagerImpl';
 import EpisodeInfo from '../entity/EpisodeInfo';
-import { getTheme } from '../utils/Themes';
 import { IjkVideoPlayer } from '../player/IjkVideoPlayer';
 import Logger from '../utils/Logger';
 import router from '@ohos.router';
+import { media } from '@kit.MediaKit';
+
+// 系统路由
+@Builder
+export function LocalVideoPlayerPageBuilder(name: string, param: Object) {
+  LocalVideoPlayerPage()
+}
 
 /**
  * 本地视频播放页面
  * TODO 暂时只能用IjkPlayer播放本地m3u8视频，AVPlayer和Video控件目前播放不了本地缓存的m3u8
  */
-@Entry
 @Component
 struct LocalVideoPlayerPage {
-  @StorageLink('theme') theme: number = 0
   private playerManager: IPlayerManager = new PlayerManagerImpl()
 
   aboutToAppear() {
-    let episode: EpisodeInfo = router.getParams()['episode']
+    // 转换成Record类型，用来访问对象的属性
+    let params = router.getParams() as Record<string, EpisodeInfo>
+    let episode: EpisodeInfo = params.episode as EpisodeInfo
     Logger.e(this, 'aboutToAppear episode=' + JSON.stringify(episode))
     this.playerManager.addListener({
       onStatusChanged: (status: number) => {
       },
       onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
       },
-      onVideoSpeedChanged: (videoSpeed: PlaybackSpeed) => {
+      onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
       },
       onVideoFitChanged: (videoFit: VideoFit) => {
       },
@@ -70,9 +76,9 @@ struct LocalVideoPlayerPage {
 
   build() {
     Stack() {
-      IjkVideoPlayer({ playerManager: this.playerManager, immersionStatusBar: false })
+      IjkVideoPlayer({ playerManager: this.playerManager })
     }
-    .backgroundColor(getTheme(this.theme).background_color_accent)
+    .backgroundColor($r('app.color.background_color_accent'))
     .height('100%')
     .width('100%')
   }

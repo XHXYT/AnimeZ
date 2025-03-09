@@ -1,16 +1,15 @@
-import { getTheme } from '../../utils/Themes';
 import DataStore from '../../utils/DataStore';
 
 const KEY = 'key_max_downloading_count'
 
 @CustomDialog
 export struct SliderDialog {
-  @StorageLink('theme') theme: number = 0
+  @StorageProp('currentColorMode') currentMode: number = 1
   @State value: number = 1
   private controller: CustomDialogController
 
-  select: (value: number) => void
-  onClose: () => void;
+  select: (value: number) => void = (value: number) => {}
+  onClose: () => void = () => {}
 
   aboutToAppear() {
     this.value = DataStore.getInt(KEY, 3)
@@ -20,7 +19,7 @@ export struct SliderDialog {
     Column() {
       Text('最大下载数')
         .fontSize(18)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .fontWeight(FontWeight.Medium)
         .margin({ left: 16, top: 16 })
         .alignSelf(ItemAlign.Start)
@@ -39,7 +38,7 @@ export struct SliderDialog {
           })
         Text(this.value.toFixed(0))
           .fontSize(14)
-          .fontColor(getTheme(this.theme).color_text_minor)
+          .fontColor($r('app.color.color_text_minor'))
           .margin({right: 6})
       }
       .margin(16)
@@ -50,7 +49,7 @@ export struct SliderDialog {
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
           .fontSize(14)
-          .fontColor(getTheme(this.theme).color_text_normal)
+          .fontColor($r('app.color.color_text_normal'))
           .onClick(() => {
 //            this.controller.close(); // 关闭弹窗
             this.onClose()
@@ -76,7 +75,7 @@ export struct SliderDialog {
       .height(46)
       .width('100%')
     }
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor($r('app.color.background_color'))
     .borderRadius(16)
     .width('80%')
   }

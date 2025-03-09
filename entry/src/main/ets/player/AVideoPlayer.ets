@@ -1,20 +1,187 @@
-import IPlayer from './IPlayer';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
+import { IPlayer } from './IPlayer';
+import IPlayerManager, { NullPlayerManager, PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
 import media from '@ohos.multimedia.media';
 import { VideoPlayerController } from './VideoPlayerController';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import DisplayUtils from '../utils/DisplayUtils';
-import ImmersionBarSpace from '../components/ImmersionBarSpace';
 import Logger from '../utils/Logger';
 
 const DEFAULT_ASPECT = 1.9
+
+/**
+ * avPlayer类对象
+ */
+class thePlayerImpl implements IPlayer {
+  private avPlayer: media.AVPlayer
+  constructor(avPlayer: media.AVPlayer) {
+    this.avPlayer = avPlayer
+  }
+
+  async setDataSource(url: string): Promise<void> {
+    if (this.avPlayer.url === url) return;
+    Logger.e(this, 'setDataSource url=' + url);
+    this.avPlayer.url = url;
+  }
+
+  async start(): Promise<void> {
+    Logger.e(this, 'setDataSource start');
+    return this.avPlayer.play();
+  }
+
+  async prepare(): Promise<void> {
+    Logger.e('prepare');
+    return this.avPlayer.prepare();
+  }
+
+  async pause(): Promise<void> {
+    Logger.e('pause');
+    return this.avPlayer.pause();
+  }
+
+  async stop(): Promise<void> {
+    Logger.e('stop');
+    return this.avPlayer.stop();
+  }
+
+  async reset(): Promise<void> {
+    Logger.e('reset');
+    return this.avPlayer.reset();
+  }
+
+  async release(): Promise<void> {
+    Logger.e('release');
+    return this.avPlayer.release();
+  }
+
+  async seekTo(value: string): Promise<void> {
+    Logger.e('seekTo value=' + value);
+    return this.avPlayer.seek(Number(value));
+  }
+
+  async setSpeed(speed: media.PlaybackSpeed): Promise<void> {
+    Logger.e('setSpeed speed=' + speed);
+    return this.avPlayer.setSpeed(speed);
+  }
+
+}
+
+/**
+ * 监视器类对象
+ */
+class PlayerListenerImpl implements PlayerListener {
+  private playerStatus: number;
+  private videoUrl: string;
+  private videoSpeed: media.PlaybackSpeed;
+  private videoAspRatio: number;
+  private originalVideoAspRatio: number;
+  private aspRatio: number;
+  private isFullScreen: boolean;
+
+  constructor(
+    playerStatus: number,
+    videoUrl: string,
+    videoSpeed: media.PlaybackSpeed,
+    videoAspRatio: number,
+    originalVideoAspRatio: number,
+    aspRatio: number,
+    isFullScreen: boolean) {
+    this.playerStatus = playerStatus;
+    this.videoUrl = videoUrl;
+    this.videoSpeed = videoSpeed;
+    this.videoAspRatio = videoAspRatio;
+    this.originalVideoAspRatio = originalVideoAspRatio;
+    this.aspRatio = aspRatio;
+    this.isFullScreen = isFullScreen;
+  }
+
+  onStatusChanged(status: number): void {
+    this.playerStatus = status;
+  }
+
+  onEpisodeChanged(episodeList: EpisodeInfo[], episodeIndex: number): void {
+    this.videoUrl = episodeList[episodeIndex].videoUrl as string
+  }
+
+  onVideoSpeedChanged(videoSpeed: media.PlaybackSpeed): void {
+    this.videoSpeed = videoSpeed;
+  }
+
+  onFullScreenChanged(isFullScreen: boolean): void {
+    this.isFullScreen = isFullScreen;
+    animateTo({
+      duration: 360,
+      curve: Curve.Smooth,
+      iterations: 1,
+      playMode: PlayMode.Normal
+    }, () => {
+      if (isFullScreen) {
+        this.aspRatio = DisplayUtils.getRealScreenHWRatio()
+      } else {
+        this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
+      }
+    })
+  }
+
+  onVideoFitChanged(videoFit: VideoFit): void {
+    switch (videoFit) {
+      case VideoFit.Contain:
+        this.videoAspRatio = this.originalVideoAspRatio;
+        break;
+      case VideoFit.Cover:
+        this.videoAspRatio = this.aspRatio;
+        break;
+      case VideoFit.Fill:
+        this.videoAspRatio = this.originalVideoAspRatio;
+        break;
+      case VideoFit.Fit_16_9:
+        this.videoAspRatio = 16 / 9;
+        break;
+      case VideoFit.Fit_4_3:
+        this.videoAspRatio = 4 / 3;
+        break;
+      case VideoFit.Fit_1_1:
+        this.videoAspRatio = 1;
+        break;
+      default:
+        this.videoAspRatio = 16 / 9; // DEFAULT_ASPECT
+        break;
+    }
+  }
+
+  onVideoSizeChange(w: number, h: number): void {
+    Logger.e(this, `onVideoSizeChange w=${w} h=${h}`);
+    this.originalVideoAspRatio = w / h;
+    animateTo({
+      duration: 360,
+      curve: Curve.Smooth,
+      iterations: 1,
+      playMode: PlayMode.Normal
+    }, () => {
+      this.videoAspRatio = w / h
+      if (this.isFullScreen) {
+        this.aspRatio = DisplayUtils.getRealScreenHWRatio()
+      } else {
+        this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
+      }
+      Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
+    })
+  }
+
+  onProgressChange(totalTime: number, currentTime: number): void {
+    // 实现进度变化处理
+  }
+
+  onBuffering(type: media.BufferingInfoType, value: number): void {
+    // 实现缓冲处理
+  }
+}
 
 /**
  * 封装media.AVPlayer
  */
 class AVPlayerWrapper {
   private readonly avPlayer: media.AVPlayer
-  private surfaceId: string
+  private surfaceId: string = ''
 
   constructor(avPlayer: media.AVPlayer) {
     this.avPlayer = avPlayer
@@ -27,47 +194,7 @@ class AVPlayerWrapper {
   }
 
   private getPlayer(): IPlayer {
-    return {
-      setDataSource: async (url: string) => {
-        if (this.avPlayer.url == url) {
-          return
-        }
-        Logger.e(this, 'setDataSource url=' + url)
-        this.avPlayer.url = url
-      },
-      start: async () => {
-        Logger.e(this, 'setDataSource start')
-        return this.avPlayer.play()
-      },
-      prepare: async () => {
-        //      this.controller.prepareAsync()
-        Logger.e(this, 'setDataSource prepare')
-        return this.avPlayer.prepare()
-      },
-      pause: async () => {
-        Logger.e(this, 'setDataSource pause')
-        return this.avPlayer.pause()
-      },
-      stop: async () => {
-        Logger.e(this, 'setDataSource stop')
-        return this.avPlayer.stop()
-      },
-      reset: async () => {
-        Logger.e(this, 'setDataSource reset')
-        return this.avPlayer.reset()
-      },
-      release: async () => {
-        Logger.e(this, 'setDataSource release')
-        return this.avPlayer.release()
-      },
-      seekTo: async (value: number) => {
-        Logger.e(this, 'setDataSource seekTo value=' + value)
-        return this.avPlayer.seek(value)
-      },
-      setSpeed: async (speed: PlaybackSpeed) => {
-        return this.setSpeed(speed)
-      }
-    }
+    return new thePlayerImpl(this.avPlayer);
   }
 
   async setSpeed(speed: PlaybackSpeed) {
@@ -167,90 +294,24 @@ export struct AVideoPlayer {
   @State playerStatus: number = PlayerStatus.IDLE
   @State isFullScreen: boolean = false
   @State videoUrl: string = ''
-  @State videoSpeed: PlaybackSpeed = PlaybackSpeed.Speed_Forward_1_00_X
+  @State videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
   private originalVideoAspRatio: number = DEFAULT_ASPECT;
   private readonly componentController: XComponentController = new XComponentController()
-  private playerManager: IPlayerManager = null
-  private immersionStatusBar: boolean = false
+  @State playerManager: IPlayerManager = new NullPlayerManager()
   private timer: number = -1;
 
   /**
    * 播放器监听回调
    */
-  private readonly playerListener: PlayerListener = {
-    onStatusChanged: (status: number) => {
-      this.playerStatus = status
-    },
-    onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
-      this.videoUrl = episodeList[episodeIndex].videoUrl
-    },
-    onVideoSpeedChanged: (videoSpeed: PlaybackSpeed) => {
-      this.videoSpeed = videoSpeed
-    },
-    onVideoFitChanged: (videoFit: VideoFit) => {
-      switch (videoFit) {
-        case VideoFit.Contain:
-          this.videoAspRatio = this.originalVideoAspRatio
-          break
-        case VideoFit.Cover:
-          this.videoAspRatio = this.aspRatio
-          break
-        case VideoFit.Fill:
-          this.videoAspRatio = this.originalVideoAspRatio
-          break
-        case VideoFit.Fit_16_9:
-          this.videoAspRatio = 16 / 9
-          break
-        case VideoFit.Fit_4_3:
-          this.videoAspRatio = 4 / 3
-          break
-        case VideoFit.Fit_1_1:
-          this.videoAspRatio = 1
-          break
-        default:
-          this.videoAspRatio = DEFAULT_ASPECT
-          break
-      }
-    },
-    onFullScreenChanged: (isFullScreen: boolean) => {
-      this.isFullScreen = isFullScreen
-      animateTo({
-        duration: 360,
-        curve: Curve.Smooth,
-        iterations: 1,
-        playMode: PlayMode.Normal
-      }, () => {
-        if (isFullScreen) {
-          this.aspRatio = DisplayUtils.getRealScreenHWRatio()
-        } else {
-          this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
-        }
-      })
-    },
-    onVideoSizeChange: (w: number, h: number) => {
-      Logger.e(this, 'onVideoSizeChange w=' + w + ' h=' + h)
-      this.originalVideoAspRatio = w / h
-      animateTo({
-        duration: 360,
-        curve: Curve.Smooth,
-        iterations: 1,
-        playMode: PlayMode.Normal
-      }, () => {
-        this.videoAspRatio = w / h
-        if (this.isFullScreen) {
-          this.aspRatio = DisplayUtils.getRealScreenHWRatio()
-        } else {
-          this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
-        }
-        Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
-      })
-    },
-    onProgressChange: (totalTime: number, currentTime: number) => {
-
-    },
-    onBuffering: (type: media.BufferingInfoType, value: number) => {
-    }
-  }
+  private readonly playerListener = new PlayerListenerImpl(
+    this.playerStatus,
+    this.videoUrl,
+    this.videoSpeed,
+    this.videoAspRatio,
+    this.originalVideoAspRatio,
+    this.aspRatio,
+    this.isFullScreen
+  );
 
   aboutToAppear() {
     if (this.playerManager) {
@@ -268,11 +329,9 @@ export struct AVideoPlayer {
     }
   }
 
+
   build() {
     Column() {
-      if (!this.isFullScreen && this.immersionStatusBar) {
-        ImmersionBarSpace().backgroundColor(Color.Black)
-      }
       Stack({ alignContent: Alignment.Center }) {
         XComponent({
           id: '',

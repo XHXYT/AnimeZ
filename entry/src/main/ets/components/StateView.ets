@@ -1,4 +1,4 @@
-import { getTheme } from '../utils/Themes';
+
 export enum ViewState {
 
   LOADING = 0,
@@ -11,14 +11,16 @@ export enum ViewState {
 
 @Component
 export default struct StateView {
-  @StorageLink('theme') theme: number = 0
+  // @Consume('StateView') state: number
   @Link state: number
   @Link errorMessage: string
-  @BuilderParam content: () => any;
-  //  @BuilderParam loading?: () => any;
-  //  @BuilderParam empty?: () => any;
-  @BuilderParam custom: (key) => any;
+  @BuilderParam content: () => void;
+  @BuilderParam custom: (key: string) => void;
   onRetry?: () => boolean;
+
+  aboutToAppear(): void {
+    console.log('stateview ', this.state)
+  }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
@@ -47,7 +49,7 @@ export default struct StateView {
         }
       }
     }
-    .backgroundColor(getTheme(this.theme).background_color_accent)
+    .backgroundColor($r('app.color.background_color_accent'))
     .width('100%')
     .height('100%')
   }
@@ -57,14 +59,14 @@ export default struct StateView {
       Image(src)
         .width(120)
           // TODO 暗色模式下变暗
-//        .brightness(getTheme(this.theme).isDarkTheme ? 0.8 : 1)
+//        .brightness(getTheme(this.currentMode).isDarkTheme ? 0.8 : 1)
         .aspectRatio(1)
         .objectFit(ImageFit.Contain)
       if (message) {
         Text(message)
           .fontSize(12)
           .constraintSize({ maxWidth: '80%' })
-          .fontColor(getTheme(this.theme).color_text_minor)
+          .fontColor($r('app.color.color_text_minor'))
           .margin({ top: 12 })
           .fontWeight(FontWeight.Normal)
       }

@@ -1,13 +1,18 @@
-import { getTheme } from '../utils/Themes';
 import promptAction from '@ohos.promptAction';
 import router from '@ohos.router';
 import VideoInfo from '../entity/VideoInfo';
+import { ConfigurationConstant } from '@kit.AbilityKit';
+import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 
+/**
+ * 主页视频列表
+ */
 @Component
 export struct VideoList {
-  @StorageLink('theme') theme: number = 0
   videoList: VideoInfo[] = []
-  private scrollable: boolean = true
+  @State scrollable: boolean = true
+  @Consume('pageStack') pageStack: NavPathStack
+  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   build() {
     Column() {
@@ -58,28 +63,27 @@ export struct VideoList {
         .height(40)
         .fontSize(12)
         .maxLines(2)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .padding({ left: 2, right: 2 })
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
         .fontWeight(500)
     }
     .borderRadius(12)
-//    .borderWidth(2)
-//    .borderColor(getTheme(this.theme).background_color_dark)
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor($r('app.color.background_color'))
     .aspectRatio(0.618)
-    .shadow({ radius: 12, color: getTheme(this.theme).isDarkTheme ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
+    .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
     .onClick(() => {
-      router.pushUrl({
-        url: 'pages/VideoDetailPage',
-        params: {
-          url: item.url,
-          sourceKey: item.sourceKey,
-          title: item.title,
-          cover: item.imgUrl
-        }
-      })
+      // 暂时默认为新增
+      const params: VideoNavigateInfo = {
+        id: null,
+        url: item.url as string,
+        sourceKey: item.sourceKey,
+        title: item.title,
+        cover: item.imgUrl as string
+      }
+      console.log('VideoTest 主页列表传递的params：', JSON.stringify(params))
+      this.pageStack.pushPathByName("VideoDetailPage", params)
     })
   }
 }

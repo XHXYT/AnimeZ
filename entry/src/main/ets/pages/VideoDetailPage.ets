@@ -5,47 +5,75 @@ import media from '@ohos.multimedia.media';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import DataSourceManager from '../api/DataSourceManager';
 import PlayerManagerImpl from '../player/PlayerManagerImpl';
-import { VideoCacheList } from '../components/VideoCacheList';
+// import { VideoCacheList } from '../components/VideoCacheList';
 import Settings from '../utils/Settings';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
-import { ShareDialog } from '../components/dialog/ShareDialog';
-import { getTheme } from '../utils/Themes';
-import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
-import VideoCollectionInfo from '../entity/VideoCollectionInfo';
-import SystemBarUtils from '../utils/SystemBarUtils';
-import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
-import SQLite from '../db/SQLite';
 import StateView, { ViewState } from '../components/StateView';
-import ImmersionBarSpace from '../components/ImmersionBarSpace';
-import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoList } from '../components/VideoList';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import EpisodeList from '../entity/EpisodeList';
-import VideoDetailInfo from '../entity/VideoDetailInfo';
+import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import Logger from '../utils/Logger';
-import router from '@ohos.router';
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
+import { ShareDialog } from '../components/dialog/ShareDialog';
+import { promptAction } from '@kit.ArkUI';
+import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
+import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { webview } from '@kit.ArkWeb';
+import { SystemVideoPlayer } from '../player/SystemVideoPlayer';
 
-@Entry
+// 系统路由
+@Builder
+export function VideoDetailPageBuilder(name: string, param: Object) {
+  VideoDetailPage()
+}
+
+const context = getContext(this) as common.UIAbilityContext
+
+
 @Component
 struct VideoDetailPage {
-  @StorageLink('theme') theme: number = 0
-  @State videoDetailInfo: VideoDetailInfo = null
-  @State episodeListIndex: number = 0;
+  @State videoDetailInfo: VideoDetailInfo = {
+    title: '',
+    sourceKey: '',
+    coverUrl: '',
+    episodes: [],
+    recommends: []
+  }
+  // 收藏判断
+  @State isCollect: boolean = false
   @State episodeIndex: number = 0;
-  @State state: number = ViewState.LOADING
   @State errorMessage: string = ''
-  private readonly playerManager: IPlayerManager = new PlayerManagerImpl()
-  private url: string
-  private sourceKey: string
-  private historyInfo: VideoHistoryInfo
-  @State collectionInfo: VideoCollectionInfo = null
+  @State episodeListIndex: number = 0;
   @State isFullScreen: boolean = false
-
-  /**
-   * 背景图是否加载完成
-   */
+  /**背景图是否加载完成*/
   @State isBackgroundLoaded: boolean = false
+  @Consume('pageStack') pageStack: NavPathStack
+  @State state: number = 0
+  // 顶部避让高度
+  @StorageProp('topRectHeight') topHeight: number = 0
+  // 底部避让高度
+  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  // 颜色模式
+  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+
+  // 视频页面链接
+  private url: string = ''
+  // 加载webview
+  private showWebview: boolean = false
+  // 视频唯一标识符
+  private videoID: number | null = -1
+  // 视频收藏标识
+  private collectID: number | null = 0
+  private sourceKey: string = ''
+  private title: string = ''
+  private isFirstPlay: boolean = true
+  private readonly playerManager: IPlayerManager = new PlayerManagerImpl()
+  // 收藏信息
+  @State collectionInfo: VideoCollectionInfo = CollectionInfo
+  // 历史信息
+  private historyInfo: VideoHistoryInfo = HistoryInfo
 
   /**
    * 二级面板内容类型
@@ -54,51 +82,74 @@ struct VideoDetailPage {
   private readonly panelController: PanelController = new PanelController()
   private pausedOnHide = false
   private readonly playerListener: PlayerListener = {
-    onStatusChanged: (status: number) => {
-      if (status == PlayerStatus.DONE) {
-        if (Settings.isAutoPlayNextEpisode()) {
-          let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
-          if (this.episodeIndex < episodeList.episodes.length - 1) {
-            this.playVideo(this.episodeListIndex, this.episodeIndex + 1)
-          }
-        }
-      }
-    },
-    onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
-      if (this.episodeIndex == episodeIndex) {
-        return
-      }
-      this.episodeIndex = episodeIndex
-      this.playVideo(this.episodeListIndex, this.episodeIndex)
-    },
-    onVideoSpeedChanged: (videoSpeed: number) => {
-    },
-    onVideoFitChanged: (videoFit: VideoFit) => {
-    },
-    onFullScreenChanged: (isFullScreen: boolean) => {
-    },
-    onVideoSizeChange: (w: number, h: number) => {
-    },
-    onProgressChange: (totalTime: number, currentTime: number) => {
-      Logger.e(this, 'totalTime=' + totalTime + ' currentTime=' + currentTime)
-      if (this.historyInfo) {
-        this.historyInfo.totalTime = totalTime
-        this.historyInfo.currentTime = currentTime
-        this.saveHistoryInfo()
-      }
-    },
-    onBuffering: (type: media.BufferingInfoType, value: number) => {
-    }
+    onStatusChanged: (status: number) => this.onStatusChanged(status),
+    onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => this.onEpisodeChanged(episodeList, episodeIndex),
+    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => this.onVideoSpeedChanged(videoSpeed),
+    onFullScreenChanged: (isFullScreen: boolean) => this.onFullScreenChanged(isFullScreen),
+    onVideoFitChanged: (videoFit: VideoFit) => this.onVideoFitChanged(videoFit),
+    onVideoSizeChange: (w: number, h: number) => this.onVideoSizeChange(w, h),
+    onProgressChange: (totalTime: number, currentTime: number) => this.onProgressChange(totalTime, currentTime),
+    onBuffering: (type: media.BufferingInfoType, value: number) => this.onBuffering(type, value),
   }
 
-  private listener: mediaquery.MediaQueryListener = mediaquery.matchMediaSync('(orientation: portrait)')
+  onStatusChanged(status: number): void {
+    if (status == PlayerStatus.DONE) {
+      if (Settings.isAutoPlayNextEpisode() && this.videoDetailInfo.episodes !== undefined) {
+        let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
+        if (this.episodeIndex < episodeList.episodes.length - 1) {
+          this.playVideo(this.episodeListIndex, this.episodeIndex + 1)
+        }
+      }
+    }
+    return
+  }
+  onEpisodeChanged(episodeList: EpisodeInfo[], episodeIndex: number): void {
+    if (this.episodeIndex == episodeIndex) {
+      return
+    }
+    this.episodeIndex = episodeIndex
+    this.playVideo(this.episodeListIndex, this.episodeIndex)
+    return
+  }
+  onVideoSpeedChanged(videoSpeed: number): void {
+    return
+  }
+  onVideoFitChanged(videoFit: VideoFit): VideoFit {
+    return videoFit
+  }
+  onFullScreenChanged(isFullScreen: boolean): void {
+    return
+  }
+  onVideoSizeChange(w: number, h: number): void {
+    return
+  }
+  onProgressChange(totalTime: number, currentTime: number): void {
+    Logger.e(this, 'totalTime=' + totalTime + ' currentTime=' + currentTime)
+    if (this.historyInfo) {
+      this.historyInfo.totalTime = totalTime
+      this.historyInfo.currentTime = currentTime
+      console.log('VideoTest #onProgressChange 视频进度调用保存')
+      this.saveHistoryInfo()
+    }
+    return
+  }
+  onBuffering(type: media.BufferingInfoType, value: number): number {
+    return value
+  }
+
+  private listener: mediaquery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(orientation: landscape)');
+  private controller: webview.WebviewController = new webview.WebviewController()
+  // 用于捕获视频链接
+  private jsStr: string = `var video = document.querySelector("#artplayer > div > video");
+            video ? video.src : "元素未找到或没有src属性";
+          `
 
   /**
    * 监听横竖屏切换
    * @param mediaQueryResult
    */
-  onPortrait(mediaQueryResult) {
-    if (mediaQueryResult.matches) {
+  onPortrait(mediaQueryResult: mediaquery.MediaQueryResult) {
+    if (mediaQueryResult.matches as boolean) {
       this.isFullScreen = false
     } else {
       this.isFullScreen = true
@@ -106,63 +157,28 @@ struct VideoDetailPage {
   }
 
   aboutToAppear() {
-
-    let portraitFunc = this.onPortrait.bind(this) // bind current js instance
-    this.listener.on('change', portraitFunc)
-
-    this.url = router.getParams()['url']
-    this.sourceKey = router.getParams()['sourceKey']
-    Logger.e(this, 'aboutToAppear url=' + this.url + ' sourceKey=' + this.sourceKey + ' params=' + JSON.stringify(router.getParams()))
-    SQLite.with(VideoHistoryTable)
-      .queryByLink(this.url)
-      .then((info) => {
-        if (info) {
-          this.historyInfo = info
-        } else {
-          this.historyInfo = VideoHistoryInfo.createByLink(this.sourceKey, this.url)
-        }
-        this.getDetailInfo()
-      })
-      .catch((e) => {
-        Logger.e(this, 'query info by link error! e=' + JSON.stringify(e))
-        this.historyInfo = VideoHistoryInfo.createByLink(this.sourceKey, this.url)
-        this.getDetailInfo()
-      })
-
-    SQLite.with(VideoCollectionTable)
-      .queryBySrc(this.url)
-      .then((info) => {
-        Logger.e(this, 'VideoCollectionTable queryBySrc info=' + JSON.stringify(info))
-        this.collectionInfo = info
-      })
-      .catch((e) => {
-        Logger.e(this, 'query collection info by link error! e=' + JSON.stringify(e))
-      })
-  }
-
-  aboutToDisappear() {
-    this.listener.off('change')
-    this.saveHistoryInfo()
-    HISTORY_CHANGED_EVENT.emit()
-    this.playerManager.removeListener(this.playerListener)
-    this.playerManager.destroy()
-  }
-
-  onPageShow() {
+    this.state = 0
+    this.listener.on('change', (mediaQueryResult: mediaquery.MediaQueryResult) => {
+      this.onPortrait(mediaQueryResult)
+    })
     if (this.videoDetailInfo) {
-      this.initBar()
       if (this.pausedOnHide) {
         if (!this.playerManager.isPlaying()) {
           this.playerManager.start()
         }
         this.pausedOnHide = false
       }
-    } else {
-      getTheme(this.theme).initBar()
     }
-  }
+   }
 
-  onPageHide() {
+  aboutToDisappear() {
+    this.listener.off('change')
+    console.log('VideoTest #aboutToDisappear 页面销毁调用保存')
+    this.saveHistoryInfo()
+    console.log('VideoTest #aboutToDisappear 已运行完保存历史记录')
+    HISTORY_CHANGED_EVENT.emit()
+    this.playerManager.removeListener(this.playerListener)
+    this.playerManager.destroy()
     if (this.playerManager.isPlaying()) {
       this.playerManager.pause()
       this.pausedOnHide = true;
@@ -179,51 +195,310 @@ struct VideoDetailPage {
     return false
   }
 
-  pageTransition() {
-    PageTransitionEnter(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Right)
-    PageTransitionEnter(OPTIONS_TRANSITION_POP).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_POP).slide(SlideEffect.Right)
+  /**检查视频历史信息*/
+  async checkVideoInfo() {
+    // 查询并初始化列表数据
+    // 根据 title 查找视频历史记录
+    const HistoryList = await videoHistoryInfoDB.query(this.title)
+    console.log('VideoTest #checkVideoInfo 查到的历史记录：', JSON.stringify(HistoryList))
+    if (HistoryList.length !== 0) {
+      // 非新增视频，提取出历史记录
+      const HistoryDetail = HistoryList[0]
+      console.log('VideoTest #checkVideoInfo 将要替换的历史记录：', JSON.stringify(HistoryDetail))
+      // 如果有历史记录详情，回显到页面中
+      if (HistoryDetail) {
+        this.historyInfo = HistoryDetail
+        // 及时更新视频id
+        this.videoID = this.historyInfo.id
+        console.log('VideoTest #checkVideoInfo 替换的历史记录：', JSON.stringify(this.historyInfo))
+      }
+    } else {
+      // 为新增视频
+      console.log('VideoTest #checkVideoInfo 新增视频')
+      return
+    }
+  }
+
+  /**检查视频收藏信息*/
+  private async checkCollectionInfo() {
+    console.log('VideoCollectionDetail #checkCollectionInfo 视频id状况：', this.videoID)
+    const CollectionList = await videoCollectionInfoDB.query(this.title)
+    if (CollectionList) {
+      const CollectionDetail = CollectionList[0]
+      this.collectionInfo = CollectionDetail
+      if (this.collectionInfo !== undefined && this.videoID !== null) {
+        this.isCollect = true
+      }
+      console.log('VideoCollectionDetail #checkCollectionInfo 视频收藏状况：', JSON.stringify(this.collectionInfo))
+    }
+  }
+
+  private getDetailInfo() {
+    console.log(`VideoTest #getDetailInfo当前数据源: ${this.sourceKey}`)
+    DataSourceManager.getSource(this.sourceKey).getVideoDetailInfo(this.url)
+      .then(async (info) => {
+        this.videoDetailInfo = info
+        this.historyInfo.link = this.videoDetailInfo.url as string // 保存页面链接
+        this.historyInfo.title = this.videoDetailInfo.title
+        this.historyInfo.coverUrl = this.videoDetailInfo.coverUrl
+        this.historyInfo.sourceKey = this.sourceKey
+        this.state = ViewState.CONTENT
+        this.playVideo(this.historyInfo.episodeListIndex, this.historyInfo.episodeIndex)
+      })
+      .catch((e: Error) => {
+        this.errorMessage = JSON.stringify(e)
+        Logger.e(this, 'VideoTest #getDetailInfo error = ' + this.errorMessage)
+        this.state = ViewState.ERROR
+      })
+  }
+
+  private playVideo(episodeListIndex: number, episodeIndex: number) {
+    Logger.e(this, 'playVideo episodeListIndex = ' + episodeListIndex + " episodeIndex=" + episodeIndex)
+    // 跳转至历史记录的播放列表
+    this.episodeListIndex = episodeListIndex
+    // 跳转至历史记录的播放集数
+    this.episodeIndex = episodeIndex
+    const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
+    Logger.e(this, 'VideoTest #playVideo historyInfo=' + JSON.stringify(episodeList))
+    let episode = episodeList.episodes[this.episodeIndex];
+    Logger.e(this, 'playVideo episode=' + JSON.stringify(episode))
+    this.historyInfo.episodeListIndex = episodeListIndex
+    this.historyInfo.episodeIndex = episodeIndex
+    this.historyInfo.episodeName = episode.title
+    this.historyInfo.videoUrl = episode.videoUrl as string
+    Logger.e(this, 'VideoTest #playVideo historyInfo=' + JSON.stringify(this.historyInfo))
+    if (episode.videoUrl) {
+      console.log('VideoTest #playVideo 存在视频链接的视频播放调用保存')
+      this.saveHistoryInfo()
+      // 保存后检查更新id
+      this.checkVideoInfo()
+      this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+    } else {
+      // 查找视频播放链接
+      DataSourceManager.getSource(this.videoDetailInfo.sourceKey).parseVideoUrl(episode.link)
+        .then((url) => {
+          // if (this.videoDetailInfo.sourceKey !== 'key_agedmvideo') {
+          //
+          // } else {
+          //   // AGE动漫源需要调用webview组件获取视频链接
+          //   this.controller.loadUrl(url)
+          //   Logger.e(this, '#parseVideoUrl 接收的云播放器link = ' + url)
+          // }
+          this.showWebview = false
+          episode.videoUrl = url
+          this.historyInfo.videoUrl = url
+          console.log('VideoTest #playVideo 网络请求的视频链接时的视频播放调用保存')
+          this.saveHistoryInfo()
+          // 保存后检查更新历史记录id
+          this.checkVideoInfo()
+          this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+        })
+        .catch((e: Error) => {
+          this.playerManager.setStatus(PlayerStatus.ERROR)
+          Logger.e(this, 'parseVideoUrl failed! e=' + JSON.stringify(e))
+        })
+    }
+  }
+
+  private async saveHistoryInfo() {
+    if (this.historyInfo) {
+      if (this.videoID !== null) {
+        // 如果有 id 调用修改 update
+        this.historyInfo.id = this.videoID
+        this.historyInfo.accessTime = new Date().getTime()
+        console.log('VideoTest #saveHistoryInfo 视频详情页将要保存的历史记录：', JSON.stringify(this.historyInfo))
+        await videoHistoryInfoDB.update(this.historyInfo, this.videoID)
+          .then((updateId) => {
+            console.log('VideoTest #saveHistoryInfo 更新成功id为：', updateId)
+          })
+          .catch((error: BusinessError) => {
+            console.error("VideoTest #saveHistoryInfo 更新操作失败: ", error)
+          })
+      } else {
+        this.historyInfo.id = this.videoID
+        // 没有 id 调用新增 insert
+        await videoHistoryInfoDB.insert(this.historyInfo)
+          .then((insertId) => {
+            console.log('VideoTest #saveHistoryInfo 插入成功id为：', insertId)
+            // 及时更新视频id
+            this.videoID = insertId
+          })
+          .catch((error: Error) => {
+            console.error("VideoTest #saveHistoryInfo 插入操作失败: ", error)
+          })
+      }
+      // 等待 await 保存(新增/修改)完成后，返回列表页
+      promptAction.showToast({ message: '保存成功' })
+    }
+  }
+
+  /**移除收藏*/
+  private async removeCollect() {
+    if (this.collectID !== null) {
+      await videoCollectionInfoDB.delete(this.collectID)
+      this.isCollect = false
+      promptAction.showToast({ message: "取消收藏" })
+    }
+  }
+  /**收藏*/
+  private async collect() {
+    if(this.videoDetailInfo.title !== undefined && this.videoDetailInfo.coverUrl !== undefined) {
+      const theTollectionInfo: VideoCollectionInfo = {
+        id: this.collectID,
+        link: this.url,
+        title: this.videoDetailInfo.title,
+        coverUrl: this.videoDetailInfo.coverUrl,
+        sourceKey: this.sourceKey,
+        accessTime: Date.now()
+      }
+      if (this.collectID === null) {
+        console.log('VideoCollectionDetail #collect 插入视频收藏id状况：', this.collectID)
+        // 没有 id 调用新增 insert
+        await videoCollectionInfoDB.insert(theTollectionInfo)
+          .then((insertId) => {
+            console.log('VideoCollect #collect 插入成功收藏id为：', insertId)
+            this.isCollect = true
+            promptAction.showToast({ message: "收藏成功" })
+          })
+          .catch((error: Error) => {
+            console.error("VideoCollect #collect 插入操作失败: ", error)
+          })
+      } else {
+        console.log('VideoCollectionDetail #collect 更新视频收藏id状况：', this.collectID)
+        // 如果有 收藏id 调用修改 update
+        await videoCollectionInfoDB.update(theTollectionInfo)
+          .then((insertId) => {
+            console.log('VideoCollect #collect 更新成功收藏id为：', insertId)
+            this.isCollect = true
+            promptAction.showToast({ message: "收藏成功" })
+          })
+          .catch((error: Error) => {
+            console.error("VideoCollect #collect 更新操作失败: ", error)
+          })
+      }
+
+    }
   }
 
   build() {
-    Stack() {
-      StateView(
-        {
-          state: $state,
-          errorMessage: $errorMessage,
-          content: () => {
-            this.Content()
-          },
-          custom: null,
-          onRetry: () => {
-            this.getDetailInfo()
-            return true;
+    NavDestination() {
+      Stack() {
+        StateView(
+          {
+            state: this.state,
+            errorMessage: this.errorMessage,
+            content: () => {
+              this.Content()
+            },
+            custom: undefined,
+            onRetry: () => {
+              this.getDetailInfo()
+              return true;
+            }
           }
+        )
+          .width('100%')
+          .height('100%')
+      }
+      .width('100%')
+      .height('100%')
+    }.hideToolBar(true)
+    .hideTitleBar(true)
+    .padding({top: this.topHeight, bottom: this.bottomHeight - 20})
+    .onReady(async (ctx: NavDestinationContext) => {
+      // 接收信息
+      try {
+        const params: VideoNavigateInfo = ctx?.pathInfo?.param as VideoNavigateInfo
+        this.url = params.url as string
+        this.videoID = params.id
+        this.collectID = params.id
+        this.title = params.title
+        this.sourceKey = params.sourceKey as string
+        if (this.videoID !== null) {
+          this.isFirstPlay = false
         }
-      )
-        .width('100%')
-        .height('100%')
-    }
-    .width('100%')
-    .height('100%')
+        console.log('VideoTest 视频详情页接收的videoID：', JSON.stringify(this.videoID))
+        // 首次打开检查一次视频id
+        await this.checkVideoInfo()
+        // 根据源获取视频数据
+        this.getDetailInfo()
+        // 检查收藏信息
+        this.checkCollectionInfo()
+        console.log('VideoTest 视频详情页接收的params：', JSON.stringify(params))
+      } catch (e) {
+        console.log(`VideoTest Navigate onReady catch exception: ${JSON.stringify(e)}`)
+      }
+
+    })
   }
 
   @Builder Content() {
     Column() {
-      MultiVideoPlayer({ playerManager: this.playerManager, immersionStatusBar: true })
+      Stack() {
+        // 复合型播放器
+        MultiVideoPlayer({ playerManager: this.playerManager })
+          .zIndex(2)
+        if (this.showWebview) {
+          Column() {
+            // webview加载
+            Web({ src: '', controller: this.controller })
+              .fileAccess(true)
+              .imageAccess(true)
+              .databaseAccess(true)
+              .onlineImageAccess(true)
+              .javaScriptAccess(true)
+              .domStorageAccess(true)
+              .onPageBegin((event) => {
+                console.log('parseVideoUrl #webview', `onPageBegin= ${JSON.stringify(event)}`)
+              })
+              .onPageEnd(e => {
+                try {
+                  // 执行查询视频src的脚本
+                  setTimeout(() => {
+                    this.controller.runJavaScript(this.jsStr)
+                      .then((result) => {
+                        console.log('parseVideoUrl #webview 延迟加载的视频src:', result)
+                        this.historyInfo.videoUrl = result
+                        let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
+                        episodeList.episodes[this.episodeIndex].videoUrl = result
+                        console.log('VideoTest #playVideo webview捕获的视频链接时的视频播放调用保存')
+                        this.saveHistoryInfo()
+                        // 保存后检查更新历史记录id
+                        this.checkVideoInfo()
+                        this.showWebview = false
+                        this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+                      })
+                      .catch((error: BusinessError) => {
+                        console.error("parseVideoUrl #webview Error:", error)
+                      })
+                  }, 3000)
+                  if (e) {
+                    console.info('parseVideoUrl #webview 页面加载完成，URL:', e.url)
+                  }
+                } catch (error) {
+                  console.error(`parseVideoUrl #webview 错误代码: ${(error as BusinessError).code}, 消息: ${(error as BusinessError).message}`)
+                }
+              })
+          }
+          .borderWidth(2)
+          .borderColor(Color.Red)
+          .backgroundColor(Color.Green)
+          .zIndex(1)
+          .constraintSize({minHeight: 20, maxHeight: 200})
+        }
+      }
 
       if (this.videoDetailInfo) {
         Stack() {
-          //          Image(this.videoDetailInfo.coverUrl)
-          //            .objectFit(ImageFit.Cover)
-          //            .height('100%')
-          //            .width('100%')
-          //            .onComplete(() => {
-          //              // TODO 背景加载完成
-          //              this.isBackgroundLoaded = true;
-          //            })
-          //            .blur(16)
+          // Image(this.videoDetailInfo.coverUrl)
+          //   .objectFit(ImageFit.Cover)
+          //   .height('100%')
+          //   .width('100%')
+          //   .onComplete(() => {
+          //     // TODO 背景加载完成
+          //     this.isBackgroundLoaded = true;
+          //   })
+          //   .blur(16)
           this.RootContent()
           CustomPanel(
             {
@@ -245,9 +520,7 @@ struct VideoDetailPage {
     .height('100%')
   }
 
-  /**
-   * 视频根内容，包括视频信息、视频播放列表、猜你喜欢
-   */
+  /**视频根内容，包括视频信息、视频播放列表、猜你喜欢*/
   @Builder RootContent() {
     Column() {
       Scroll() {
@@ -256,24 +529,24 @@ struct VideoDetailPage {
             Column() {
               Text(this.videoDetailInfo.title)
                 .alignSelf(ItemAlign.Start)
-                .fontColor(getTheme(this.theme).color_text_major)
+                .fontColor($r('app.color.color_text_major'))
                 .fontWeight(FontWeight.Bold)
                 .fontSize(18)
               Column() {
                 if (this.videoDetailInfo.updateTime) {
                   Text(this.videoDetailInfo.updateTime)
-                    .fontColor(getTheme(this.theme).color_text_normal)
+                    .fontColor($r('app.color.color_text_normal'))
                     .fontSize(12)
                 }
                 if (this.videoDetailInfo.category) {
                   Text(`分类：${this.videoDetailInfo.category}`)
-                    .fontColor(getTheme(this.theme).color_text_normal)
+                    .fontColor($r('app.color.color_text_normal'))
                     .fontSize(12)
                 }
                 if (this.videoDetailInfo.desc) {
                   Row() {
                     Text(this.videoDetailInfo.desc)
-                      .fontColor(getTheme(this.theme).color_text_normal)
+                      .fontColor($r('app.color.color_text_normal'))
                       .maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                       .fontSize(12)
@@ -305,7 +578,7 @@ struct VideoDetailPage {
               .borderRadius(8)
               .shadow({
                 radius: 12,
-                color: getTheme(this.theme).isDarkTheme ? '#333333' : '#aaaaaa',
+                color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
                 offsetX: 6,
                 offsetY: 6
               })
@@ -337,19 +610,17 @@ struct VideoDetailPage {
       .height('100%')
     }
     //    .backgroundColor('#80ffffff')
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor($r('app.color.background_color'))
     .width('100%')
     .height('100%')
   }
 
-  /**
-   * 面板内容
-   */
+  /**面板内容*/
   @Builder SecondaryContent() {
     Column() {
       Row() {
         Text(this.panelContentType == 0 ? '详情' : '缓存')
-          .fontColor(getTheme(this.theme).color_text_major)
+          .fontColor($r('app.color.color_text_major'))
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
 
@@ -384,18 +655,16 @@ struct VideoDetailPage {
       } else {
         //        this.DownloadPage()
 
-        VideoCacheList({ videoDetailInfo: this.videoDetailInfo })
+        // VideoCacheList({ videoDetailInfo: this.videoDetailInfo })
 
       }
     }
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor($r('app.color.background_color'))
     .width('100%')
     .height('100%')
   }
 
-  /**
-   * 下载页
-   */
+  /**下载页*/
   @Builder DownloadPage() {
     Column() {
       Row() {
@@ -411,14 +680,14 @@ struct VideoDetailPage {
                     .width(6)
                     .margin({ right: 2 })
                     .borderRadius(4)
-                    .backgroundColor(getTheme(this.theme).primary_color)
+                    .backgroundColor($r('app.color.primary_color'))
                   Text(episodeList.title)
-                    .fontColor(getTheme(this.theme).color_text_major)
+                    .fontColor($r('app.color.color_text_major'))
                     .fontSize(16)
                   Blank()
                   Text('缓存全部')
                     .fontSize(12)
-                    .fontColor(getTheme(this.theme).color_text_normal)
+                    .fontColor($r('app.color.color_text_normal'))
                     .padding(8)
                     .borderRadius(6)
                     .onClick(() => {
@@ -470,7 +739,7 @@ struct VideoDetailPage {
       //          .layoutWeight(1)
       //          .textAlign(TextAlign.Center)
       //          .fontSize(14)
-      //          .fontColor(getTheme(this.theme).color_text_normal)
+      //          .fontColor(getTheme(this.currentMode).color_text_normal)
       //          .onClick(() => {
       //          })
       //        Stack()
@@ -496,30 +765,29 @@ struct VideoDetailPage {
         Text("下载列表")
           .textAlign(TextAlign.Center)
           .fontSize(14)
-          .backgroundColor(getTheme(this.theme).primary_color)
+          .backgroundColor($r('app.color.primary_color'))
           .fontColor(Color.White)
           .borderRadius(21)
           .layoutWeight(1)
           .onClick(() => {
-            router.pushUrl({ url: 'pages/DownloadManagerPage' })
+            // router.pushUrl({ url: 'pages/DownloadManagerPage' })
           })
           .height(42)
           .width('100%')
       }
       .padding(24)
 
-      ImmersionBarSpace()
+
     }
     .width('100%')
     .layoutWeight(1)
   }
 
-  /**
-   * 视频详情
-   */
+  /**视频详情*/
   @Builder VideoDetail() {
     Column() {
       Row() {
+        // 封面
         Image(this.videoDetailInfo.coverUrl)
           .alt($r('app.media.pic_load_failed'))
           .objectFit(ImageFit.Cover)
@@ -529,7 +797,7 @@ struct VideoDetailPage {
           .borderColor('#cccccc')
           .shadow({
             radius: 12,
-            color: getTheme(this.theme).isDarkTheme ? '#333333' : '#aaaaaa',
+            color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
             offsetX: 6,
             offsetY: 6
           })
@@ -537,9 +805,10 @@ struct VideoDetailPage {
             this.panelController.show()
           })
         Column() {
+          // 标题
           Text(this.videoDetailInfo.title)
             .alignSelf(ItemAlign.Start)
-            .fontColor(getTheme(this.theme).color_text_major)
+            .fontColor($r('app.color.color_text_major'))
             .fontSize(16)
           Column() {
             if (this.videoDetailInfo.updateTime) {
@@ -563,19 +832,19 @@ struct VideoDetailPage {
       if (this.videoDetailInfo.desc) {
         this.Header('简介')
         Text(this.videoDetailInfo.desc)
-          .fontColor(getTheme(this.theme).color_text_normal)
+          .fontColor($r('app.color.color_text_normal'))
           .fontSize(12).padding(16)
       }
       if (this.videoDetailInfo.protagonist) {
         this.Header('角色声优')
         Text(this.videoDetailInfo.protagonist)
-          .fontColor(getTheme(this.theme).color_text_normal)
+          .fontColor($r('app.color.color_text_normal'))
           .fontSize(12).padding(16)
       }
       if (this.videoDetailInfo.director) {
         this.Header('制作信息')
         Text(this.videoDetailInfo.director)
-          .fontColor(getTheme(this.theme).color_text_normal)
+          .fontColor($r('app.color.color_text_normal'))
           .fontSize(12).padding(16)
       }
     }
@@ -594,11 +863,11 @@ struct VideoDetailPage {
               .textAlign(TextAlign.Center)
               .backgroundColor(
                   (this.episodeListIndex == episodeListIndex && this.episodeIndex == episodeIndex)
-                  ? '#bb3366ff' : getTheme(this.theme).background_color_accent
+                  ? '#bb3366ff' : $r('app.color.background_color_accent')
               )
               .fontColor(
                   (this.episodeListIndex == episodeListIndex && this.episodeIndex == episodeIndex)
-                  ? Color.White : getTheme(this.theme).color_text_major
+                  ? Color.White : $r('app.color.color_text_major')
               )
               .fontSize(12)
               .padding({ top: 8, bottom: 8 })
@@ -607,7 +876,7 @@ struct VideoDetailPage {
                   (this.episodeListIndex == episodeListIndex && this.episodeIndex == episodeIndex)
                   ? 0 : 1.5
               )
-              .borderColor(getTheme(this.theme).background_color_accent)
+              .borderColor($r('app.color.background_color_accent'))
               .margin({ bottom: 8, right: '2%' })
               // 解决横竖屏切换导致文字显示错位问题
               .width(this.isFullScreen ? '17%' : '18%')
@@ -644,42 +913,47 @@ struct VideoDetailPage {
 
   @Builder ButtonGroup() {
     Row() {
-      if (this.collectionInfo) {
-        this.IconWithText($r('app.media.ic_collected2'), "已收藏", () => {
-          this.removeCollect()
-        })
-      } else {
+      // 收藏
+      if (!this.isCollect) {
         this.IconWithText($r('app.media.ic_collection'), "收藏", () => {
           this.collect()
         })
+      } else {
+        this.IconWithText($r('app.media.ic_collected2'), "已收藏", () => {
+          this.removeCollect()
+        })
       }
+      // 缓存
       this.IconWithText(
       $r('app.media.ic_download2'),
         '缓存',
         () => {
           this.panelContentType = 1
-          this.panelController.show()
+          promptAction.showToast({ message: "开发中" })
+          // this.panelController.show()
         }
       )
+      // 分享
       this.IconWithText($r('app.media.ic_share'), "分享", () => {
+        promptAction.showToast({ message: "开发中" })
         Logger.e(this, 'videoDetailInfo=' + JSON.stringify(this.videoDetailInfo))
-        let sourceController = new CustomDialogController({
+        /*let sourceController = new CustomDialogController({
           builder: ShareDialog(
             {
-              detailInfo: this.videoDetailInfo,
+              // detailInfo: this.videoDetailInfo,
               onClose: () => {
                 sourceController.close()
               }
             }
           ),
           cancel: () => {
-            console.log("cancel")
+            console.log("取消")
           },
           alignment: DialogAlignment.Bottom,
           autoCancel: true,
           customStyle: true
         })
-        sourceController.open()
+        sourceController.open()*/
       })
     }
     .justifyContent(FlexAlign.SpaceEvenly)
@@ -689,23 +963,23 @@ struct VideoDetailPage {
   @Builder IconWithText(src: string | PixelMap | Resource, text: string | Resource, onClick?: (event?: ClickEvent) => void) {
     Column() {
       Image(src)
-        .fillColor(getTheme(this.theme).color_text_normal)
+        .fillColor($r('app.color.color_text_normal'))
         .width(20)
         .height(20)
       Text(text)
         .fontSize(10)
         .width(40)
-        .fontColor(getTheme(this.theme).color_text_normal)
+        .fontColor($r('app.color.color_text_normal'))
         .textAlign(TextAlign.Center)
         .margin({ top: 4 })
     }
     .backgroundColor(
-      this.isBackgroundLoaded ? '#aaffffff' : getTheme(this.theme).background_color_accent
+      this.isBackgroundLoaded ? '#aaffffff' : $r('app.color.background_color_accent')
     )
     .padding({ left: 20, top: 8, right: 20, bottom: 8 })
     .borderRadius(12)
     .borderWidth(1.5)
-    .borderColor(getTheme(this.theme).background_color_accent)
+    .borderColor($r('app.color.background_color_accent'))
     .onClick(onClick)
   }
 
@@ -716,9 +990,9 @@ struct VideoDetailPage {
         .width(6)
         .margin({ right: 2 })
         .borderRadius(4)
-        .backgroundColor(getTheme(this.theme).primary_color)
+        .backgroundColor($r('app.color.primary_color'))
       Text(title)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .fontSize(16)
         .fontWeight(500)
     }
@@ -726,109 +1000,4 @@ struct VideoDetailPage {
     .width('100%')
   }
 
-  private getDetailInfo() {
-    // TODO 根据key获取数据源
-    DataSourceManager.getSource(this.sourceKey).getVideoDetailInfo(this.url)
-      .then(async (info) => {
-        Logger.e(this, 'videoDetailInfo=' + JSON.stringify(info))
-
-        this.initBar()
-        this.playerManager.addListener(this.playerListener)
-
-        this.videoDetailInfo = info
-        this.state = ViewState.CONTENT
-        this.historyInfo.title = this.videoDetailInfo.title
-        this.historyInfo.coverUrl = this.videoDetailInfo.coverUrl
-        this.historyInfo.sourceKey = this.sourceKey
-
-        this.playVideo(this.episodeListIndex, this.episodeIndex)
-      })
-      .catch((e) => {
-        this.errorMessage = JSON.stringify(e)
-        Logger.e(this, 'getDetailInfo error=' + this.errorMessage)
-        this.state = ViewState.ERROR
-      })
-  }
-
-  private playVideo(episodeListIndex: number, episodeIndex: number) {
-    Logger.e(this, 'playVideo episodeListIndex=' + episodeListIndex + " episodeIndex=" + episodeIndex)
-    this.episodeListIndex = episodeListIndex
-    this.episodeIndex = episodeIndex
-    const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
-    let episode = episodeList.episodes[this.episodeIndex];
-    Logger.e(this, 'playVideo episode=' + JSON.stringify(episode))
-    this.historyInfo.episodeListIndex = episodeListIndex
-    this.historyInfo.episodeIndex = episodeIndex
-    this.historyInfo.episodeName = episode.title
-    this.historyInfo.videoUrl = episode.videoUrl
-    Logger.e(this, 'playVideo historyInfo=' + JSON.stringify(this.historyInfo))
-    if (episode.videoUrl) {
-      this.saveHistoryInfo()
-      this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
-    } else {
-      DataSourceManager.getSource(this.videoDetailInfo.sourceKey).parseVideoUrl(episode.link)
-        .then((url) => {
-          episode.videoUrl = url
-          this.historyInfo.videoUrl = episode.videoUrl
-          this.saveHistoryInfo()
-          this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
-        })
-        .catch((e) => {
-          this.playerManager.setStatus(PlayerStatus.ERROR)
-          Logger.e(this, 'parseVideoUrl failed! e=' + JSON.stringify(e))
-        })
-    }
-  }
-
-  private saveHistoryInfo() {
-    if (this.historyInfo) {
-      this.historyInfo.accessTime = new Date().getTime()
-      SQLite.with(VideoHistoryTable)
-        .save(this.historyInfo)
-        .catch((e) => {
-          Logger.e(this, 'saveHistoryInfo error=' + JSON.stringify(e))
-        })
-    }
-  }
-
-  private removeCollect() {
-    SQLite.with(VideoCollectionTable)
-      .delete(this.collectionInfo)
-      .then((result) => {
-        Logger.e(this, 'delete collection info success! result=' + result)
-        this.collectionInfo = null
-      })
-      .catch((e) => {
-        Logger.e(this, 'delete collection info failed! e=' + JSON.stringify(e))
-      })
-  }
-
-  private collect() {
-    let collectionInfo: VideoCollectionInfo = {
-      src: this.url,
-      title: this.videoDetailInfo.title,
-      coverUrl: this.videoDetailInfo.coverUrl,
-      accessTime: new Date().getTime(),
-      sourceKey: this.sourceKey,
-    }
-    SQLite.with(VideoCollectionTable)
-      .insert(collectionInfo)
-      .then((result) => {
-        Logger.e(this, 'insert collection info success! result=' + result)
-        this.collectionInfo = collectionInfo
-      })
-      .catch((e) => {
-        Logger.e(this, 'insert collection info failed! e=' + JSON.stringify(e))
-      })
-  }
-
-  private initBar() {
-    let theme = getTheme(this.theme)
-    SystemBarUtils.setWindowSystemBarProperties({
-      statusBarColor: theme.statusBarColor,
-      statusBarContentColor: '#ffffff',
-      navigationBarColor: theme.isDarkTheme ? '#80000000' : '#ddffffff',
-      navigationBarContentColor: theme.navigationBarContentColor
-    })
-  }
 }

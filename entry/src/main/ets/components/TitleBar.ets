@@ -1,10 +1,8 @@
-import { getTheme } from '../utils/Themes';
-import router from '@ohos.router'
 
 @Component
 export default struct TitleBar {
-  @StorageLink('theme') theme: number = 0
-  private title: string
+  @State title: ResourceStr = ''
+  @Consume('pageStack') pageStack: NavPathStack
 
   build() {
     Column() {
@@ -14,12 +12,12 @@ export default struct TitleBar {
           .height(24)
           .margin({ left: 16 })
           .objectFit(ImageFit.Contain)
-          .fillColor(getTheme(this.theme).color_text_major)
+          .fillColor($r('app.color.color_text_major'))
           .onClick(() => {
-            router.back()
+            this.pageStack.pop(true)
           })
         Text(this.title)
-          .fontColor(getTheme(this.theme).color_text_major)
+          .fontColor($r('app.color.color_text_major'))
           .fontSize(20)
           .fontWeight(500)
           .layoutWeight(1)

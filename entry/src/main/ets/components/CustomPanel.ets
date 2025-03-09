@@ -1,7 +1,7 @@
 
 export class PanelController {
 
-  private listener: (show: boolean) => void
+  private listener: (show: boolean) => void = () => {}
   private toShow: boolean = false
 
   setListener(listener: (show: boolean) => void) {
@@ -31,16 +31,16 @@ export class PanelController {
 
 @Component
 export default struct CustomPanel {
-  @StorageLink('theme') theme: number = 0
+  @StorageProp('currentColorMode') currentMode: number = 1
 //  @Watch("onShowPanelChanged") @State showPanel: boolean = false
   // TODO 改为panel state
   @State showPanelInner: boolean = false
   @State translateY: number = 0
   @State panelOpacity: number = 0
   @State panelHeight: number = 0
-  @BuilderParam panelContent: () => any
-  private controller: PanelController
-  private onClose: () => void
+  @BuilderParam panelContent: () => void
+  private controller: PanelController | undefined = undefined
+  private onClose: () => void = () => {}
 
   aboutToAppear() {
     if (this.controller) {
@@ -62,7 +62,9 @@ export default struct CustomPanel {
           .opacity(this.panelOpacity)
           .onClick(() => {
 //            this.showPanel = false
-            this.controller.close()
+            if (this.controller !== undefined) {
+              this.controller.close()
+            }
           })
         Stack() {
           this.panelContent()
@@ -88,7 +90,9 @@ export default struct CustomPanel {
       }
     })
     .onClick(() => {
-      this.controller.close()
+      if (this.controller !== undefined) {
+        this.controller.close()
+      }
     })
   }
 

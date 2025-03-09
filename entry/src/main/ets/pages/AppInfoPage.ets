@@ -1,29 +1,49 @@
-import { getTheme } from '../utils/Themes';
 import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
-import { SettingGroup, SettingsContainer } from '../components/Settings'
 import TitleBar from '../components/TitleBar'
-import ImmersionBarSpace from '../components/ImmersionBarSpace'
 import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import { ConfigurationConstant } from '@kit.AbilityKit';
+import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
+import { SettingRow } from '../components/common/Common';
+
+// 系统路由
+@Builder
+export function AppInfoPageBuilder(name: string, param: Object) {
+  AppInfoPage()
+}
 
 @Entry
 @Component
 struct AppInfoPage {
+  @Consume('pageStack') pageStack: NavPathStack
+  // 顶部避让高度
+  @StorageProp('topRectHeight') topHeight: number = 0
+  // 底部避让高度
+  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
-  @StorageLink('theme') theme: number = 0
-
-  private settings: SettingGroup[] = [
+  private appInfo: SettingGroup<boolean | string | number>[] = [
     {
       settings: [
-        { title: '应用版本', info: '1.0.1', icon: $r('app.media.ic_version') },
-        { title: '应用开发者', info: 'Z-P-J', icon: $r('app.media.ic_author'),
+        { title: '应用版本', info: '1.0.2', icon: $r('app.media.ic_version') },
+        { title: '应用原始开发者', info: 'Z-P-J', icon: $rawfile('zpj.png'),
           onClick: () => {
-            router.pushUrl({url: 'pages/AboutMePage'})
+            this.pageStack.pushPathByName("AboutMePage", '')
           }
         },
-        { title: '开源仓库', info: 'https://github.com/Z-P-J/AnimeZ', icon: $r('app.media.ic_gitee'),
+        { title: '开源仓库', info: 'https://github.com/Z-P-J/AnimeZ', icon: $r('app.media.ic_github'),
           onClick: () => {
-            router.pushUrl({url: 'pages/WebPage', params: {url: 'https://github.com/Z-P-J/AnimeZ'}})
+            this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J/AnimeZ")
+          }
+        },
+        { title: '应用维护者', info: '小雅', icon: $rawfile('ya.png'),
+          onClick: () => {
+            this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/")
+          }
+        },
+        { title: '新开源仓库', info: 'https://github.com/XHXYT/AnimeZ', icon: $r('app.media.ic_github'),
+          onClick: () => {
+            this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/AnimeZ")
           }
         },
         { title: '开源社区', info: 'https://gitee.com/ohos-dev', icon: $r('app.media.ic_community'),
@@ -33,7 +53,7 @@ struct AppInfoPage {
         },
         { title: '开源社区交流群', info: '752399947', icon: $r('app.media.ic_qq'),
           onClick: () => {
-            promptAction.showToast({message: 'TODO 跳转开源社区交流群'})
+            promptAction.showToast({message: '开发中'})
           }
         }
       ]
@@ -41,7 +61,7 @@ struct AppInfoPage {
   ]
 
   aboutToAppear() {
-    getTheme(this.theme).initBar()
+
   }
 
   pageTransition() {
@@ -52,8 +72,7 @@ struct AppInfoPage {
   }
 
   build() {
-    Column() {
-      ImmersionBarSpace()
+    NavDestination() {
       TitleBar({title: '应用信息'})
 
       Scroll() {
@@ -62,23 +81,72 @@ struct AppInfoPage {
             .height(64)
             .width(64)
             .margin({top: 56})
-            .borderRadius(16)
-            .shadow({ radius: 12, color: getTheme(this.theme).isDarkTheme ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+            .borderRadius(100)
+            .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
           Text($r('app.string.EntryAbility_label'))
             .fontSize(18)
-            .fontColor(getTheme(this.theme).color_text_major)
+            .fontColor($r('app.color.color_text_major'))
             .fontWeight(500)
             .padding({ top: 12 })
           Text($r('app.string.module_desc'))
             .fontSize(14)
-            .fontColor(getTheme(this.theme).color_text_minor)
+            .fontColor($r('app.color.color_text_minor'))
             .margin({ top: 8, bottom: 56 })
-          ForEach(this.settings, (group, index) => {
-            SettingsContainer({ group: group })
-            if (index < this.settings.length - 1) {
-              Blank().height(16)
+          ForEach(
+            this.appInfo,
+            (group: SettingGroup<SettingGroupType>, index) => {
+              Column() {
+                if (group.title) {
+                  Row() {
+                    Row()
+                      .backgroundColor($r('app.color.primary_color'))
+                      .height(14)
+                      .width(6)
+                      .margin({ right: 2 })
+                      .borderRadius(4)
+                    Text(group.title)
+                      .fontColor($r('app.color.color_text_major'))
+                      .fontSize(16)
+                      .fontWeight(FontWeight.Bold)
+                    Blank()
+                  }
+                  .padding({ left: 16, top: 16, right: 16, bottom: 8 })
+                  .width('100%')
+                }
+
+                ForEach(
+                  group.settings,
+                  (setting: SettingItem<SettingGroupType>) => {
+                    SettingRow({
+                      icons: setting.icon,
+                      title: setting.title,
+                      subtitle: setting.info,
+                      onCheck: () => {
+                        if (setting.onClick) {
+                          setting.onClick(
+                            setting,
+                            () => { },
+
+                          )
+                        }
+                      }
+                    })
+                  },
+                  (setting: SettingItem<SettingGroupType>) => setting.title
+                )
+              }
+              .backgroundColor($r('app.color.background_color'))
+              .borderRadius(16)
+
+              if (index < this.appInfo.length - 1) {
+                Blank().height(16)
+              }
+            },
+            // 唯一键生成
+            (group: SettingGroup<SettingGroupType>) => {
+              return group.title || String(group.settings.length)
             }
-          })
+          )
         }
         .padding(16)
         .width('100%')
@@ -91,9 +159,11 @@ struct AppInfoPage {
       .width('100%')
       .layoutWeight(1)
 
-      ImmersionBarSpace()
     }
-    .backgroundColor(getTheme(this.theme).background_color_accent)
+    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .backgroundColor($r('app.color.background_color_accent'))
+    .hideTitleBar(true)
+    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }

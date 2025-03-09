@@ -91,13 +91,13 @@ export default class YingHuaDataSource implements DataSource {
         }
     }
 
+    // TODO 还不知道怎么用的
     async getVideoList(page: number): Promise<VideoInfo[]> {
         let url = "http://www.bimiacg4.net/type/riman-" + page
         let doc = await HttpUtils.getHtml(url)
         let drama = selectFirst(doc, 'ul.drama-module')
         return this.parseVideoList(drama)
     }
-
     private async parseVideoList(drama): Promise<VideoInfo[]> {
         //        let drama = selectFirst(doc, 'ul.drama-module')
         Logger.e(this, 'parseHtml drama=' + drama)

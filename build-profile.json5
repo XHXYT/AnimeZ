@@ -3,23 +3,29 @@
     "signingConfigs": [
       {
         "name": "default",
+        "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\Z-P-J\\.ohos\\config\\openharmony\\auto_ohos_default_AnimeZ_org.ohosdev.anime.cer",
-          "storePassword": "0000001AB46493BF5963CD1D0030300446F5C7C07AABECACC702374DCA72F16DDA9E022CD2836DA43F6A",
+          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.cer",
+          "storePassword": "0000001B6F75A39A97F440E4B543138415A83FDA8B1608D59AAA4F9F590934C0DDD47777D647418EAE794E",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001A4C81075550D465C0E95F53F7F5E648117503357D73F68002C960222DA5AE3F8F59BEF4BC8C36",
-          "profile": "C:\\Users\\Z-P-J\\.ohos\\config\\openharmony\\auto_ohos_default_AnimeZ_org.ohosdev.anime.p7b",
+          "keyPassword": "0000001BA73184F7D912C027B00D3ADE991B45E8C6C4FD7395A41490571AECE041125A4C4BA783AFE09F25",
+          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Z-P-J\\.ohos\\config\\openharmony\\auto_ohos_default_AnimeZ_org.ohosdev.anime.p12"
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12"
         }
       }
     ],
-    "compileSdkVersion": 9,
-    "compatibleSdkVersion": 9,
     "products": [
       {
         "name": "default",
         "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.2(14)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        }
       }
     ]
   },

@@ -1,4 +1,4 @@
-import IPlayerManager from './IPlayerManager';
+import IPlayerManager, { NullPlayerManager } from './IPlayerManager';
 import { IjkVideoPlayer } from './IjkVideoPlayer';
 import { SystemVideoPlayer } from './SystemVideoPlayer';
 import { AVideoPlayer } from './AVideoPlayer';
@@ -11,8 +11,7 @@ import Settings from '../utils/Settings';
 @Component
 export struct MultiVideoPlayer {
   @State playerType: number = 0
-  private playerManager: IPlayerManager = null
-  private immersionStatusBar: boolean = false
+  @State playerManager: IPlayerManager = new NullPlayerManager()
 
   aboutToAppear() {
     if (!this.playerManager) {
@@ -24,11 +23,11 @@ export struct MultiVideoPlayer {
   build() {
     Stack() {
       if (this.playerType == 1) {
-        SystemVideoPlayer({ playerManager: this.playerManager, immersionStatusBar: this.immersionStatusBar })
+        SystemVideoPlayer({ playerManager: this.playerManager })
       } else if (this.playerType == 2) {
-        IjkVideoPlayer({ playerManager: this.playerManager, immersionStatusBar: this.immersionStatusBar })
+        IjkVideoPlayer({ playerManager: this.playerManager })
       } else {
-        AVideoPlayer({ playerManager: this.playerManager, immersionStatusBar: this.immersionStatusBar })
+        AVideoPlayer({ playerManager: this.playerManager })
       }
     }
     .width('100%')

@@ -4,15 +4,15 @@ import Logger from './Logger';
  */
 export default class DataStore {
 
-    static get<T>(key: string, defaultValue?: T): T | undefined {
-        if (!AppStorage.Has(key)) {
+    static get<T>(key: string, defaultValue?: T): T {
+        if (!AppStorage.has(key)) {
             // 初始化Persist属性
-            PersistentStorage.PersistProp<T>(key, defaultValue)
+            PersistentStorage.persistProp<T>(key, defaultValue)
             Logger.e(this, 'get not has key=' + key)
         } else {
             Logger.e(this, 'get has key=' + key)
         }
-        return AppStorage.Get<T>(key)
+        return AppStorage.get<T>(key)
     }
 
     static getInt(key: string, defaultValue?: number): number {
@@ -40,11 +40,11 @@ export default class DataStore {
     }
 
     static set<T>(key: string, value: T) {
-        if (AppStorage.Has(key)) {
-            AppStorage.Set<T>(key, value)
+        if (AppStorage.has(key)) {
+            AppStorage.set<T>(key, value)
         } else {
             // 初始化并保存Persist属性的值
-            PersistentStorage.PersistProp<T>(key, value)
+            PersistentStorage.persistProp<T>(key, value)
         }
     }
 

@@ -1,84 +1,106 @@
-import { getCurrentTheme, getTheme } from '../utils/Themes';
-import { MyPageTabContent } from '../components/MyPage';
-import { HomepageTabContent } from '../components/Homepage';
-import ImmersionBarSpace from '../components/ImmersionBarSpace';
+import { MyPage } from './MyPage';
+import { HomePage } from './Homepage';
 import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import { initDataSources } from '../api/DataSourceManager';
+import { setAutoColorMode, setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
+import { common } from '@kit.AbilityKit';
+import DataStore from '../utils/DataStore';
+import Settings from '../utils/Settings';
+
+const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
 @Entry
 @Component
 struct Index {
-  @StorageLink('theme') theme: number = 0
   @State currentIndex: number = 0
-  @State onShow: boolean = false
+  @Provide onShow: boolean = false
+  @Provide('StateView') state: number = 0
+  // 顶部避让高度
+  @StorageProp('topRectHeight') topHeight: number = 0
+  @StorageProp('currentColorMode') currentMode: number = -1
   private controller: TabsController = new TabsController()
+  // 底部避让高度
+  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @Provide('pageStack') pageStack: NavPathStack = new NavPathStack()
 
   aboutToAppear() {
-    this.theme = getCurrentTheme()
-    getTheme(this.theme).initBar()
+    // 初始化视频数据源
+    initDataSources()
+    // 初始化颜色模式
+    this.switchColorMode(DataStore.getInt(Settings.KEY_COLOR_MODE, -1))
+    console.log('#aboutToAppear ColorMode值：', DataStore.getInt(Settings.KEY_COLOR_MODE, -1))
   }
 
-  onPageShow() {
-    getTheme(this.theme).initBar()
-    this.onShow = true
+  /**
+   * 切换颜色模式
+   * @param index 颜色模式序号
+   */
+  switchColorMode(index: number) {
+    switch (index) {
+      case -1:
+        // 跟随系统
+        setAutoColorMode(context)
+        break;
+      case 0:
+        // 夜晚
+        setDarkColorMode(context)
+
+        break
+      case 1:
+        // 白天
+        setLightColorMode(context)
+        break
+    }
   }
 
-  onPageHide() {
-    this.onShow = false
-  }
-
-  pageTransition() {
-    PageTransitionEnter(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Right)
-    PageTransitionEnter(OPTIONS_TRANSITION_POP).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_POP).slide(SlideEffect.Right)
-  }
 
   build() {
-    Column() {
+    Navigation(this.pageStack) {
       Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
         TabContent() {
-          HomepageTabContent()
+          HomePage()
         }
         .tabBar(this.TabBarBuilder(0, '首页', $r('app.media.ic_homepage'), $r('app.media.ic_homepage_selected')))
-
+        .onWillShow(() => {
+          this.currentIndex = 0
+        })
         TabContent() {
-          MyPageTabContent({onShow: $onShow})
+          MyPage()
         }
         .tabBar(this.TabBarBuilder(1, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected')))
+        .onWillShow(() => {
+          this.currentIndex = 1
+        })
       }
       .vertical(false)
       .layoutWeight(1)
       .barMode(BarMode.Fixed)
       .barWidth('100%')
       .barHeight(48)
-      .backgroundColor(getTheme(this.theme).background_color_accent)
-      //      .animationDuration(420)
       .onChange((index: number) => {
         this.currentIndex = index
       })
 
-      ImmersionBarSpace()
-    }
-    .backgroundColor(getTheme(this.theme).background_color)
-    .width('100%')
-    .height('100%')
+    }.hideToolBar(true)
+    .mode(NavigationMode.Stack)
+    .width('100%').height('100%')
   }
 
   @Builder TabBarBuilder(index: number, title: string, icon: Resource, iconSelected: Resource) {
-    Column() {
+    Column({space: 3}) {
       Image(this.currentIndex === index ? iconSelected : icon)
         .width(20)
         .height(20)
-        .margin({ bottom: 4 })
         .objectFit(ImageFit.Contain)
       Text(title)
         .fontColor(this.currentIndex === index ? '#007DFF' : '#817977')
+        .margin({bottom: this.bottomHeight})
         .fontSize(12)
         .fontWeight(400)
         .lineHeight(14)
     }
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(getTheme(this.theme).background_color)
+    .backgroundColor(this.currentIndex === 0 ? $r('app.color.background_color') : $r('app.color.background_color_accent'))
     .height('100%')
     .width('100%')
   }

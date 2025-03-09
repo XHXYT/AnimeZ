@@ -1,5 +1,5 @@
 import media from '@ohos.multimedia.media';
-import IPlayer from './IPlayer';
+import { IPlayer } from './IPlayer';
 import EpisodeInfo from '../entity/EpisodeInfo';
 
 export enum PlayerStatus {
@@ -25,92 +25,149 @@ export enum VideoFit {
 // TODO 优化监听回调，改为on('xxxx', (x) => void)
 export interface PlayerListener {
 
-  onStatusChanged(status: number)
+  onStatusChanged: (status: number) => void
 
-//  onEpisodeChanged(episode: EpisodeInfo)
+//  onEpisodeChanged: (episode: EpisodeInfo) => void
 
-  onEpisodeChanged(episodeList: EpisodeInfo[], episodeIndex: number)
+  onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => void
 
-  onVideoSpeedChanged(videoSpeed: PlaybackSpeed)
+  onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => void
 
-  onFullScreenChanged(isFullScreen: boolean)
+  onFullScreenChanged: (isFullScreen: boolean) => void
 
-  onVideoFitChanged(videoFit: VideoFit)
+  onVideoFitChanged: (videoFit: VideoFit) => void
 
-  onVideoSizeChange(w: number, h: number)
+  onVideoSizeChange: (w: number, h: number) => void
 
-  onProgressChange(totalTime: number, currentTime: number)
+  onProgressChange: (totalTime: number, currentTime: number) => void
 
-  onBuffering(type: media.BufferingInfoType, value: number)
+  onBuffering: (type: media.BufferingInfoType, value: number) => void
 
 }
 
 export default interface IPlayerManager {
 
-  init(player: IPlayer)
+  init(player: IPlayer): void
 
-//  setEpisode(episode: EpisodeInfo);
+//  setEpisode(episode: EpisodeInfo): void
 
 //  playEpisode(episode: EpisodeInfo): Promise<void>
 
-//  getEpisode(): EpisodeInfo;
+//  getEpisode(): EpisodeInfo
 
-//  getEpisodeList(): EpisodeInfo[];
+//  getEpisodeList(): EpisodeInfo[]
 
-  playEpisodeList(episodeList: EpisodeInfo[], episodeIndex?: number): Promise<void>;
+  playEpisodeList(episodeList: EpisodeInfo[], episodeIndex?: number): Promise<void>
 
 //  playEpisodeAt(episodeIndex: number): Promise<void>
 
-//  setPlayerUrl(url: string);
+//  setPlayerUrl(url: string): void
 
-  start(): Promise<void>;
+  start(): Promise<void>
 
-  pause(): Promise<void>;
+  pause(): Promise<void>
 
-  stop(): Promise<void>;
+  stop(): Promise<void>
 
-  seekTo(value: number): Promise<void>;
+  seekTo(value: string): Promise<void>
 
-  setSpeed(speed: PlaybackSpeed): Promise<void>;
+  setSpeed(speed: media.PlaybackSpeed): Promise<void>
 
-  getSpeed(): PlaybackSpeed;
+  getSpeed(): media.PlaybackSpeed
 
-  isPlaying(): boolean;
+  isPlaying(): boolean
 
-  setVideoFit(videoFit: VideoFit);
+  setVideoFit(videoFit: VideoFit): void
 
-  setStatus(status: PlayerStatus);
+  setStatus(status: PlayerStatus): void
 
-  getStatus(): PlayerStatus;
+  getStatus(): PlayerStatus
 
-  isPrepared(): boolean;
+  isPrepared(): boolean
 
-  getDuration(): number;
+  getDuration(): number
 
-  getCurrentPosition(): number;
+  getCurrentPosition(): number
 
-  addListener(listener: PlayerListener);
+  addListener(listener: PlayerListener): void
 
-  removeListener(listener: PlayerListener);
+  removeListener(listener: PlayerListener): void
 
-  destroy();
+  destroy(): void
 
-  isFullScreen();
+  isFullScreen(): boolean
 
-  enterFullScreen();
+  enterFullScreen(): void
 
-  exitFullScreen();
+  exitFullScreen(): void
 
-  onVideoSizeChanged(width: number, height: number)
+  onVideoSizeChanged(width: number, height: number): void
 
-  notifyDuration(duration: number);
+  notifyDuration(duration: number): void
 
-  notifyCurrentTime(currentTime: number);
+  notifyCurrentTime(currentTime: number): void
 
-  notifyDuration(duration: number);
+  notifyDuration(duration: number): void
 
-  notifyTime(duration: number, currentTime: number);
+  notifyTime(duration: number, currentTime: number): void
 
-  notifyBuffering(type: media.BufferingInfoType, value: number)
+  notifyBuffering(type: media.BufferingInfoType, value: number): void
 
 }
+
+// IPlayerManager空对象
+export class NullPlayerManager implements IPlayerManager {
+  init(player: IPlayer): void {}
+  playEpisodeList(episodeList: EpisodeInfo[], episodeIndex?: number): Promise<void> {
+    return Promise.resolve();
+  }
+  start(): Promise<void> {
+    return Promise.resolve();
+  }
+  pause(): Promise<void> {
+    return Promise.resolve();
+  }
+  stop(): Promise<void> {
+    return Promise.resolve();
+  }
+  seekTo(value: string): Promise<void> {
+    return Promise.resolve();
+  }
+  setSpeed(speed: media.PlaybackSpeed): Promise<void> {
+    return Promise.resolve();
+  }
+  getSpeed(): media.PlaybackSpeed {
+    return {} as media.PlaybackSpeed;
+  }
+  isPlaying(): boolean {
+    return false;
+  }
+  setVideoFit(videoFit: VideoFit): void {}
+  setStatus(status: PlayerStatus): void {}
+  getStatus(): PlayerStatus {
+    return PlayerStatus.IDLE;
+  }
+  isPrepared(): boolean {
+    return false;
+  }
+  getDuration(): number {
+    return 0;
+  }
+  getCurrentPosition(): number {
+    return 0;
+  }
+  addListener(listener: PlayerListener): void {}
+  removeListener(listener: PlayerListener): void {}
+  destroy(): void {}
+  isFullScreen(): boolean {
+    return false;
+  }
+  enterFullScreen(): void {}
+  exitFullScreen(): void {}
+  onVideoSizeChanged(width: number, height: number): void {}
+  notifyDuration(duration: number): void {}
+  notifyCurrentTime(currentTime: number): void {}
+  notifyTime(duration: number, currentTime: number): void {}
+  notifyBuffering(type: media.BufferingInfoType, value: number): void {}
+}
+

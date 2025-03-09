@@ -1,20 +1,33 @@
-import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
-import { getTheme, KEY_THEME_ID, setTheme } from '../utils/Themes';
-import DataSourceManager from '../api/DataSourceManager';
-import Settings from '../utils/Settings';
-import { SliderDialog } from '../components/dialog/SliderDialog';
+import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
+import DataSourceManager from '../api/DataSourceManager'
+import Settings from '../utils/Settings'
+import { SliderDialog } from '../components/dialog/SliderDialog'
 import TitleBar from '../components/TitleBar'
-import { SettingGroup, SettingsList } from '../components/Settings'
-import ImmersionBarSpace from '../components/ImmersionBarSpace'
+import { Preference, SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants'
 import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper'
+import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/common/Common'
+import { setAutoColorMode, setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager'
+import { common } from '@kit.AbilityKit'
 
-@Entry
+// 系统路由
+@Builder
+export function SettingsPageBuilder(name: string, param: Object) {
+  SettingsPage()
+}
+
+const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+
 @Component
 struct SettingsPage {
-  @StorageLink('theme') theme: number = 0
-  private settings: SettingGroup[] = [
+  @Consume('pageStack') pageStack: NavPathStack
+  // 顶部避让高度
+  @StorageProp('topRectHeight') topHeight: number = 0
+  // 底部避让高度
+  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @StorageProp('currentColorMode') currentMode: number = -1
+  private settings: SettingGroup<SettingGroupType>[] = [
     {
       title: '界面',
       settings: [
@@ -24,22 +37,38 @@ struct SettingsPage {
             type: 'radio',
             defaultValue: 0,
             values: DataSourceManager.getAllSources(),
-            onValueChange: (key, value) => {
-              DataSourceManager.setCurrentSourceIndex(value)
-              SOURCE_CHANGED_EVENT.emit()
+            onValueChange: (key: string, value: string | boolean | number) => {
+              if (typeof value === 'number') {
+                DataSourceManager.setCurrentSourceIndex(value)
+                SOURCE_CHANGED_EVENT.emit()
+              }
             }
           }
         },
-        { title: '主题', info: '纯白',
+        { title: '颜色主题', info: '自动',
           preference: {
-            key: KEY_THEME_ID,
-            type: 'radio',
-            defaultValue: 0,
-            values: ['白天', '夜晚'],
+            key: Settings.KEY_COLOR_MODE,
+            type: 'menu',
+            defaultValue: -1,
+            values: ['自动', '夜晚', '白天' ],
             onValueChange: (key, value) => {
-              this.theme = value
-              setTheme(value)
-              getTheme(this.theme).initBar()
+              switch (value) {
+                case -1:
+                  // 设置为 自动
+                  this.currentMode = -1
+                  setAutoColorMode(context)
+                  break
+                case 0:
+                  // 设置为 黑暗
+                  this.currentMode = 0
+                  setDarkColorMode(context)
+                  break
+                case 1:
+                  // 设置为 日间
+                  this.currentMode = 1
+                  setLightColorMode(context)
+                  break
+              }
             }
           }
         }
@@ -51,8 +80,8 @@ struct SettingsPage {
         { title: '默认播放器', info: 'AVPlayer',
           preference: {
             key: Settings.KEY_DEFAULT_PLAYER,
-            type: 'radio',
-            defaultValue: 0,
+            type: 'menu',
+            defaultValue: -1,
             values: ['AVPlayer', 'VideoPlayer', 'IjkPlayer'],
             onValueChange: (key, value) => {
 
@@ -65,6 +94,7 @@ struct SettingsPage {
           preference: {
             key: Settings.KEY_AUTO_PLAY_NEXT_EPISODE,
             type: 'switch',
+            values: [],
             defaultValue: true
           }
         },
@@ -74,12 +104,13 @@ struct SettingsPage {
           preference: {
             key: Settings.KEY_AUTO_PLAY_ON_NO_WIFI,
             type: 'switch',
+            values: [],
             defaultValue: true
           }
         }
       ]
     },
-    {
+   /* {
       title: '下载',
       settings: [
         {
@@ -115,65 +146,138 @@ struct SettingsPage {
           }
         }
       ]
-    },
+    },*/
     {
       title: '更多',
       settings: [
         {
           title: '检查更新',
           info: '1.0.1',
-          //          icon: $r('app.media.ic_upgrade'),
           iconBlendColor: Color.Black,
           onClick: () => {
-            promptAction.showToast({ message: 'TODO 检查更新' })
+            promptAction.showToast({ message: '开发中' })
           }
         },
         {
           title: '应用信息',
           info: $r('app.string.module_desc'),
-          //          icon: $r('app.media.ic_application'),
           onClick: () => {
-            router.pushUrl({ url: 'pages/AppInfoPage' })
+            this.pageStack.pushPathByName("AppInfoPage", '')
           }
         },
         {
           title: '关于作者',
           info: '这人很懒，什么都没有写！',
-          //          icon: $r('app.media.ic_author'),
           onClick: () => {
-            router.pushUrl({ url: 'pages/AboutMePage' })
+            this.pageStack.pushPathByName("AboutMePage", '')
           }
         }
       ]
     }
   ]
 
-  onPageShow() {
-    getTheme(this.theme).initBar()
-  }
-
-  pageTransition() {
-    PageTransitionEnter(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Right)
-    PageTransitionEnter(OPTIONS_TRANSITION_POP).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_POP).slide(SlideEffect.Right)
-  }
 
   build() {
-    Column() {
-      ImmersionBarSpace()
+    NavDestination() {
+      // 标题
       TitleBar({ title: '设置' })
-      SettingsList({ settings: this.settings })
-        .layoutWeight(1)
+      // 内容
+      Column() {
+        Scroll() {
+          Column() {
+            ForEach(
+              this.settings,
+              (group: SettingGroup<SettingGroupType>, index) => {
+                Column() {
+                  if (group.title) {
+                    // 标题行
+                    Row() {
+                      Row()
+                        .backgroundColor($r('app.color.primary_color'))
+                        .height(14)
+                        .width(6)
+                        .margin({ right: 2 })
+                        .borderRadius(4)
+                      Text(group.title)
+                        .fontColor($r('app.color.color_text_major'))
+                        .fontSize(16)
+                        .fontWeight(FontWeight.Bold)
+                      Blank()
+                    }
+                    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
+                    .width('100%')
+                  }
+                  // 设置项
+                  ForEach(
+                    group.settings,
+                    (setting: SettingItem<SettingGroupType>) => {
+                      if(setting.preference?.type === 'switch') {
+                        ToggleSettingRow({
+                          title: setting.title,
+                          subtitle: setting.info,
+                          preference: setting.preference as Preference<boolean>
+                        })
+                      } else if (setting.preference?.type === 'radio') {
+
+                      } else if (setting.preference?.type === 'menu') {
+                        MenuSettingRow({
+                          title: setting.title,
+                          icons: setting.icon,
+                          info: setting.info as string,
+                          preference: setting.preference as Preference<number>
+                        })
+                      }else {
+                        SettingRow({
+                          icons: setting.icon,
+                          title: setting.title,
+                          subtitle: setting.info,
+                          onCheck: () => {
+                            if (setting.onClick) {
+                              setting.onClick(
+                                setting,
+                                () => { },
+
+                              )
+                            }
+                          }
+                        })
+                      }
+                    },
+                    (setting: SettingItem<SettingGroupType>) => setting.title
+                  )
+                }
+                .backgroundColor($r('app.color.background_color'))
+                .borderRadius(16)
+
+                if (index < this.settings.length - 1) {
+                  Blank().height(16)
+                }
+              },
+              // 唯一键生成
+              (group: SettingGroup<SettingGroupType>) => {
+                return group.title || String(group.settings.length)
+              }
+            )
+          }
+          .padding(16)
+          .width('100%')
+          .constraintSize({
+            minHeight: '100%'
+          })
+        }.scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+      }.layoutWeight(1)
 
       Text('本应用仅供学习交流！')
-        .fontSize(10)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontSize(16)
+        .fontColor($r('app.color.color_text_major'))
         .padding(8)
 
-      ImmersionBarSpace()
     }
-    .backgroundColor(getTheme(this.theme).background_color_accent)
+    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .backgroundColor($r('app.color.background_color_accent'))
+    .hideTitleBar(true)
+    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }

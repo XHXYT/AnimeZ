@@ -1,5 +1,5 @@
 import media from '@ohos.multimedia.media';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
+import IPlayerManager, { NullPlayerManager, PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import VideoTimeUtils from './VideoTimeUtils';
 import Logger from '../utils/Logger';
@@ -57,7 +57,7 @@ export struct VideoPlayerController {
   @State bufferingPercent: number = 0
   @State episodeList: EpisodeInfo[] = []
   @State episodeIndex: number = 0
-  private playerManager: IPlayerManager = null;
+  @State playerManager: IPlayerManager = new NullPlayerManager()
   private showControllerTimer: number = -1;
   private readonly playerListener: PlayerListener = {
     onStatusChanged: (status: number) => {
@@ -312,7 +312,7 @@ export struct VideoPlayerController {
 
                 this.setProgress(this.playerManager.getDuration(), seekValue)
 
-                this.playerManager.seekTo(seekValue);
+                this.playerManager.seekTo(seekValue.toString());
               }
             })
           Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)

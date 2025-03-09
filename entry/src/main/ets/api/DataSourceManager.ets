@@ -1,28 +1,58 @@
 import YingHuaDataSource from './impl/YingHuaDataSource';
 import DataStore from '../utils/DataStore';
 import BimiAcgDataSource from './impl/BimiAcgDataSource';
-import Globals from '../utils/Globals';
 import DataSource from './DataSource';
+import VideoInfo from '../entity/VideoInfo';
+import HomepageData from '../entity/HomepageData';
+import VideoDetailInfo from '../entity/VideoDetailInfo';
+import Logger from '../utils/Logger';
+import AGEDataSource from './impl/AGEDataSource';
 
 const MAP_DATA_SOURCE = 'map_data_source'
 const KEY_CURRENT_SOURCE = 'key_current_source'
 
+
+// 数据源信息接口
 interface SourceInfo {
   key: string,
   title: string,
-  source: { new(): DataSource }
+  source: () => DataSource
 }
 
 // TODO 通过注解配置key和title
 const ALL_SOURCES: SourceInfo[] = [
-  { key: 'key_yinghuavideo', title: '樱花动漫', source: YingHuaDataSource },
-  { key: 'key_bimi_acg', title: 'Bimi动漫（已废弃）', source: BimiAcgDataSource }
+  { key: 'key_yinghuavideo', title: '樱花动漫', source: () => new YingHuaDataSource() },
+  // { key: 'key_agedmvideo', title: 'AGE动漫', source: () => new AGEDataSource() }
 ]
+
+/**
+ * 初始化数据源
+ */
+export function initDataSources() {
+  ALL_SOURCES.forEach((item: SourceInfo) => {
+    const title = item.title
+    try {
+      const key = item.key
+      const instance = item.source()
+      DataSourceManager.register(key, instance);
+    } catch (e) {
+      Logger.e(`数据源[${title}]注册失败: ${e.message}`);
+    }
+  });
+
+}
 
 /**
  * 视频数据源管理
  */
 export default class DataSourceManager {
+  private static dataSourceRegistry = new Map<string, DataSource>()
+
+  // 注册数据源实现
+  static register(sourceKey: string, dataSource: DataSource) {
+    DataSourceManager.dataSourceRegistry.set(sourceKey, dataSource);
+    console.log('数据源 已注册:', sourceKey)
+  }
 
   /**
    * 获取所有数据源
@@ -40,7 +70,7 @@ export default class DataSourceManager {
     if (targetSource) {
       return targetSource.title
     } else {
-      return null;
+      return ''
     }
   }
 
@@ -49,7 +79,7 @@ export default class DataSourceManager {
    */
   static getCurrentSource(): DataSource {
     let currentSource = DataStore.get(KEY_CURRENT_SOURCE, ALL_SOURCES[0].key)
-    return this.getSource(currentSource)
+    return DataSourceManager.getSource(currentSource)
   }
 
   /**
@@ -59,6 +89,9 @@ export default class DataSourceManager {
     DataStore.set(KEY_CURRENT_SOURCE, key)
   }
 
+  /**
+   * 获取当前数据源key
+   */
   static getCurrentSourceKey(): string {
     return DataStore.get(KEY_CURRENT_SOURCE, ALL_SOURCES[0].key)
   }
@@ -69,35 +102,20 @@ export default class DataSourceManager {
    */
   static setCurrentSourceIndex(index: number) {
     if (ALL_SOURCES.length > index) {
-      this.setCurrentSource(ALL_SOURCES[index].key)
+      DataSourceManager.setCurrentSource(ALL_SOURCES[index].key)
     }
   }
 
-  /**
-   * 根据key获取视频数据源
-   */
-  static getSource(key: string): DataSource {
-    const map = this.getSourceMap();
-    const source = map.get(key)
-    if (source) {
-      return source
-    }
-
-    let targetSource = ALL_SOURCES.find((source) => {
-      return source.key == key
-    })
-    if (!targetSource) {
-      targetSource = ALL_SOURCES[0]
-    }
-    const newSource = new targetSource.source()
-    map.set(key, newSource)
-    return newSource
+  static getSource(sourceKey: string): DataSource {
+    const source = DataSourceManager.dataSourceRegistry.get(sourceKey);
+    if (!source) throw new Error(`数据源 [${sourceKey}] not registered`)
+    console.log('数据源 :', sourceKey)
+    return source;
   }
 
-  private static getSourceMap(): Map<string, DataSource> {
-    return Globals.get<Map<string, DataSource>>(MAP_DATA_SOURCE, () => {
-      const map = new Map<string, DataSource>()
-      return map
-    })
-  }
 }
+
+// 独立维护实例容器
+const dataSourceMap = new Map<string, Map<string, DataSource>>()
+
+

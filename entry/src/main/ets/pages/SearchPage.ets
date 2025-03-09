@@ -1,60 +1,53 @@
 import DataSourceManager from '../api/DataSourceManager';
-import { getTheme } from '../utils/Themes';
 import Logger from '../utils/Logger';
-import ImmersionBarSpace from '../components/ImmersionBarSpace';
-import { SearchHistoryTable } from '../db/impl/SearchHistoryDao';
-import SQLite from '../db/SQLite';
-import { SearchHistoryInfo } from '../entity/SearchHistoryInfo';
-import router from '@ohos.router';
-import DataSource from '../api/DataSource';
 import { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
 import promptAction from '@ohos.promptAction';
 import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import { SearchHistoryInfo, searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
 
-@Entry
+const tag: string = 'SearchPage'
+
+// 系统路由
+@Builder
+export function SearchPageBuilder(name: string, param: Object) {
+  SearchPage()
+}
+
 @Component
 struct SearchPage {
-  @StorageLink('theme') theme: number = 0
+
   @State videoList: VideoInfo[] = []
-  @State searchHistoryList: SearchHistoryInfo[] = [
-  //    { id: 0, keyword: '1' }, { id: 0, keyword: '122222' }, { id: 0, keyword: '156' },
-  //    { id: 0, keyword: '14656' }, { id: 0, keyword: '12354' }, { id: 0, keyword: '1' },
-  //    { id: 0, keyword: '1' }, { id: 0, keyword: '1111111112' }, { id: 0, keyword: '222222' }
-  ]
-  @State searchRecommends: string[] = ['进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
-  @State state: number = ViewState.CUSTOM
+  @Consume('pageStack') pageStack: NavPathStack
+  @State searchHistoryList: SearchHistoryInfo[] = []
+  // 顶部避让高度
+  @StorageProp('topRectHeight') topHeight: number = 0
+  @StorageProp('currentColorMode') currentMode: number = 1
+  // 底部避让高度
+  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @State searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
+  @State state: number = 0
   @State errorMessage: string = ''
   @State keyword: string = ''
 
-  aboutToAppear() {
-    SQLite.with(SearchHistoryTable)
-      .queryAll()
-      .then((list) => {
-        this.searchHistoryList = list
-      })
+  async aboutToAppear() {
+    this.state = ViewState.CUSTOM
+    // 查询搜索历史
+    const searchlist = await searchHistoryInfoDB.query()
+    if (searchlist) {
+      this.searchHistoryList = searchlist
+    }
   }
 
-  onPageShow() {
-    getTheme(this.theme).initBar()
-  }
-
-  pageTransition() {
-    PageTransitionEnter(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Right)
-    PageTransitionEnter(OPTIONS_TRANSITION_POP).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_POP).slide(SlideEffect.Right)
-  }
 
   build() {
-    Column() {
-      ImmersionBarSpace()
+    NavDestination() {
       this.SearchBar()
       StateView(
         {
-          state: $state,
+          state: this.state,
           errorMessage: $errorMessage,
           content: () => {
             this.content()
@@ -70,9 +63,12 @@ struct SearchPage {
       )
         .width('100%')
         .layoutWeight(1)
-      ImmersionBarSpace()
+
     }
-    .backgroundColor(getTheme(this.theme).background_color_accent)
+    .padding({top: this.topHeight - 15, bottom: this.bottomHeight - 20})
+    .backgroundColor($r('app.color.background_color_accent'))
+    .hideTitleBar(true)
+    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }
@@ -83,19 +79,16 @@ struct SearchPage {
 
   @Builder SearchBar() {
     Row() {
-      Image($r('app.media.ic_arrow_left'))
-        .width(24)
-        .height(24)
-        .margin({ left: 12 })
-        .fillColor(getTheme(this.theme).color_text_major)
-        .objectFit(ImageFit.Contain)
+      SymbolGlyph($r('sys.symbol.arrow_left'))
+        .fontSize(24)
+        .fontColor([$r('app.color.color_text_major')])
         .onClick(() => {
-          router.back()
+          this.pageStack.pop(true)
         })
       TextInput({ placeholder: '输入关键字...', text: this.keyword })
         .placeholderFont({ size: 14, weight: 300 })
         .placeholderColor('#817977')
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .onChange((value) => {
           this.keyword = value
         })
@@ -104,19 +97,18 @@ struct SearchPage {
         })
         .height(36)
         .margin({ left: 12, right: 12 })
-        .backgroundColor(getTheme(this.theme).background_color)
+        .backgroundColor($r('app.color.background_color'))
         .layoutWeight(1)
       Text('搜索')
         .fontSize(16)
-        .fontColor(getTheme(this.theme).primary_color)
-          //        .fontWeight(300)
-        .margin({ right: 16 })
+        .fontColor($r('app.color.primary_color'))
         .onClick(() => {
           this.doSearch(this.keyword)
         })
     }
     .height(56)
     .width('100%')
+    .padding({left: 16, right: 16})
   }
 
   @Builder Bar(title: string, showButton: boolean = true) {
@@ -126,9 +118,9 @@ struct SearchPage {
         .width(6)
         .margin({ right: 2 })
         .borderRadius(4)
-        .backgroundColor(getTheme(this.theme).primary_color)
+        .backgroundColor($r('app.color.primary_color'))
       Text(title)
-        .fontColor(getTheme(this.theme).color_text_major)
+        .fontColor($r('app.color.color_text_major'))
         .fontSize(16)
         .fontWeight(500)
 
@@ -158,8 +150,8 @@ struct SearchPage {
             ForEach(this.searchHistoryList, (item: SearchHistoryInfo) => {
               Text(item.keyword)
                 .textAlign(TextAlign.Center)
-                .backgroundColor(getTheme(this.theme).background_color)
-                .fontColor(getTheme(this.theme).color_text_major)
+                .backgroundColor($r('app.color.background_color'))
+                .fontColor($r('app.color.color_text_major'))
                 .fontWeight(300)
                 .fontSize(14)
                 .maxLines(1)
@@ -186,7 +178,7 @@ struct SearchPage {
             Text(item)
               .width('45%')
               .textAlign(TextAlign.Start)
-              .fontColor(getTheme(this.theme).color_text_major)
+              .fontColor($r('app.color.color_text_major'))
               .fontWeight(300)
               .fontSize(14)
               .maxLines(1)
@@ -200,7 +192,7 @@ struct SearchPage {
         }
         .margin(6)
 
-        ImmersionBarSpace()
+
       }
       .constraintSize({
         minHeight: '100%'
@@ -210,7 +202,7 @@ struct SearchPage {
     .height('100%')
   }
 
-  private doSearch(keyword: string) {
+  private async doSearch(keyword: string) {
     Logger.e(this, 'doSearch keyword=' + keyword)
     this.keyword = keyword
     if (this.keyword.length == 0) {
@@ -218,13 +210,19 @@ struct SearchPage {
       return
     }
     this.state = ViewState.LOADING
-    SQLite.with(SearchHistoryTable).saveOrUpdate(keyword)
-      .then((result) => {
-        Logger.e(this,  'saveOrUpdate result=' + result)
+    let result: SearchHistoryInfo = {
+      id: null,
+      keyword: keyword,
+      accessTime: new Date().getTime()
+    }
+    await searchHistoryInfoDB.insert(result)
+      .then((insertId) => {
+        console.log('SearchTest #doSearch 插入成功id为：', insertId)
       })
-      .catch((e) => {
-        Logger.e(this,  'saveOrUpdate e=' + JSON.stringify(e))
+      .catch((error: Error) => {
+        console.error("SearchTest #doSearch 插入操作失败: ", error)
       })
+
     // TODO 支持更多数据源
     DataSourceManager.getCurrentSource().search(keyword, 1)
       .then((videoList) => {
@@ -235,7 +233,7 @@ struct SearchPage {
           this.state = ViewState.CONTENT
         }
       })
-      .catch((e) => {
+      .catch((e: Error) => {
         this.errorMessage = JSON.stringify(e)
         this.state = ViewState.ERROR
       })
@@ -254,13 +252,13 @@ struct SearchPage {
         secondaryButton: {
           value: '确定',
           fontColor: Color.Red,
-          action: () => {
-            SQLite.with(SearchHistoryTable)
-              .clearTable()
+          action: async () => {
+            await searchHistoryInfoDB.delete()
             this.searchHistoryList = []
           }
         }
       }
     )
   }
+
 }
