@@ -1,7 +1,7 @@
 import IPlayerManager, { VideoFit } from '../player/IPlayerManager';
 import PlayerManagerImpl from '../player/PlayerManagerImpl';
 import EpisodeInfo from '../entity/EpisodeInfo';
-import { IjkVideoPlayer } from '../player/IjkVideoPlayer';
+import { IjkVideoPlayer } from '../player/IJK/IjkVideoPlayer';
 import Logger from '../utils/Logger';
 import router from '@ohos.router';
 import { media } from '@kit.MediaKit';
@@ -18,7 +18,7 @@ export function LocalVideoPlayerPageBuilder(name: string, param: Object) {
  */
 @Component
 struct LocalVideoPlayerPage {
-  private playerManager: IPlayerManager = new PlayerManagerImpl()
+  @State playerManager: IPlayerManager = new PlayerManagerImpl()
 
   aboutToAppear() {
     // 转换成Record类型，用来访问对象的属性
@@ -76,7 +76,7 @@ struct LocalVideoPlayerPage {
 
   build() {
     Stack() {
-      IjkVideoPlayer({ playerManager: this.playerManager })
+      IjkVideoPlayer({ playerManager: $playerManager })
     }
     .backgroundColor($r('app.color.background_color_accent'))
     .height('100%')

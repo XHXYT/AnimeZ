@@ -1,10 +1,9 @@
 import media from '@ohos.multimedia.media';
-import IPlayerManager, { NullPlayerManager, PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import VideoTimeUtils from './VideoTimeUtils';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
-import router from '@ohos.router';
 
 interface KeyValue {
   name: string,
@@ -57,9 +56,10 @@ export struct VideoPlayerController {
   @State bufferingPercent: number = 0
   @State episodeList: EpisodeInfo[] = []
   @State episodeIndex: number = 0
-  @State playerManager: IPlayerManager = new NullPlayerManager()
+  @Link playerManager: IPlayerManager
   private showControllerTimer: number = -1;
-  private readonly playerListener: PlayerListener = {
+  @Consume('pageStack') pageStack: NavPathStack
+  private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
       this.initLoading()
@@ -71,16 +71,15 @@ export struct VideoPlayerController {
       this.title = episodeList[episodeIndex].desc
     },
     onVideoSpeedChanged: (videoSpeed: number) => {
-
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
       this.videoFit = videoFit
     },
     onFullScreenChanged: (isFullScreen: boolean) => {
+      console.log('VideoPlayerController #onFullScreenChanged isFullScreen：', isFullScreen)
       this.isFullScreen = isFullScreen
     },
     onVideoSizeChange: (w: number, h: number) => {
-
     },
     onProgressChange: (totalTime: number, currentTime: number) => {
       this.setProgress(totalTime, currentTime)
@@ -112,14 +111,14 @@ export struct VideoPlayerController {
     if (this.playerManager) {
       this.playerStatus = this.playerManager.getStatus()
       this.initLoading()
-      this.playerManager.addListener(this.playerListener)
+      this.playerManager.addListener(this.playerListenerVC)
     } else {
       throw new Error('You must set playerManager firstly!')
     }
   }
 
   aboutToDisappear() {
-    this.playerManager.removeListener(this.playerListener)
+    this.playerManager.removeListener(this.playerListenerVC)
     if (this.showControllerTimer >= 0) {
       clearTimeout(this.showControllerTimer)
       this.showControllerTimer = -1;
@@ -140,6 +139,7 @@ export struct VideoPlayerController {
         .padding({ left: 32, right: 32, top: 16, bottom: 16 })
       }
 
+      // 播放错误
       Column() {
         Image($r('app.media.ic_refresh'))
           .width(32)
@@ -156,6 +156,7 @@ export struct VideoPlayerController {
         this.playerManager.start()
       })
 
+      // 重新播放
       Column() {
         Image($r('app.media.ic_refresh'))
           .width(32)
@@ -174,7 +175,7 @@ export struct VideoPlayerController {
       })
 
       if (this.showController) {
-        // Controller
+        // 控制面板
         this.VideoController()
       }
 
@@ -190,6 +191,7 @@ export struct VideoPlayerController {
   @Builder VideoController() {
     Stack() {
       Column() {
+        // 上控制栏
         Row() {
           Image($r("app.media.ic_arrow_left"))
             .width(24)
@@ -202,7 +204,7 @@ export struct VideoPlayerController {
                 this.playerManager.exitFullScreen()
                 return
               }
-              router.back()
+              this.pageStack.pop(true)
             })
           Text(this.title)
             .fontColor(Color.White)
@@ -253,6 +255,7 @@ export struct VideoPlayerController {
         })
 
         if (this.isFullScreen) {
+          // 控制锁定
           Image(this.isLocked ? $r('app.media.ic_lock') : $r('app.media.ic_unlock'))
             .width(44)
             .height(44)
@@ -267,6 +270,7 @@ export struct VideoPlayerController {
             })
         }
 
+        // 下控制栏
         Row() {
           Image(
               (this.playerStatus == PlayerStatus.PLAY)
@@ -307,12 +311,12 @@ export struct VideoPlayerController {
               + ' result2=' + (mode == SliderChangeMode.Click) + ' click=' + SliderChangeMode.Click + ' result3=' + (mode === SliderChangeMode.Click))
               if (mode == SliderChangeMode.End || mode == 3) {
                 this.progress = value
-                let seekValue = value / 100 * this.playerManager.getDuration();
+                let seekValue = value / 100 * (this.playerManager.getDuration() as number);
                 Logger.e(this, 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
 
-                this.setProgress(this.playerManager.getDuration(), seekValue)
+                this.setProgress(this.playerManager.getDuration() as number, seekValue)
 
-                this.playerManager.seekTo(seekValue.toString());
+                this.playerManager.seekTo(seekValue);
               }
             })
           Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
@@ -349,7 +353,7 @@ export struct VideoPlayerController {
               .margin({ right: 12 })
               .objectFit(ImageFit.Contain)
               .onClick(() => {
-                promptAction.showToast({ message: 'TODO 全屏' })
+                // promptAction.showToast({ message: 'TODO 全屏' })
                 this.playerManager.enterFullScreen()
               })
           }

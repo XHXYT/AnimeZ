@@ -26,7 +26,7 @@ struct SettingsPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageProp('currentColorMode') currentMode: number = -1
+  @StorageLink('currentColorMode') currentMode: number = -1
   private settings: SettingGroup<SettingGroupType>[] = [
     {
       title: '界面',
@@ -52,20 +52,18 @@ struct SettingsPage {
             defaultValue: -1,
             values: ['自动', '夜晚', '白天' ],
             onValueChange: (key, value) => {
+              this.currentMode = value as number
               switch (value) {
                 case -1:
                   // 设置为 自动
-                  this.currentMode = -1
                   setAutoColorMode(context)
                   break
                 case 0:
                   // 设置为 黑暗
-                  this.currentMode = 0
                   setDarkColorMode(context)
                   break
                 case 1:
                   // 设置为 日间
-                  this.currentMode = 1
                   setLightColorMode(context)
                   break
               }
@@ -84,10 +82,19 @@ struct SettingsPage {
             defaultValue: -1,
             values: ['AVPlayer', 'VideoPlayer', 'IjkPlayer'],
             onValueChange: (key, value) => {
-
             }
           }
         },
+        // {
+        //   title: '启用感应旋屏',
+        //   info: '跟随传感器切换半屏/全屏播放',
+        //   preference: {
+        //     key: Settings.KEY_SENSOR_ROTATE,
+        //     type: 'switch',
+        //     values: [],
+        //     defaultValue: true
+        //   }
+        // },
         {
           title: '自动播放下一集',
           info: '视频结束后自动播放下一集',

@@ -5,7 +5,8 @@ import { common } from '@kit.AbilityKit';
 import { setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
 import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
-import mediaQuery from '@ohos.mediaquery'
+import DataStore from '../utils/DataStore';
+import Settings from '../utils/Settings';
 
 const TAG: string = 'MyPage'
 const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -20,15 +21,12 @@ export struct MyPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageProp('currentColorMode') currentMode: number = -1
+  @StorageLink('currentColorMode') currentMode: number = -1
   @Watch('onShowChanged') @Consume onShow: boolean
-  @State DarkModeImage: boolean = false
+  @Consume DarkModeImage: boolean
   @State items: VideoHistoryInfo[] = []
   @State bgHeight: number = 0
   private readonly scroller = new Scroller()
-
-  // 系统为深色模式时为true，否则为false。
-  listener: mediaQuery.MediaQueryListener = mediaQuery.matchMediaSync('(dark-mode: true)')
 
   aboutToAppear() {
     this.loadHistoryList()
@@ -37,9 +35,6 @@ export struct MyPage {
         this.loadHistoryList()
       } else {
       }
-    })
-    this.listener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
-      this.DarkModeImage  = mediaQueryResult.matches as boolean
     })
   }
 
@@ -177,10 +172,24 @@ export struct MyPage {
             // 设置为 黑暗
             this.currentMode = 0
             setDarkColorMode(context)
+            DataStore.set(Settings.KEY_COLOR_MODE, 0)
           } else if (this.currentMode === 0){
             // 设置为 日间
             this.currentMode = 1
             setLightColorMode(context)
+            DataStore.set(Settings.KEY_COLOR_MODE, 1)
+          } else {
+            if (this.DarkModeImage) {
+              // 设置为 日间
+              this.currentMode = 1
+              setLightColorMode(context)
+              DataStore.set(Settings.KEY_COLOR_MODE, 1)
+            } else {
+              // 设置为 黑暗
+              this.currentMode = 0
+              setDarkColorMode(context)
+              DataStore.set(Settings.KEY_COLOR_MODE, 0)
+            }
           }
         })
     }

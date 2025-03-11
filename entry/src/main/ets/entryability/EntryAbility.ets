@@ -7,7 +7,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 export default class EntryAbility extends UIAbility {
     onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
-        AppStorage.setOrCreate('currentColorMode', this.context.config.colorMode)
+        // AppStorage.setOrCreate('currentColorMode', this.context.config.colorMode)
     }
 
     onDestroy() {
@@ -15,8 +15,8 @@ export default class EntryAbility extends UIAbility {
     }
 
     onConfigurationUpdate(newConfig: Configuration): void {
-        AppStorage.setOrCreate('currentColorMode', newConfig.colorMode);
-        hilog.info(0x0000, 'testTag', 'the newConfig.colorMode is %{public}s', JSON.stringify(AppStorage.get('currentColorMode')) ?? '');
+        // AppStorage.setOrCreate('currentColorMode', newConfig.colorMode);
+        // hilog.info(0x0000, 'testTag', 'the newConfig.colorMode is %{public}s', JSON.stringify(AppStorage.get('currentColorMode')) ?? '');
     }
 
     onWindowStageCreate(windowStage: window.WindowStage) {

@@ -20,7 +20,7 @@ export function HomePageBuilder(name: string, param: Object) {
 export struct HomePage {
   @State state: number = 0
   @Consume('pageStack') pageStack: NavPathStack
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
@@ -95,7 +95,7 @@ struct Recommend {
   @Prop state: number
   @State errorMessage: string = ''
   @Consume('pageStack') pageStack: NavPathStack
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   aboutToAppear() {
     this.state = ViewState.LOADING

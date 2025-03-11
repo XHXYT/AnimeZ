@@ -28,7 +28,7 @@ struct VideoCollectionPage {
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   // 当前颜色模式
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
 
   private readonly selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
   private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
@@ -285,7 +285,7 @@ struct VideoCollectionPage {
 struct CollectionItem {
   @State selectionMode: boolean = false
   @State isSelected: boolean = false
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
   @State selectionManager: SelectionManager<VideoCollectionInfo> | undefined = undefined
   @State item: VideoCollectionInfo = CollectionInfo
   @State selectionIconMargin: number = 0

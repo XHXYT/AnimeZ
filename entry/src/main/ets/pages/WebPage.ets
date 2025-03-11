@@ -34,7 +34,7 @@ struct WebPage {
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   private readonly controller: Webview.WebviewController = new Webview.WebviewController()
   private url: string | Resource = ''
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
 
   aboutToAppear() {

@@ -1,6 +1,6 @@
 import { MyPage } from './MyPage';
 import { HomePage } from './Homepage';
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
+import mediaQuery from '@ohos.mediaquery'
 import { initDataSources } from '../api/DataSourceManager';
 import { setAutoColorMode, setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
 import { common } from '@kit.AbilityKit';
@@ -15,20 +15,25 @@ struct Index {
   @State currentIndex: number = 0
   @Provide onShow: boolean = false
   @Provide('StateView') state: number = 0
+  @Provide DarkModeImage: boolean = false
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
-  @StorageProp('currentColorMode') currentMode: number = -1
+  @StorageLink('currentColorMode') currentMode: number = -1
   private controller: TabsController = new TabsController()
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   @Provide('pageStack') pageStack: NavPathStack = new NavPathStack()
-
+  // 系统为深色模式时为true，否则为false。
+  listener: mediaQuery.MediaQueryListener = mediaQuery.matchMediaSync('(dark-mode: true)')
   aboutToAppear() {
     // 初始化视频数据源
     initDataSources()
     // 初始化颜色模式
     this.switchColorMode(DataStore.getInt(Settings.KEY_COLOR_MODE, -1))
-    console.log('#aboutToAppear ColorMode值：', DataStore.getInt(Settings.KEY_COLOR_MODE, -1))
+    // 启用颜色模式监听
+    this.listener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
+      this.DarkModeImage  = mediaQueryResult.matches as boolean
+    })
   }
 
   /**
@@ -44,7 +49,6 @@ struct Index {
       case 0:
         // 夜晚
         setDarkColorMode(context)
-
         break
       case 1:
         // 白天

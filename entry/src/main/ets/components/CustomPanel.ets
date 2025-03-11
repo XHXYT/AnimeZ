@@ -31,7 +31,7 @@ export class PanelController {
 
 @Component
 export default struct CustomPanel {
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
 //  @Watch("onShowPanelChanged") @State showPanel: boolean = false
   // TODO 改为panel state
   @State showPanelInner: boolean = false

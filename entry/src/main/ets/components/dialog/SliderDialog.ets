@@ -4,7 +4,7 @@ const KEY = 'key_max_downloading_count'
 
 @CustomDialog
 export struct SliderDialog {
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
   @State value: number = 1
   private controller: CustomDialogController
 

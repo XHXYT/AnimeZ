@@ -22,7 +22,6 @@ export enum VideoFit {
   Fit_1_1,
 }
 
-// TODO 优化监听回调，改为on('xxxx', (x) => void)
 export interface PlayerListener {
 
   onStatusChanged: (status: number) => void
@@ -47,127 +46,70 @@ export interface PlayerListener {
 
 export default interface IPlayerManager {
 
-  init(player: IPlayer): void
+  init: (player: IPlayer) => void
 
-//  setEpisode(episode: EpisodeInfo): void
+  //  setEpisode: (episode: EpisodeInfo) => void
 
-//  playEpisode(episode: EpisodeInfo): Promise<void>
+  //  playEpisode: (episode: EpisodeInfo) => Promise<void>
 
-//  getEpisode(): EpisodeInfo
+  //  getEpisode: () => EpisodeInfo
 
-//  getEpisodeList(): EpisodeInfo[]
+  //   getEpisodeList: () => EpisodeInfo[]
 
-  playEpisodeList(episodeList: EpisodeInfo[], episodeIndex?: number): Promise<void>
+  playEpisodeList: (episodeList: EpisodeInfo[], episodeIndex?: number) => Promise<void>
 
-//  playEpisodeAt(episodeIndex: number): Promise<void>
+  //  playEpisodeAt: (episodeIndex: number) => Promise<void>
 
-//  setPlayerUrl(url: string): void
+  //  setPlayerUrl: (url: string) => void
 
-  start(): Promise<void>
+  start: () => Promise<void>
 
-  pause(): Promise<void>
+  pause: () => Promise<void>
 
-  stop(): Promise<void>
+  stop: () => Promise<void>
 
-  seekTo(value: string): Promise<void>
+  seekTo: (value: number) => Promise<void>
 
-  setSpeed(speed: media.PlaybackSpeed): Promise<void>
+  setSpeed: (speed: media.PlaybackSpeed) => Promise<void>
 
-  getSpeed(): media.PlaybackSpeed
+  getSpeed: () => media.PlaybackSpeed
 
-  isPlaying(): boolean
+  isPlaying: () => boolean
 
-  setVideoFit(videoFit: VideoFit): void
+  setVideoFit: (videoFit: VideoFit) => void
 
-  setStatus(status: PlayerStatus): void
+  setStatus: (status: PlayerStatus) => void
 
-  getStatus(): PlayerStatus
+  getStatus: () => PlayerStatus
 
-  isPrepared(): boolean
+  isPrepared: () => boolean;
 
-  getDuration(): number
+  getDuration: () => number;
 
-  getCurrentPosition(): number
+  getCurrentPosition: () => number;
 
-  addListener(listener: PlayerListener): void
+  addListener: (listener: PlayerListener) => void
 
-  removeListener(listener: PlayerListener): void
+  removeListener: (listener: PlayerListener) => void
 
-  destroy(): void
+  destroy: () => void
 
-  isFullScreen(): boolean
+  isFullScreen: () => boolean
 
-  enterFullScreen(): void
+  enterFullScreen: () => void
 
-  exitFullScreen(): void
+  exitFullScreen: () => void
 
-  onVideoSizeChanged(width: number, height: number): void
+  onVideoSizeChanged: (width: number, height: number) => void
 
-  notifyDuration(duration: number): void
+  notifyDuration: (duration: number) => void
 
-  notifyCurrentTime(currentTime: number): void
+  notifyCurrentTime: (currentTime: number) => void
 
-  notifyDuration(duration: number): void
+  notifyTime: (duration: number, currentTime: number) => void
 
-  notifyTime(duration: number, currentTime: number): void
-
-  notifyBuffering(type: media.BufferingInfoType, value: number): void
+  notifyBuffering: (type: media.BufferingInfoType, value: number) => void
 
 }
 
-// IPlayerManager空对象
-export class NullPlayerManager implements IPlayerManager {
-  init(player: IPlayer): void {}
-  playEpisodeList(episodeList: EpisodeInfo[], episodeIndex?: number): Promise<void> {
-    return Promise.resolve();
-  }
-  start(): Promise<void> {
-    return Promise.resolve();
-  }
-  pause(): Promise<void> {
-    return Promise.resolve();
-  }
-  stop(): Promise<void> {
-    return Promise.resolve();
-  }
-  seekTo(value: string): Promise<void> {
-    return Promise.resolve();
-  }
-  setSpeed(speed: media.PlaybackSpeed): Promise<void> {
-    return Promise.resolve();
-  }
-  getSpeed(): media.PlaybackSpeed {
-    return {} as media.PlaybackSpeed;
-  }
-  isPlaying(): boolean {
-    return false;
-  }
-  setVideoFit(videoFit: VideoFit): void {}
-  setStatus(status: PlayerStatus): void {}
-  getStatus(): PlayerStatus {
-    return PlayerStatus.IDLE;
-  }
-  isPrepared(): boolean {
-    return false;
-  }
-  getDuration(): number {
-    return 0;
-  }
-  getCurrentPosition(): number {
-    return 0;
-  }
-  addListener(listener: PlayerListener): void {}
-  removeListener(listener: PlayerListener): void {}
-  destroy(): void {}
-  isFullScreen(): boolean {
-    return false;
-  }
-  enterFullScreen(): void {}
-  exitFullScreen(): void {}
-  onVideoSizeChanged(width: number, height: number): void {}
-  notifyDuration(duration: number): void {}
-  notifyCurrentTime(currentTime: number): void {}
-  notifyTime(duration: number, currentTime: number): void {}
-  notifyBuffering(type: media.BufferingInfoType, value: number): void {}
-}
 

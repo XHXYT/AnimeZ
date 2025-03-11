@@ -1,176 +1,15 @@
 import media from '@ohos.multimedia.media';
-import { IPlayer } from './IPlayer';
+import { IPlayer } from '../IPlayer';
 import { IJKMediaInfo } from './IjkMediaInfo';
-import { IjkMediaPlayer } from './IjkMediaPlayer';
-import { VideoPlayerController } from './VideoPlayerController';
-import IPlayerManager, { NullPlayerManager, PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
-import EpisodeInfo from '../entity/EpisodeInfo';
-import DisplayUtils from '../utils/DisplayUtils';
-import Logger from '../utils/Logger';
+import { VideoPlayerController } from '../VideoPlayerController';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../IPlayerManager';
+import EpisodeInfo from '../../entity/EpisodeInfo';
+import DisplayUtils from '../../utils/DisplayUtils';
+import Logger from '../../utils/Logger';
 import { IjkPlayerNapi } from '@ohos/ijkplayer/src/main/ets/ijkplayer/utils/IjkPlayerNapi';
+import { IjkMediaPlayer } from '@ohos/ijkplayer';
 
 const DEFAULT_ASPECT = 1.9
-
-/**
- * Ijk播放器类对象
- */
-class theIjkPlayer implements IPlayer {
-  private ijkPlayer: IjkMediaPlayer;
-  private playerManager: IPlayerManager;
-
-  constructor(ijkPlayer: IjkMediaPlayer, playerManager: IPlayerManager) {
-  this.ijkPlayer = ijkPlayer;
-  this.playerManager = playerManager;
-}
-
-  async setDataSource(url: string): Promise<void> {
-    this.ijkPlayer.setDataSource(url);
-    this.playerManager.setStatus(PlayerStatus.INITIALIZED);
-  }
-
-  async start(): Promise<void> {
-    this.ijkPlayer.start();
-    this.playerManager.setStatus(PlayerStatus.PLAY);
-  }
-
-  async prepare(): Promise<void> {
-    this.ijkPlayer.prepareAsync();
-  }
-
-  async pause(): Promise<void> {
-    this.ijkPlayer.pause();
-    this.playerManager.setStatus(PlayerStatus.PAUSE);
-  }
-
-  async stop(): Promise<void> {
-    this.ijkPlayer.stop();
-    this.playerManager.setStatus(PlayerStatus.STOP);
-  }
-
-  async reset(): Promise<void> {
-    this.ijkPlayer.reset();
-    this.playerManager.setStatus(PlayerStatus.IDLE);
-  }
-
-  async release(): Promise<void> {
-    this.ijkPlayer.release();
-  }
-
-  async seekTo(value: string): Promise<void> {
-    this.ijkPlayer.seekTo(value);
-  }
-
-  async setSpeed(speed: media.PlaybackSpeed): Promise<void> {
-    let speedValue: string;
-    switch (speed) {
-      case media.PlaybackSpeed.SPEED_FORWARD_0_75_X:
-        speedValue = '0.75';
-        break;
-      case media.PlaybackSpeed.SPEED_FORWARD_1_00_X:
-        speedValue = '1.00';
-        break;
-      case media.PlaybackSpeed.SPEED_FORWARD_1_25_X:
-        speedValue = '1.25';
-        break;
-      case media.PlaybackSpeed.SPEED_FORWARD_1_75_X:
-        speedValue = '1.75';
-        break;
-      case media.PlaybackSpeed.SPEED_FORWARD_2_00_X:
-        speedValue = '2.00';
-        break;
-      default:
-        speedValue = '1.00'; // 默认速度
-        break;
-    }
-    this.ijkPlayer.setSpeed(speedValue);
-  }
-}
-
-/**
- * 播放器监听器类对象
- */
-class PlayerListenerImpl implements PlayerListener {
-  private playerStatus: number;
-  private isFullScreen: boolean;
-  private videoAspRatio: number;
-  private aspRatio: number;
-  private startProgress: () => void;
-  private stopProgress: () => void;
-
-  constructor(playerStatus: number, isFullScreen: boolean, videoAspRatio: number, aspRatio: number, startProgress: () => void, stopProgress: () => void) {
-    this.playerStatus = playerStatus;
-    this.isFullScreen = isFullScreen;
-    this.videoAspRatio = videoAspRatio;
-    this.aspRatio = aspRatio;
-    this.startProgress = startProgress;
-    this.stopProgress = stopProgress;
-  }
-
-  onStatusChanged(status: number): void {
-    this.playerStatus = status;
-
-    if (status === PlayerStatus.PLAY) {
-      this.startProgress();
-    } else {
-      this.stopProgress();
-    }
-  }
-
-  onEpisodeChanged(episodeList: EpisodeInfo[], episodeIndex: number): void {
-    // 实现集数变化的逻辑
-  }
-
-  onVideoSpeedChanged(videoSpeed: media.PlaybackSpeed): void {
-    // 实现视频速度变化的逻辑
-  }
-
-  onVideoFitChanged(videoFit: VideoFit): void {
-    // 实现视频适配模式变化的逻辑
-  }
-
-  onFullScreenChanged(isFullScreen: boolean): void {
-    this.isFullScreen = isFullScreen;
-    animateTo({
-      duration: 360,
-      curve: Curve.Smooth,
-      iterations: 1,
-      playMode: PlayMode.Normal
-    }, () => {
-      if (isFullScreen) {
-        this.aspRatio = DisplayUtils.getRealScreenHWRatio();
-      } else {
-        this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
-      }
-    });
-  }
-
-  onVideoSizeChange(w: number, h: number): void {
-    animateTo({
-      duration: 360,
-      curve: Curve.Smooth,
-      iterations: 1,
-      playMode: PlayMode.Normal
-    }, () => {
-      this.videoAspRatio = w / h;
-      if (this.isFullScreen) {
-        this.aspRatio = DisplayUtils.getRealScreenHWRatio();
-      } else {
-        this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
-      }
-      Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio);
-    });
-  }
-
-  onProgressChange(totalTime: number, currentTime: number): void {
-    // 实现进度变化的逻辑
-  }
-
-  onBuffering(type: media.BufferingInfoType, value: number): void {
-    // 实现缓冲状态的逻辑
-  }
-
-}
-
 
 /**
  * 视频播放器，封装IjkPlayer
@@ -178,81 +17,82 @@ class PlayerListenerImpl implements PlayerListener {
  */
 @Component
 export struct IjkVideoPlayer {
-  private readonly ijkPlayer: IjkMediaPlayer = new IjkMediaPlayer()
+  private readonly ijkPlayer = IjkMediaPlayer.getInstance()
   @State videoAspRatio: number = DEFAULT_ASPECT
   @State aspRatio: number = DEFAULT_ASPECT
   @State playStatus: number = PlayerStatus.IDLE
   @State playerStatus: PlayerStatus = PlayerStatus.IDLE
   @State isFullScreen: boolean = false
   private readonly componentController: XComponentController = new XComponentController()
-  @State playerManager: IPlayerManager = new NullPlayerManager()
+  @Link playerManager: IPlayerManager
   private updateProgressTimer: number = -1
   private lastTime: number = 0
-  /*private readonly player: IPlayer = {
+  /**播放器*/
+  private readonly player: IPlayer = {
     setDataSource: async (url: string) => {
-      this.ijkPlayer.setDataSource(url)
-      this.playerManager.setStatus(PlayerStatus.INITIALIZED)
+      this.ijkPlayer.setDataSource(url);
+      this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
     },
-    start: async () => {
-      this.ijkPlayer.start()
-      this.playerManager.setStatus(PlayerStatus.PLAY)
-    },
+
     prepare: async () => {
       this.ijkPlayer.prepareAsync()
     },
-    pause: async () => {
-      this.ijkPlayer.pause()
-      this.playerManager.setStatus(PlayerStatus.PAUSE)
+
+    start: async (): Promise<void>  => {
+      this.ijkPlayer.start()
+      this.playerManager?.setStatus(PlayerStatus.PLAY)
     },
-    stop: async () => {
+
+    stop: async (): Promise<void> => {
       this.ijkPlayer.stop()
-      this.playerManager.setStatus(PlayerStatus.STOP)
+      this.playerManager?.setStatus(PlayerStatus.STOP)
     },
+
+    pause:async () => {
+      this.ijkPlayer.pause();
+      this.playerManager?.setStatus(PlayerStatus.PAUSE);
+    },
+
     reset: async () => {
       this.ijkPlayer.reset()
-      this.playerManager.setStatus(PlayerStatus.IDLE)
+      this.playerManager?.setStatus(PlayerStatus.IDLE)
     },
+
     release: async () => {
       this.ijkPlayer.release()
     },
-    seekTo: async (value: string) => {
-      this.ijkPlayer.seekTo(value)
-    },
-    setSpeed: async (speed: PlaybackSpeed) => {
-      switch (speed) {
-        case PlaybackSpeed.Speed_Forward_0_75_X:
-          this.ijkPlayer.setSpeed('0.75')
-          break
-        case PlaybackSpeed.Speed_Forward_1_00_X:
-          this.ijkPlayer.setSpeed('1.00')
-          break
-        case PlaybackSpeed.Speed_Forward_1_25_X:
-          this.ijkPlayer.setSpeed('1.25')
-          break
-        case PlaybackSpeed.Speed_Forward_1_75_X:
-          this.ijkPlayer.setSpeed('1.75')
-          break
-        case PlaybackSpeed.Speed_Forward_2_00_X:
-          this.ijkPlayer.setSpeed('2.00')
-          break
-      }
-    }
-  }*/
-  private readonly player = new theIjkPlayer(this.ijkPlayer, this.playerManager)
 
-  /**
-   * 播放器监听回调
-   */
-  private readonly playerListener = new
-  PlayerListenerImpl(
-    this.playerStatus,
-    this.isFullScreen,
-    this.videoAspRatio,
-    this.aspRatio,
-    this.startProgress,
-    this.stopProgress
-  )
-  /*private readonly playerListener: PlayerListener = {
+    seekTo: async (msec: number) => {
+      this.ijkPlayer.seekTo(String(msec));
+    },
+
+    setSpeed: async (speed: media.PlaybackSpeed) => {
+      let speedValue: string;
+      switch (speed) {
+        case media.PlaybackSpeed.SPEED_FORWARD_0_75_X:
+          speedValue = '0.75';
+          break;
+        case media.PlaybackSpeed.SPEED_FORWARD_1_00_X:
+          speedValue = '1.00';
+          break;
+        case media.PlaybackSpeed.SPEED_FORWARD_1_25_X:
+          speedValue = '1.25';
+          break;
+        case media.PlaybackSpeed.SPEED_FORWARD_1_75_X:
+          speedValue = '1.75';
+          break;
+        case media.PlaybackSpeed.SPEED_FORWARD_2_00_X:
+          speedValue = '2.00';
+          break;
+        default:
+          speedValue = '1.00'; // 默认速度
+          break;
+      }
+      this.ijkPlayer.setSpeed(speedValue);
+    },
+  }
+  /**播放器监听回调*/
+  private readonly playerListener: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
 
@@ -264,7 +104,7 @@ export struct IjkVideoPlayer {
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
     },
-    onVideoSpeedChanged: (videoSpeed: PlaybackSpeed) => {
+    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
     },
@@ -303,7 +143,7 @@ export struct IjkVideoPlayer {
     },
     onBuffering: (type: media.BufferingInfoType, value: number) => {
     }
-  }*/
+  }
 
   aboutToAppear() {
     if (this.playerManager) {
@@ -314,26 +154,23 @@ export struct IjkVideoPlayer {
   }
 
   aboutToDisappear() {
-    this.playerManager.removeListener(this.playerListener)
+    this.playerManager?.removeListener(this.playerListener)
   }
 
   build() {
     Column() {
-      // if (!this.isFullScreen) {
-      //   .backgroundColor(Color.Black)
-      // }
       Stack({ alignContent: Alignment.Center }) {
         XComponent({
+          type: XComponentType.SURFACE,
+          controller: this.componentController,
           id: '' + new Date().getTime(),
-          type: 'surface',
-          libraryname: 'ijkplayer_napi',
-          controller: this.componentController
+          libraryname: 'ijkplayer_napi'
         })
           .onLoad((context: IjkPlayerNapi) => {
             Logger.e(this, 'XComponent onLoad')
 
             this.initIjk(context)
-            this.playerManager.init(this.player)
+            this.playerManager?.init(this.player)
           })
           .onDestroy(() => {
             Logger.e(this, 'XComponent onDestroy')
@@ -378,7 +215,7 @@ export struct IjkVideoPlayer {
         if (typeof height == 'string') {
           height = parseInt(height)
         }
-        this.playerManager.onVideoSizeChanged(width, height)
+        this.playerManager?.onVideoSizeChanged(width, height)
       }
     })
 
@@ -391,7 +228,7 @@ export struct IjkVideoPlayer {
     this.ijkPlayer.setOnCompletionListener({
       onCompletion: () => {
         Logger.e(this, 'onCompletion')
-        this.playerManager.setStatus(PlayerStatus.DONE)
+        this.playerManager?.setStatus(PlayerStatus.DONE)
       }
     })
 
@@ -405,14 +242,14 @@ export struct IjkVideoPlayer {
     this.ijkPlayer.setOnErrorListener({
       onError: (what: number, extra: number) => {
         Logger.e(this, 'onError what=' + what + " extra=" + extra)
-        this.playerManager.setStatus(PlayerStatus.ERROR)
+        this.playerManager?.setStatus(PlayerStatus.ERROR)
       }
     })
 
     this.ijkPlayer.setOnPreparedListener({
       onPrepared: () => {
         Logger.e(this, 'onPrepared')
-        this.playerManager.setStatus(PlayerStatus.PREPARED)
+        this.playerManager?.setStatus(PlayerStatus.PREPARED)
       }
     })
 
@@ -444,12 +281,12 @@ export struct IjkVideoPlayer {
   protected onInfo(what: number, extra: number) {
     Logger.e(this, "OnInfoListener-->go:" + what + "===" + extra);
     if (what == IJKMediaInfo.MEDIA_INFO_BUFFERING_START) {
-      this.playerManager.notifyBuffering(media.BufferingInfoType.BUFFERING_START, 0)
+      this.playerManager?.notifyBuffering(media.BufferingInfoType.BUFFERING_START, 0)
     } else if (what == IJKMediaInfo.MEDIA_INFO_BUFFERING_END) {
-      this.playerManager.notifyBuffering(media.BufferingInfoType.BUFFERING_END, 0)
+      this.playerManager?.notifyBuffering(media.BufferingInfoType.BUFFERING_END, 0)
     } else if (what == IJKMediaInfo.MEDIA_INFO_VIDEO_RENDERING_START) {
       this.ijkPlayer.start()
-      this.playerManager.setStatus(PlayerStatus.PLAY)
+      this.playerManager?.setStatus(PlayerStatus.PLAY)
     }
   }
 
@@ -468,7 +305,7 @@ export struct IjkVideoPlayer {
         return
       }
       this.lastTime = currentTime
-      this.playerManager.notifyTime(totalTime, currentTime)
+      this.playerManager?.notifyTime(totalTime, currentTime)
     }, 1000);
     Logger.e(this, 'startProgress updateProgressTimer=' + this.updateProgressTimer)
   }

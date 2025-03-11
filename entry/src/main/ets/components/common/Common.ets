@@ -249,9 +249,14 @@ export struct MenuSettingRow {
           .fontSize(14)
           .margin({left: 5, right: 8})
           .fontColor([$r('app.color.color_text_minor')])
-      }.height('100%')
+      }
       .bindMenu(this.menu())
-      Blank()
+      .responseRegion({
+        x: -this.toggleX,
+        y: 0,
+        width: this.rowWidth,
+        height: '100%'
+      })
     }
     .padding(16)
     .width('100%')
@@ -264,7 +269,7 @@ export struct MenuSettingRow {
 
 /*@Component
 export struct RadioSettingRow {
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
   @State index: number = 0
   @State title: ResourceStr = ''
   @State subtitle: ResourceStr = ''

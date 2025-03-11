@@ -10,6 +10,6 @@
   "version": "1.0.1",
   "dynamicDependencies": {},
   "dependencies": {
-    "@ohos/ijkplayer": "^2.0.5"
+    "@ohos/ijkplayer": "^2.0.6"
   }
 }

@@ -300,7 +300,7 @@ struct HistoryItem {
   @State item: VideoHistoryInfo = HistoryInfo
   @State selectionIconMargin: number = 0
   @State selectionIconSize: number = 0
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       if (isSelectionMode) {

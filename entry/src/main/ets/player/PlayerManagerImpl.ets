@@ -1,16 +1,16 @@
 import media from '@ohos.multimedia.media';
-import { IPlayer, nullIPlayer } from './IPlayer';
+import { IPlayer } from './IPlayer';
 import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from './IPlayerManager';
 import window from '@ohos.window';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 
 /**
- * 播放器管理
+ * 播放器管理（总）
  */
 export default class PlayerManagerImpl implements IPlayerManager {
   private url: string = ''
-//  private episode: EpisodeInfo
+  //  private episode: EpisodeInfo
   private episodeList: EpisodeInfo[] = []
   private episodeIndex: number = 0
   private readonly listeners: PlayerListener[] = []
@@ -21,9 +21,28 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private currentTime: number = 0
   private videoSpeed: number = PlaybackSpeed.Speed_Forward_1_00_X
 
-  private player: IPlayer = new nullIPlayer()
-
   private playAfterInit: boolean = false
+
+  private player: IPlayer = {
+    setDataSource: async (url: string): Promise<void> => {
+    },
+    prepare: async (): Promise<void> => {
+    },
+    start: async (): Promise<void>  => {
+    },
+    stop: async (): Promise<void> => {
+    },
+    pause:async () => {
+    },
+    reset: async () => {
+    },
+    release: async () => {
+    },
+    seekTo: async (msec: number) => {
+    },
+    setSpeed: async (speed: media.PlaybackSpeed) => {
+    },
+  }
 
   init(player: IPlayer) {
     this.player = player
@@ -34,33 +53,33 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
   }
 
-//  async setEpisode(episode: EpisodeInfo) {
-//    if (this.episode == episode) {
-//      return
-//    }
-//    this.episode = episode;
-//    this.listeners.forEach((l) => {
-//      l.onEpisodeChanged(episode)
-//    })
-//    await this.setPlayerUrl(episode.videoUrl)
-//  }
+  //  async setEpisode(episode: EpisodeInfo) {
+  //    if (this.episode == episode) {
+  //      return
+  //    }
+  //    this.episode = episode;
+  //    this.listeners.forEach((l) => {
+  //      l.onEpisodeChanged(episode)
+  //    })
+  //    await this.setPlayerUrl(episode.videoUrl)
+  //  }
 
   async playEpisode(episode: EpisodeInfo) {
-//    if (this.episode == episode) {
-//      return
-//    }
-//    this.episode = episode;
-//    this.listeners.forEach((l) => {
-//      l.onEpisodeChanged(episode)
-//    })
+    //    if (this.episode == episode) {
+    //      return
+    //    }
+    //    this.episode = episode;
+    //    this.listeners.forEach((l) => {
+    //      l.onEpisodeChanged(episode)
+    //    })
     Logger.e(this, '')
     await this.setPlayerUrl(episode.videoUrl as string)
     await this.start()
   }
 
-//  getEpisode(): EpisodeInfo {
-//    return this.episode
-//  }
+  //  getEpisode(): EpisodeInfo {
+  //    return this.episode
+  //  }
 
   async playEpisodeList(episodeList: EpisodeInfo[], episodeIndex: number = 0): Promise<void> {
     Logger.e(this, 'playEpisodeList index=' + episodeIndex + ' episodeList=' + JSON.stringify(episodeList))
@@ -75,18 +94,18 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
   }
 
-//  async playEpisodeAt(episodeIndex: number): Promise<void> {
-//    if (this.episodeList == episodeIndex) {
-//
-//    }
-//    this.episodeIndex = episodeIndex
-//    await this.playEpisode(this.episodeList[episodeIndex])
-//  }
+  //  async playEpisodeAt(episodeIndex: number): Promise<void> {
+  //    if (this.episodeList == episodeIndex) {
+  //
+  //    }
+  //    this.episodeIndex = episodeIndex
+  //    await this.playEpisode(this.episodeList[episodeIndex])
+  //  }
 
-//  getEpisodeList(): EpisodeInfo[] {
-//    // TODO 获取播放列表
-//    return []
-//  }
+  //  getEpisodeList(): EpisodeInfo[] {
+  //    // TODO 获取播放列表
+  //    return []
+  //  }
 
   private isInitializing = false
 
@@ -126,9 +145,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
       } else if (this.status == PlayerStatus.INITIALIZED) {
         await this.player.prepare()
       } else if (this.status == PlayerStatus.ERROR) {
-//        await this.stop()
-//        // TODO验证是否有问题
-//        await this.player.prepare()
+        //        await this.stop()
+        //        // TODO验证是否有问题
+        //        await this.player.prepare()
         this.isInitializing = true
         this.currentTime = 0
         await this.player.reset()
@@ -136,7 +155,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
         await this.player.setDataSource(this.url)
       } else {
         await this.player.setSpeed(this.videoSpeed)
-        await this.player.seekTo(this.currentTime.toString())
+        await this.player.seekTo(this.currentTime)
         await this.player.start()
       }
     } else {
@@ -161,11 +180,11 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
   }
 
-  async seekTo(value: string) {
+  async seekTo(value: number) {
     if (this.player) {
       await this.player.seekTo(value)
       this.notifyBuffering(media.BufferingInfoType.BUFFERING_START, 0)
-      this.notifyCurrentTime(Number(value))
+      this.notifyCurrentTime(value)
     }
   }
 
@@ -295,6 +314,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
       win.setPreferredOrientation(window.Orientation.LANDSCAPE)
       this.fullScreenMode = true
       this.listeners.forEach((listener) => {
+        console.log('PlayerManagerlmpl #enterFullScreen isFullScreen：', this.isFullScreen())
         listener.onFullScreenChanged(true)
       })
     })
@@ -310,6 +330,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
       win.setPreferredOrientation(window.Orientation.PORTRAIT)
       this.fullScreenMode = false
       this.listeners.forEach((listener) => {
+        console.log('PlayerManagerlmpl #exitFullScreen isFullScreen：', this.isFullScreen())
         listener.onFullScreenChanged(false)
       })
     })

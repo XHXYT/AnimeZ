@@ -16,12 +16,13 @@ import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import Logger from '../utils/Logger';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { ShareDialog } from '../components/dialog/ShareDialog';
-import { promptAction } from '@kit.ArkUI';
+import { display, promptAction } from '@kit.ArkUI';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { webview } from '@kit.ArkWeb';
-import { SystemVideoPlayer } from '../player/SystemVideoPlayer';
+import DataStore from '../utils/DataStore';
+
 
 // 系统路由
 @Builder
@@ -31,7 +32,7 @@ export function VideoDetailPageBuilder(name: string, param: Object) {
 
 const context = getContext(this) as common.UIAbilityContext
 
-
+@Entry
 @Component
 struct VideoDetailPage {
   @State videoDetailInfo: VideoDetailInfo = {
@@ -56,7 +57,7 @@ struct VideoDetailPage {
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   // 颜色模式
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   // 视频页面链接
   private url: string = ''
@@ -69,7 +70,7 @@ struct VideoDetailPage {
   private sourceKey: string = ''
   private title: string = ''
   private isFirstPlay: boolean = true
-  private readonly playerManager: IPlayerManager = new PlayerManagerImpl()
+  @State playerManager: IPlayerManager = new PlayerManagerImpl()
   // 收藏信息
   @State collectionInfo: VideoCollectionInfo = CollectionInfo
   // 历史信息
@@ -81,86 +82,79 @@ struct VideoDetailPage {
   @State panelContentType: number = 0
   private readonly panelController: PanelController = new PanelController()
   private pausedOnHide = false
-  private readonly playerListener: PlayerListener = {
-    onStatusChanged: (status: number) => this.onStatusChanged(status),
-    onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => this.onEpisodeChanged(episodeList, episodeIndex),
-    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => this.onVideoSpeedChanged(videoSpeed),
-    onFullScreenChanged: (isFullScreen: boolean) => this.onFullScreenChanged(isFullScreen),
-    onVideoFitChanged: (videoFit: VideoFit) => this.onVideoFitChanged(videoFit),
-    onVideoSizeChange: (w: number, h: number) => this.onVideoSizeChange(w, h),
-    onProgressChange: (totalTime: number, currentTime: number) => this.onProgressChange(totalTime, currentTime),
-    onBuffering: (type: media.BufferingInfoType, value: number) => this.onBuffering(type, value),
-  }
-
-  onStatusChanged(status: number): void {
-    if (status == PlayerStatus.DONE) {
-      if (Settings.isAutoPlayNextEpisode() && this.videoDetailInfo.episodes !== undefined) {
-        let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
-        if (this.episodeIndex < episodeList.episodes.length - 1) {
-          this.playVideo(this.episodeListIndex, this.episodeIndex + 1)
+  private readonly playerListenerD: PlayerListener = {
+    onStatusChanged: (status: number) => {
+      if (status == PlayerStatus.DONE) {
+        if (Settings.isAutoPlayNextEpisode() && this.videoDetailInfo.episodes !== undefined) {
+          let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
+          if (this.episodeIndex < episodeList.episodes.length - 1) {
+            this.playVideo(this.episodeListIndex, this.episodeIndex + 1)
+          }
         }
       }
-    }
-    return
-  }
-  onEpisodeChanged(episodeList: EpisodeInfo[], episodeIndex: number): void {
-    if (this.episodeIndex == episodeIndex) {
       return
-    }
-    this.episodeIndex = episodeIndex
-    this.playVideo(this.episodeListIndex, this.episodeIndex)
-    return
-  }
-  onVideoSpeedChanged(videoSpeed: number): void {
-    return
-  }
-  onVideoFitChanged(videoFit: VideoFit): VideoFit {
-    return videoFit
-  }
-  onFullScreenChanged(isFullScreen: boolean): void {
-    return
-  }
-  onVideoSizeChange(w: number, h: number): void {
-    return
-  }
-  onProgressChange(totalTime: number, currentTime: number): void {
-    Logger.e(this, 'totalTime=' + totalTime + ' currentTime=' + currentTime)
-    if (this.historyInfo) {
-      this.historyInfo.totalTime = totalTime
-      this.historyInfo.currentTime = currentTime
-      console.log('VideoTest #onProgressChange 视频进度调用保存')
-      this.saveHistoryInfo()
-    }
-    return
-  }
-  onBuffering(type: media.BufferingInfoType, value: number): number {
-    return value
+    },
+    onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
+      if (this.episodeIndex == episodeIndex) {
+        return
+      }
+      this.episodeIndex = episodeIndex
+      this.playVideo(this.episodeListIndex, this.episodeIndex)
+      return
+    },
+    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {},
+    onFullScreenChanged: (isFullScreen: boolean) => {
+      console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', isFullScreen)
+      this.isFullScreen = isFullScreen
+      console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', this.isFullScreen)
+    },
+    onVideoFitChanged: (videoFit: VideoFit): VideoFit => {
+      return videoFit
+    },
+    onVideoSizeChange: (w: number, h: number) => {},
+    onProgressChange: (totalTime: number, currentTime: number) => {
+      Logger.e(this, 'totalTime=' + totalTime + ' currentTime=' + currentTime)
+      if (this.historyInfo) {
+        this.historyInfo.totalTime = totalTime
+        this.historyInfo.currentTime = currentTime
+        console.log('VideoTest #onProgressChange 视频进度调用保存')
+        this.saveHistoryInfo()
+      }
+      return
+    },
+    onBuffering: (type: media.BufferingInfoType, value: number): number => {
+      return value
+    },
   }
 
-  private listener: mediaquery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(orientation: landscape)');
+  @State @Watch('onPortrait') ScreenOrientation: number = display.getDefaultDisplaySync().orientation
   private controller: webview.WebviewController = new webview.WebviewController()
   // 用于捕获视频链接
   private jsStr: string = `var video = document.querySelector("#artplayer > div > video");
-            video ? video.src : "元素未找到或没有src属性";
-          `
+            video ? video.src : "元素未找到或没有src属性";`
 
   /**
    * 监听横竖屏切换
    * @param mediaQueryResult
    */
-  onPortrait(mediaQueryResult: mediaquery.MediaQueryResult) {
-    if (mediaQueryResult.matches as boolean) {
-      this.isFullScreen = false
-    } else {
-      this.isFullScreen = true
+  onPortrait() {
+    console.log('VideoDetailPage #onPortrait 屏幕状态：', this.ScreenOrientation)
+    // 启用重力感应
+    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true)) {
+      // if (this.ScreenOrientation === 1) {
+      //   // 横屏
+      //   this.playerManager.enterFullScreen()
+      // } else if (this.ScreenOrientation === 0) {
+      //   // 竖屏
+      //
+      // }
     }
   }
 
   aboutToAppear() {
     this.state = 0
-    this.listener.on('change', (mediaQueryResult: mediaquery.MediaQueryResult) => {
-      this.onPortrait(mediaQueryResult)
-    })
+    this.playerManager.addListener(this.playerListenerD)
+    //
     if (this.videoDetailInfo) {
       if (this.pausedOnHide) {
         if (!this.playerManager.isPlaying()) {
@@ -172,27 +166,19 @@ struct VideoDetailPage {
    }
 
   aboutToDisappear() {
-    this.listener.off('change')
     console.log('VideoTest #aboutToDisappear 页面销毁调用保存')
     this.saveHistoryInfo()
+    promptAction.showToast({ message: '历史记录已保存' })
     console.log('VideoTest #aboutToDisappear 已运行完保存历史记录')
     HISTORY_CHANGED_EVENT.emit()
-    this.playerManager.removeListener(this.playerListener)
+    this.playerManager.removeListener(this.playerListenerD)
     this.playerManager.destroy()
     if (this.playerManager.isPlaying()) {
       this.playerManager.pause()
-      this.pausedOnHide = true;
+      this.pausedOnHide = true
     } else {
       this.pausedOnHide = false
     }
-  }
-
-  onBackPress() {
-    if (this.panelController.isShow()) {
-      this.panelController.close()
-      return true;
-    }
-    return false
   }
 
   /**检查视频历史信息*/
@@ -327,8 +313,7 @@ struct VideoDetailPage {
             console.error("VideoTest #saveHistoryInfo 插入操作失败: ", error)
           })
       }
-      // 等待 await 保存(新增/修改)完成后，返回列表页
-      promptAction.showToast({ message: '保存成功' })
+
     }
   }
 
@@ -382,6 +367,10 @@ struct VideoDetailPage {
 
   build() {
     NavDestination() {
+      // 状态栏黑色填充
+      Column().width('100%')
+        .backgroundColor(Color.Black)
+        .height(this.isFullScreen ? 0 : this.topHeight)
       Stack() {
         StateView(
           {
@@ -404,7 +393,7 @@ struct VideoDetailPage {
       .height('100%')
     }.hideToolBar(true)
     .hideTitleBar(true)
-    .padding({top: this.topHeight, bottom: this.bottomHeight - 20})
+    .padding({bottom: this.bottomHeight - 20})
     .onReady(async (ctx: NavDestinationContext) => {
       // 接收信息
       try {
@@ -430,6 +419,25 @@ struct VideoDetailPage {
       }
 
     })
+    .onBackPressed(() => {
+      console.log('VideoDetailPage #onBackPressed')
+      console.log('VideoDetailPage #onBackPressed isFullScreen：', this.isFullScreen)
+      if (!this.panelController.isShow() && !this.isFullScreen) {
+        return false
+      }
+      if (this.panelController.isShow()) {
+        // 关闭控制面板
+        this.panelController.close()
+        return true
+      }
+      if (this.isFullScreen) {
+        // 退出全屏
+        this.isFullScreen = false
+        this.playerManager.exitFullScreen()
+        return true
+      }
+      return true
+    })
   }
 
   @Builder Content() {
@@ -437,9 +445,8 @@ struct VideoDetailPage {
       Stack() {
         // 复合型播放器
         MultiVideoPlayer({ playerManager: this.playerManager })
-          .zIndex(2)
         if (this.showWebview) {
-          Column() {
+          /*Column() {
             // webview加载
             Web({ src: '', controller: this.controller })
               .fileAccess(true)
@@ -453,7 +460,7 @@ struct VideoDetailPage {
               })
               .onPageEnd(e => {
                 try {
-                  // 执行查询视频src的脚本
+                  // 延迟3秒执行查询视频src的脚本
                   setTimeout(() => {
                     this.controller.runJavaScript(this.jsStr)
                       .then((result) => {
@@ -466,7 +473,7 @@ struct VideoDetailPage {
                         // 保存后检查更新历史记录id
                         this.checkVideoInfo()
                         this.showWebview = false
-                        this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+                        // this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
                       })
                       .catch((error: BusinessError) => {
                         console.error("parseVideoUrl #webview Error:", error)
@@ -484,7 +491,7 @@ struct VideoDetailPage {
           .borderColor(Color.Red)
           .backgroundColor(Color.Green)
           .zIndex(1)
-          .constraintSize({minHeight: 20, maxHeight: 200})
+          .constraintSize({minHeight: 20, maxHeight: 200})*/
         }
       }
 

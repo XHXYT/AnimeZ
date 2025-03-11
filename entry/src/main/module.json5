@@ -17,7 +17,9 @@
     "mainElement": "EntryAbility",
     "deviceTypes": [
       "default",
-      "tablet"
+      "tablet",
+      "2in1",
+      "car"
     ],
     "metadata": [
       {
@@ -34,10 +36,11 @@
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",
         "description": "$string:EntryAbility_desc",
-        "icon": "$media:icon",
+        "icon": "$media:layered_image",
         "label": "$string:EntryAbility_label",
-        "startWindowIcon": "$media:icon",
+        "startWindowIcon": "$media:layered_image",
         "startWindowBackground": "$color:start_window_background",
+        "orientation": "auto_rotation_restricted",
         "exported": true,
         "skills": [
           {

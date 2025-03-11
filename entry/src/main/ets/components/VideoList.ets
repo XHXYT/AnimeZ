@@ -12,7 +12,7 @@ export struct VideoList {
   videoList: VideoInfo[] = []
   @State scrollable: boolean = true
   @Consume('pageStack') pageStack: NavPathStack
-  @StorageProp('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   build() {
     Column() {

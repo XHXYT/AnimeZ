@@ -1,7 +1,7 @@
-import IPlayerManager, { NullPlayerManager } from './IPlayerManager';
-import { IjkVideoPlayer } from './IjkVideoPlayer';
-import { SystemVideoPlayer } from './SystemVideoPlayer';
-import { AVideoPlayer } from './AVideoPlayer';
+import IPlayerManager from './IPlayerManager';
+import { IjkVideoPlayer } from './IJK/IjkVideoPlayer';
+import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
+import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
 import Settings from '../utils/Settings';
 
 
@@ -10,8 +10,9 @@ import Settings from '../utils/Settings';
  */
 @Component
 export struct MultiVideoPlayer {
+  // 播放器
   @State playerType: number = 0
-  @State playerManager: IPlayerManager = new NullPlayerManager()
+  @Link playerManager: IPlayerManager
 
   aboutToAppear() {
     if (!this.playerManager) {
@@ -22,9 +23,9 @@ export struct MultiVideoPlayer {
 
   build() {
     Stack() {
-      if (this.playerType == 1) {
+      if (this.playerType === 0) {
         SystemVideoPlayer({ playerManager: this.playerManager })
-      } else if (this.playerType == 2) {
+      } else if (this.playerType === 1) {
         IjkVideoPlayer({ playerManager: this.playerManager })
       } else {
         AVideoPlayer({ playerManager: this.playerManager })

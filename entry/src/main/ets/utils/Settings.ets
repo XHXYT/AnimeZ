@@ -11,12 +11,20 @@ export default class Settings {
   static KEY_MAX_DOWNLOADING_COUNT = 'key_max_downloading_count'
   static KEY_DEFAULT_PLAYER = 'key_default_player'
   static KEY_COLOR_MODE = 'key_color_mode'
+  static KEY_SENSOR_ROTATE = 'key_sensor_rotate'
 
   /**
    * 自动播放下一集，默认开启
    */
   static isAutoPlayNextEpisode(): boolean {
     return DataStore.getBoolean(Settings.KEY_AUTO_PLAY_NEXT_EPISODE, true)
+  }
+
+  /**
+   * 跟随传感器自动旋屏，默认开启
+   */
+  static getisSensorRotate(): boolean {
+    return DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true)
   }
 
   /**
@@ -40,6 +48,9 @@ export default class Settings {
     return DataStore.getInt(Settings.KEY_MAX_DOWNLOADING_COUNT, 3)
   }
 
+  /**
+   * 播放器
+   */
   static getDefaultPlayerType(): number {
     return DataStore.getInt(Settings.KEY_DEFAULT_PLAYER, -1)
   }

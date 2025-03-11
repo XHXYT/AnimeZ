@@ -24,7 +24,7 @@ struct SearchPage {
   @State searchHistoryList: SearchHistoryInfo[] = []
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
-  @StorageProp('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = 1
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   @State searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
