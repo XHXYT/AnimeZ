@@ -1,7 +1,5 @@
-import router from '@ohos.router';
 import promptAction from '@ohos.promptAction'
 import TitleBar from '../components/TitleBar'
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
 import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingRow } from '../components/common/Common';

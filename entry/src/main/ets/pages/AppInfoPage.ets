@@ -1,7 +1,6 @@
 import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
 import TitleBar from '../components/TitleBar'
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
 import { SettingRow } from '../components/common/Common';
@@ -62,13 +61,6 @@ struct AppInfoPage {
 
   aboutToAppear() {
 
-  }
-
-  pageTransition() {
-    PageTransitionEnter(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Right)
-    PageTransitionEnter(OPTIONS_TRANSITION_POP).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_PUSH).slide(SlideEffect.Left)
-    PageTransitionExit(OPTIONS_TRANSITION_POP).slide(SlideEffect.Right)
   }
 
   build() {

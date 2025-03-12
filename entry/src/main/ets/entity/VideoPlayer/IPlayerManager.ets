@@ -1,6 +1,6 @@
 import media from '@ohos.multimedia.media';
 import { IPlayer } from './IPlayer';
-import EpisodeInfo from '../entity/EpisodeInfo';
+import EpisodeInfo from '../EpisodeInfo';
 
 export enum PlayerStatus {
   IDLE = 0,

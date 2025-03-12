@@ -1,13 +1,14 @@
 import media from '@ohos.multimedia.media';
-import { IPlayer } from '../IPlayer';
+import { IPlayer } from '../../entity/VideoPlayer/IPlayer';
 import { IJKMediaInfo } from './IjkMediaInfo';
 import { VideoPlayerController } from '../VideoPlayerController';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../../entity/VideoPlayer/IPlayerManager';
 import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { IjkPlayerNapi } from '@ohos/ijkplayer/src/main/ets/ijkplayer/utils/IjkPlayerNapi';
 import { IjkMediaPlayer } from '@ohos/ijkplayer';
+import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
 
 const DEFAULT_ASPECT = 1.9
 
@@ -111,7 +112,7 @@ export struct IjkVideoPlayer {
     onFullScreenChanged: (isFullScreen: boolean) => {
       this.isFullScreen = isFullScreen
       animateTo({
-        duration: 360,
+        duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
         playMode: PlayMode.Normal
@@ -125,7 +126,7 @@ export struct IjkVideoPlayer {
     },
     onVideoSizeChange: (w: number, h: number) => {
       animateTo({
-        duration: 360,
+        duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
         playMode: PlayMode.Normal

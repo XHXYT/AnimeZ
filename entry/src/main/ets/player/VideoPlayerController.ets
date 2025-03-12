@@ -1,7 +1,7 @@
 import media from '@ohos.multimedia.media';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../entity/VideoPlayer/IPlayerManager';
 import EpisodeInfo from '../entity/EpisodeInfo';
-import VideoTimeUtils from './VideoTimeUtils';
+import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
 
@@ -193,12 +193,10 @@ export struct VideoPlayerController {
       Column() {
         // 上控制栏
         Row() {
-          Image($r("app.media.ic_arrow_left"))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(28)
+            .fontColor([Color.White])
             .margin({ left: this.isFullScreen ? 20 : 14 })
-            .objectFit(ImageFit.Contain)
             .onClick(() => {
               if (this.playerManager.isFullScreen()) {
                 this.playerManager.exitFullScreen()

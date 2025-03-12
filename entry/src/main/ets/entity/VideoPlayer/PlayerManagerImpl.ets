@@ -2,8 +2,9 @@ import media from '@ohos.multimedia.media';
 import { IPlayer } from './IPlayer';
 import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from './IPlayerManager';
 import window from '@ohos.window';
-import EpisodeInfo from '../entity/EpisodeInfo';
-import Logger from '../utils/Logger';
+import EpisodeInfo from '../EpisodeInfo';
+import Logger from '../../utils/Logger';
+import SystemBarUtils from '../../utils/SystemBarUtils';
 
 /**
  * 播放器管理（总）
@@ -310,8 +311,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
     window.getLastWindow(getContext(this), (err, win) => {
       win.setWindowLayoutFullScreen(true)
+      // 隐藏状态栏
       win.setWindowSystemBarEnable([])
-      win.setPreferredOrientation(window.Orientation.LANDSCAPE)
+      // 设置窗口方向为自动但横屏
+      win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_LANDSCAPE)
       this.fullScreenMode = true
       this.listeners.forEach((listener) => {
         console.log('PlayerManagerlmpl #enterFullScreen isFullScreen：', this.isFullScreen())
@@ -326,8 +329,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
     window.getLastWindow(getContext(this), (err, win) => {
       win.setWindowLayoutFullScreen(true)
+      // 显示状态栏
       win.setWindowSystemBarEnable(['status', 'navigation'])
-      win.setPreferredOrientation(window.Orientation.PORTRAIT)
+      // 设置窗口方向为自动但受系统锁定
+      win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED)
       this.fullScreenMode = false
       this.listeners.forEach((listener) => {
         console.log('PlayerManagerlmpl #exitFullScreen isFullScreen：', this.isFullScreen())

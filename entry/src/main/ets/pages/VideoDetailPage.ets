@@ -1,10 +1,10 @@
 import mediaquery from '@ohos.mediaquery';
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../player/IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../entity/VideoPlayer/IPlayerManager';
 import media from '@ohos.multimedia.media';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import DataSourceManager from '../api/DataSourceManager';
-import PlayerManagerImpl from '../player/PlayerManagerImpl';
+import PlayerManagerImpl from '../entity/VideoPlayer/PlayerManagerImpl';
 // import { VideoCacheList } from '../components/VideoCacheList';
 import Settings from '../utils/Settings';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
@@ -19,9 +19,15 @@ import { ShareDialog } from '../components/dialog/ShareDialog';
 import { display, promptAction } from '@kit.ArkUI';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, settings } from '@kit.BasicServicesKit';
 import { webview } from '@kit.ArkWeb';
 import DataStore from '../utils/DataStore';
+import SystemBarUtils from '../utils/SystemBarUtils';
+import { deviceInfo } from '@kit.BasicServicesKit'
+import { BreakpointState } from '../utils/BreakPointManager';
+import { VideoPlayerGridColSpan, VideoPlayerNewGridColSpan, VideoDetailGridColSpan,
+  VideoDetailNewGridColSpan } from '../components/common/BreakPoint';
+import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 
 
 // 系统路由
@@ -56,6 +62,8 @@ struct VideoDetailPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  // 栅格区高度
+  @Consume('VideoDetailGridColHeight') VideoDetailGridColHeight: BreakpointState<Length>
   // 颜色模式
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
@@ -70,11 +78,14 @@ struct VideoDetailPage {
   private sourceKey: string = ''
   private title: string = ''
   private isFirstPlay: boolean = true
+  @Consume('CompStr') compStr: BreakpointState<string>
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
   // 收藏信息
   @State collectionInfo: VideoCollectionInfo = CollectionInfo
   // 历史信息
   private historyInfo: VideoHistoryInfo = HistoryInfo
+  // 是否处于自由多窗 TODO 等待相应API
+  @State isFreeWindow: boolean = false
 
   /**
    * 二级面板内容类型
@@ -104,9 +115,14 @@ struct VideoDetailPage {
     },
     onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {},
     onFullScreenChanged: (isFullScreen: boolean) => {
-      console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', isFullScreen)
-      this.isFullScreen = isFullScreen
-      console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', this.isFullScreen)
+      // console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', isFullScreen)
+      this.getUIContext()?.animateTo({
+        duration: DEFAULT_DURATION ,
+        curve: Curve.Ease
+      }, () => {
+        this.isFullScreen = isFullScreen
+      })
+      // console.log('VideoDetailPage #onFullScreenChanged isFullScreen：', this.isFullScreen)
     },
     onVideoFitChanged: (videoFit: VideoFit): VideoFit => {
       return videoFit
@@ -127,34 +143,32 @@ struct VideoDetailPage {
     },
   }
 
-  @State @Watch('onPortrait') ScreenOrientation: number = display.getDefaultDisplaySync().orientation
   private controller: webview.WebviewController = new webview.WebviewController()
+  // 横屏监听
+  landscapelistener: mediaquery.MediaQueryListener =
+    this.getUIContext().getMediaQuery().matchMediaSync('(orientation: landscape)')
   // 用于捕获视频链接
   private jsStr: string = `var video = document.querySelector("#artplayer > div > video");
             video ? video.src : "元素未找到或没有src属性";`
 
-  /**
-   * 监听横竖屏切换
-   * @param mediaQueryResult
-   */
-  onPortrait() {
-    console.log('VideoDetailPage #onPortrait 屏幕状态：', this.ScreenOrientation)
-    // 启用重力感应
-    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true)) {
-      // if (this.ScreenOrientation === 1) {
-      //   // 横屏
-      //   this.playerManager.enterFullScreen()
-      // } else if (this.ScreenOrientation === 0) {
-      //   // 竖屏
-      //
-      // }
-    }
-  }
 
   aboutToAppear() {
     this.state = 0
+    console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true))
+    // 启用重力感应（横屏监听）, 仅手机生效
+    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true) && deviceInfo.deviceType === 'phone') {
+      this.landscapelistener.on('change', (mediaQueryResult: mediaquery.MediaQueryResult) => {
+        console.info(`#媒体查询#设备横屏状态改变 结果: ${mediaQueryResult.matches}`)
+        if (mediaQueryResult.matches) {
+          // 横屏进入全屏
+          this.playerManager.enterFullScreen
+        } else {
+          // 竖屏退出全屏
+          this.playerManager.exitFullScreen
+        }
+      })
+    }
     this.playerManager.addListener(this.playerListenerD)
-    //
     if (this.videoDetailInfo) {
       if (this.pausedOnHide) {
         if (!this.playerManager.isPlaying()) {
@@ -173,6 +187,7 @@ struct VideoDetailPage {
     HISTORY_CHANGED_EVENT.emit()
     this.playerManager.removeListener(this.playerListenerD)
     this.playerManager.destroy()
+    this.landscapelistener.off('change')
     if (this.playerManager.isPlaying()) {
       this.playerManager.pause()
       this.pausedOnHide = true
@@ -229,6 +244,8 @@ struct VideoDetailPage {
         this.historyInfo.coverUrl = this.videoDetailInfo.coverUrl
         this.historyInfo.sourceKey = this.sourceKey
         this.state = ViewState.CONTENT
+        // 设置状态栏
+        SystemBarUtils.setWindowSystemBarTransparent(true)
         this.playVideo(this.historyInfo.episodeListIndex, this.historyInfo.episodeIndex)
       })
       .catch((e: Error) => {
@@ -367,11 +384,11 @@ struct VideoDetailPage {
 
   build() {
     NavDestination() {
-      // 状态栏黑色填充
-      Column().width('100%')
-        .backgroundColor(Color.Black)
-        .height(this.isFullScreen ? 0 : this.topHeight)
       Stack() {
+        // Text(this.compStr.value)
+        //   .fontColor(Color.Red)
+        //   .fontSize(20)
+        //   .zIndex(2)
         StateView(
           {
             state: this.state,
@@ -393,7 +410,7 @@ struct VideoDetailPage {
       .height('100%')
     }.hideToolBar(true)
     .hideTitleBar(true)
-    .padding({bottom: this.bottomHeight - 20})
+    .backgroundColor($r('app.color.background_color'))
     .onReady(async (ctx: NavDestinationContext) => {
       // 接收信息
       try {
@@ -423,17 +440,24 @@ struct VideoDetailPage {
       console.log('VideoDetailPage #onBackPressed')
       console.log('VideoDetailPage #onBackPressed isFullScreen：', this.isFullScreen)
       if (!this.panelController.isShow() && !this.isFullScreen) {
+        // 还原状态栏颜色
+        SystemBarUtils.setWindowSystemBarTransparent(false)
         return false
       }
       if (this.panelController.isShow()) {
-        // 关闭控制面板
+        // 关闭详情页二级面板
         this.panelController.close()
         return true
       }
       if (this.isFullScreen) {
         // 退出全屏
-        this.isFullScreen = false
-        this.playerManager.exitFullScreen()
+        this.getUIContext()?.animateTo({
+          duration: DEFAULT_DURATION,
+          curve: Curve.Ease
+        }, () => {
+          this.isFullScreen = false
+          this.playerManager.exitFullScreen()
+        })
         return true
       }
       return true
@@ -441,90 +465,112 @@ struct VideoDetailPage {
   }
 
   @Builder Content() {
-    Column() {
-      Stack() {
-        // 复合型播放器
-        MultiVideoPlayer({ playerManager: this.playerManager })
-        if (this.showWebview) {
-          /*Column() {
-            // webview加载
-            Web({ src: '', controller: this.controller })
-              .fileAccess(true)
-              .imageAccess(true)
-              .databaseAccess(true)
-              .onlineImageAccess(true)
-              .javaScriptAccess(true)
-              .domStorageAccess(true)
-              .onPageBegin((event) => {
-                console.log('parseVideoUrl #webview', `onPageBegin= ${JSON.stringify(event)}`)
-              })
-              .onPageEnd(e => {
-                try {
-                  // 延迟3秒执行查询视频src的脚本
-                  setTimeout(() => {
-                    this.controller.runJavaScript(this.jsStr)
-                      .then((result) => {
-                        console.log('parseVideoUrl #webview 延迟加载的视频src:', result)
-                        this.historyInfo.videoUrl = result
-                        let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
-                        episodeList.episodes[this.episodeIndex].videoUrl = result
-                        console.log('VideoTest #playVideo webview捕获的视频链接时的视频播放调用保存')
-                        this.saveHistoryInfo()
-                        // 保存后检查更新历史记录id
-                        this.checkVideoInfo()
-                        this.showWebview = false
-                        // this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
-                      })
-                      .catch((error: BusinessError) => {
-                        console.error("parseVideoUrl #webview Error:", error)
-                      })
-                  }, 3000)
-                  if (e) {
-                    console.info('parseVideoUrl #webview 页面加载完成，URL:', e.url)
-                  }
-                } catch (error) {
-                  console.error(`parseVideoUrl #webview 错误代码: ${(error as BusinessError).code}, 消息: ${(error as BusinessError).message}`)
-                }
-              })
-          }
-          .borderWidth(2)
-          .borderColor(Color.Red)
-          .backgroundColor(Color.Green)
-          .zIndex(1)
-          .constraintSize({minHeight: 20, maxHeight: 200})*/
-        }
-      }
-
-      if (this.videoDetailInfo) {
+    GridRow() {
+      // 播放器区
+      GridCol({
+        span: this.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
+        order: 1
+      }) {
         Stack() {
-          // Image(this.videoDetailInfo.coverUrl)
-          //   .objectFit(ImageFit.Cover)
-          //   .height('100%')
-          //   .width('100%')
-          //   .onComplete(() => {
-          //     // TODO 背景加载完成
-          //     this.isBackgroundLoaded = true;
-          //   })
-          //   .blur(16)
-          this.RootContent()
-          CustomPanel(
-            {
-              controller: this.panelController,
-              panelContent: () => {
-                this.SecondaryContent()
-              }
+          // 复合型播放器
+          MultiVideoPlayer({ playerManager: this.playerManager })
+          // webview加载
+          if (this.showWebview) {
+            /*Column() {
+              // webview加载
+              Web({ src: '', controller: this.controller })
+                .fileAccess(true)
+                .imageAccess(true)
+                .databaseAccess(true)
+                .onlineImageAccess(true)
+                .javaScriptAccess(true)
+                .domStorageAccess(true)
+                .onPageBegin((event) => {
+                  console.log('parseVideoUrl #webview', `onPageBegin= ${JSON.stringify(event)}`)
+                })
+                .onPageEnd(e => {
+                  try {
+                    // 延迟3秒执行查询视频src的脚本
+                    setTimeout(() => {
+                      this.controller.runJavaScript(this.jsStr)
+                        .then((result) => {
+                          console.log('parseVideoUrl #webview 延迟加载的视频src:', result)
+                          this.historyInfo.videoUrl = result
+                          let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
+                          episodeList.episodes[this.episodeIndex].videoUrl = result
+                          console.log('VideoTest #playVideo webview捕获的视频链接时的视频播放调用保存')
+                          this.saveHistoryInfo()
+                          // 保存后检查更新历史记录id
+                          this.checkVideoInfo()
+                          this.showWebview = false
+                          // this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+                        })
+                        .catch((error: BusinessError) => {
+                          console.error("parseVideoUrl #webview Error:", error)
+                        })
+                    }, 3000)
+                    if (e) {
+                      console.info('parseVideoUrl #webview 页面加载完成，URL:', e.url)
+                    }
+                  } catch (error) {
+                    console.error(`parseVideoUrl #webview 错误代码: ${(error as BusinessError).code}, 消息: ${(error as BusinessError).message}`)
+                  }
+                })
             }
-          )
-            .hitTestBehavior(HitTestMode.None)
-            .width('100%')
-            .height('100%')
-        }
-        .width('100%')
-        .layoutWeight(1)
+            .borderWidth(2)
+            .borderColor(Color.Red)
+            .backgroundColor(Color.Green)
+            .zIndex(1)
+            .constraintSize({minHeight: 20, maxHeight: 200})*/
+          }
+        }.width('100%')
+        .backgroundColor(Color.Black)
+        .alignContent(Alignment.Center)
+        .padding({top: this.isFullScreen ? 0 : this.topHeight - 10})
+        .height(this.VideoDetailGridColHeight.value)
       }
+      // 视频详情区
+      GridCol({
+        span: this.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
+        order: 2
+      }) {
+        if (this.videoDetailInfo) {
+          Stack() {
+            // Image(this.videoDetailInfo.coverUrl)
+            //   .objectFit(ImageFit.Cover)
+            //   .height('100%')
+            //   .width('100%')
+            //   .onComplete(() => {
+            //     // TODO 背景加载完成
+            //     this.isBackgroundLoaded = true;
+            //   })
+            //   .blur(16)
+            // 主详情
+            this.RootContent()
+            // 详情二级页面
+            CustomPanel(
+              {
+                controller: this.panelController,
+                panelContent: () => {
+                  this.SecondaryContent()
+                }
+              }
+            )
+              .hitTestBehavior(HitTestMode.None)
+              .width('100%')
+              .height('100%')
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .padding({top: this.isFullScreen ? 0 : this.topHeight - 10})
+        }
+      }.layoutWeight(1)
     }
     .width('100%')
     .height('100%')
+    // .borderWidth(2)
+    // .borderColor(Color.Red)
+    .backgroundColor($r('app.color.background_color'))
   }
 
   /**视频根内容，包括视频信息、视频播放列表、猜你喜欢*/
@@ -616,7 +662,6 @@ struct VideoDetailPage {
       .layoutWeight(1)
       .height('100%')
     }
-    //    .backgroundColor('#80ffffff')
     .backgroundColor($r('app.color.background_color'))
     .width('100%')
     .height('100%')
@@ -635,7 +680,12 @@ struct VideoDetailPage {
         Image($r('app.media.ic_close'))
           .width(24).height(24)
           .onClick(() => {
-            this.panelController.close()
+            this.getUIContext()?.animateTo({
+              duration: 520,
+              curve: Curve.Ease
+            }, () => {
+              this.panelController.close()
+            })
           })
       }
       .padding({ left: 16, top: 16, right: 16, bottom: 8 })

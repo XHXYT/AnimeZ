@@ -1,12 +1,13 @@
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import Logger from '../utils/Logger';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import VideoTimeUtils from '../player/VideoTimeUtils';
+import VideoTimeUtils from '../utils/VideoTimeUtils';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
+import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 
 // 系统路由
 @Builder
@@ -306,7 +307,7 @@ struct HistoryItem {
       if (isSelectionMode) {
         this.selectionMode = true
         animateTo({
-          duration: 360,
+          duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
           playMode: PlayMode.Normal
@@ -316,7 +317,7 @@ struct HistoryItem {
         })
       } else {
         animateTo({
-          duration: 360,
+          duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
           playMode: PlayMode.Normal,

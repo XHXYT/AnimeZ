@@ -1,3 +1,4 @@
+import { DEFAULT_DURATION } from "../utils/TransitionHelper";
 
 export class PanelController {
 
@@ -104,7 +105,7 @@ export default struct CustomPanel {
 
         setTimeout(() => {
           animateTo({
-            duration: 360,
+            duration: DEFAULT_DURATION,
             curve: Curve.ExtremeDeceleration,
             iterations: 1,
             playMode: PlayMode.Normal
@@ -117,7 +118,7 @@ export default struct CustomPanel {
     } else {
       if (this.showPanelInner) {
         animateTo({
-          duration: 360,
+          duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
           playMode: PlayMode.Normal,

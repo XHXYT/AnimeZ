@@ -1,7 +1,5 @@
 import Logger from '../utils/Logger';
-import router from '@ohos.router';
 import Webview from '@ohos.web.webview';
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
@@ -115,11 +113,9 @@ struct WebPage {
   build() {
     NavDestination() {
       Row({space: 12}) {
-        Image($r('app.media.ic_arrow_left'))
-          .width(24)
-          .height(24)
-          .fillColor($r('app.color.color_text_major'))
-          .objectFit(ImageFit.Contain)
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(28)
+          .fontColor([$r('app.color.color_text_major')])
           .onClick(() => {
             this.pageStack.pop(true)
           })

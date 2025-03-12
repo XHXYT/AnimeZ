@@ -1,4 +1,4 @@
-import IPlayerManager from './IPlayerManager';
+import IPlayerManager from '../entity/VideoPlayer/IPlayerManager';
 import { IjkVideoPlayer } from './IJK/IjkVideoPlayer';
 import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';

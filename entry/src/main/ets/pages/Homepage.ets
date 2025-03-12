@@ -9,6 +9,7 @@ import { VideoList } from '../components/VideoList';
 import DataSourceManager from '../api/DataSourceManager';
 import Logger from '../utils/Logger';
 import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
+import { BannerView } from '../components/home/BannerView';
 
 // 系统路由
 @Builder
@@ -132,7 +133,9 @@ struct Recommend {
     Stack() {
       Scroll() {
         Column() {
-          this.Banner()
+          // 轮播图
+          BannerView({bannerList: this.bannerList})
+          // 视频列表
           ForEach(this.categoryList, (category: DramaList) => {
             this.Category(category)
           })
@@ -149,60 +152,6 @@ struct Recommend {
     .width('100%')
   }
 
-  // 轮播图
-  @Builder Banner() {
-    Swiper() {
-      ForEach(this.bannerList, (item: VideoInfo) => {
-        this.BannerItem(item)
-      })
-    }
-    .width('100%')
-    .aspectRatio(2)
-    .autoPlay(true)
-    .interval(5000)
-    .loop(true)
-    .indicator(false)
-  }
-
-  // 轮播图项
-  @Builder BannerItem(item: VideoInfo) {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      Image(item.imgUrl)
-        .alt($r('app.media.pic_load_failed'))
-        .objectFit(ImageFit.Cover)
-        .layoutWeight(1)
-        .borderRadius(16)
-        .shadow({ radius: 16, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
-
-      Row()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
-        .borderRadius(16)
-
-      Text(item.title)
-        .fontColor(Color.White)
-        .fontSize(16)
-        .padding(12)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .alignSelf(ItemAlign.Start)
-    }
-    .padding(16)
-    .onClick(() => {
-      console.log('Home 点击图片 ')
-      // 默认为新增 由数据库抛出重复值
-      const params: VideoNavigateInfo = {
-        id: null,
-        url: item.url as string,
-        sourceKey: item.sourceKey,
-        title: item.title,
-        cover: item.imgUrl as string
-      }
-      console.log('VideoTest 主页轮播图传递的params：', JSON.stringify(params))
-      this.pageStack.pushPathByName("VideoDetailPage", params)
-    })
-  }
   // 分类项
   @Builder Category(category: DramaList) {
     Column() {

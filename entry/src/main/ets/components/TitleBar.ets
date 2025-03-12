@@ -6,13 +6,10 @@ export default struct TitleBar {
 
   build() {
     Column() {
-      Row() {
-        Image($r('app.media.ic_arrow_left'))
-          .width(24)
-          .height(24)
-          .margin({ left: 16 })
-          .objectFit(ImageFit.Contain)
-          .fillColor($r('app.color.color_text_major'))
+      Row({space: 16}) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(28)
+          .fontColor([$r('app.color.color_text_major')])
           .onClick(() => {
             this.pageStack.pop(true)
           })
@@ -21,12 +18,12 @@ export default struct TitleBar {
           .fontSize(20)
           .fontWeight(500)
           .layoutWeight(1)
-          .margin({ left: 16 })
           .align(Alignment.Start)
         Blank()
       }
       .height(56)
       .width('100%')
+      .padding({left: 16})
     }
   }
 }

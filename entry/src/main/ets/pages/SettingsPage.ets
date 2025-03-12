@@ -4,12 +4,12 @@ import Settings from '../utils/Settings'
 import { SliderDialog } from '../components/dialog/SliderDialog'
 import TitleBar from '../components/TitleBar'
 import { Preference, SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants'
-import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper'
 import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/common/Common'
 import { setAutoColorMode, setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager'
 import { common } from '@kit.AbilityKit'
+import { removeItemsByIndex } from '../utils/RemoveItemsUtils'
+import { deviceInfo } from '@kit.BasicServicesKit'
 
 // 系统路由
 @Builder
@@ -85,16 +85,16 @@ struct SettingsPage {
             }
           }
         },
-        // {
-        //   title: '启用感应旋屏',
-        //   info: '跟随传感器切换半屏/全屏播放',
-        //   preference: {
-        //     key: Settings.KEY_SENSOR_ROTATE,
-        //     type: 'switch',
-        //     values: [],
-        //     defaultValue: true
-        //   }
-        // },
+        {
+          title: '启用自动旋屏',
+          info: '跟随传感器自动切换半屏/全屏播放',
+          preference: {
+            key: Settings.KEY_SENSOR_ROTATE,
+            type: 'switch',
+            values: [],
+            defaultValue: true
+          }
+        },
         {
           title: '自动播放下一集',
           info: '视频结束后自动播放下一集',
@@ -183,6 +183,12 @@ struct SettingsPage {
     }
   ]
 
+  aboutToAppear(): void {
+    // 非手机端移除自动旋屏项
+    if (deviceInfo.deviceType !== 'phone') {
+      removeItemsByIndex(this.settings[1].settings, [1])
+    }
+  }
 
   build() {
     NavDestination() {

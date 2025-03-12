@@ -6,6 +6,7 @@ import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
+import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 
 // 系统路由
 @Builder
@@ -295,7 +296,7 @@ struct CollectionItem {
       if (isSelectionMode) {
         this.selectionMode = true
         animateTo({
-          duration: 360,
+          duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
           playMode: PlayMode.Normal
@@ -305,7 +306,7 @@ struct CollectionItem {
         })
       } else {
         animateTo({
-          duration: 360,
+          duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
           playMode: PlayMode.Normal,

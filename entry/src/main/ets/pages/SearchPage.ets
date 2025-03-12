@@ -5,7 +5,6 @@ import { VideoList } from '../components/VideoList';
 import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
 import promptAction from '@ohos.promptAction';
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
 import { SearchHistoryInfo, searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
 
 const tag: string = 'SearchPage'

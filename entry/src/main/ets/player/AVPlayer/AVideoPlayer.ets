@@ -1,10 +1,11 @@
-import { IPlayer } from '../IPlayer';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../IPlayerManager';
+import { IPlayer } from '../../entity/VideoPlayer/IPlayer';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../../entity/VideoPlayer/IPlayerManager';
 import media from '@ohos.multimedia.media';
 import { VideoPlayerController } from '../VideoPlayerController';
 import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
+import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
 
 const DEFAULT_ASPECT = 1.9
 
@@ -215,7 +216,7 @@ export struct AVideoPlayer {
       console.log('AVideoPlayer #onFullScreenChanged isFullScreen：', isFullScreen)
       this.isFullScreen = isFullScreen;
       animateTo({
-        duration: 360,
+        duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
         playMode: PlayMode.Normal
@@ -231,7 +232,7 @@ export struct AVideoPlayer {
       Logger.e(this, `onVideoSizeChange w=${w} h=${h}`);
       this.originalVideoAspRatio = w / h;
       animateTo({
-        duration: 360,
+        duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
         playMode: PlayMode.Normal
