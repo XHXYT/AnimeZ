@@ -10,6 +10,7 @@ import DataSourceManager from '../api/DataSourceManager';
 import Logger from '../utils/Logger';
 import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { BannerView } from '../components/home/BannerView';
+import { CategroyView } from '../components/home/CategoryView';
 
 // 系统路由
 @Builder
@@ -21,11 +22,27 @@ export function HomePageBuilder(name: string, param: Object) {
 export struct HomePage {
   @State state: number = 0
   @Consume('pageStack') pageStack: NavPathStack
-  @StorageLink('currentColorMode') currentMode: number = 1
+  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @State bannerList: VideoInfo[] = []
+  @State categoryList: DramaList[] = []
+  @State errorMessage: string = ''
+
+  aboutToAppear() {
+    this.state = ViewState.LOADING
+    this.loadNextPage()
+    // 启用数据源监听
+    SOURCE_CHANGED_EVENT.on(() => {
+      this.loadNextPage()
+    })
+  }
+
+  aboutToDisappear() {
+    SOURCE_CHANGED_EVENT.off()
+  }
 
   build() {
     NavDestination() {
@@ -72,8 +89,23 @@ export struct HomePage {
       .height(56)
       .width('100%')
       .padding({left: 16, right: 16})
-      // 推荐
-      Recommend()
+      // 视频推荐区
+      StateView(
+        {
+          state: this.state,
+          errorMessage: $errorMessage,
+          content: () => {
+            this.Content()
+          },
+          custom: undefined,
+          onRetry: () => {
+            this.loadNextPage()
+            return true;
+          }
+        }
+      )
+        .width('100%')
+        .layoutWeight(1)
 
     }.width('100%')
     .height('100%')
@@ -84,61 +116,16 @@ export struct HomePage {
       this.state = ViewState.CONTENT
     })
   }
-}
 
-/**
- * 首页推荐
- */
-@Component
-struct Recommend {
-  @State bannerList: VideoInfo[] = []
-  @State categoryList: DramaList[] = []
-  @Prop state: number
-  @State errorMessage: string = ''
-  @Consume('pageStack') pageStack: NavPathStack
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-
-  aboutToAppear() {
-    this.state = ViewState.LOADING
-    this.loadNextPage()
-    SOURCE_CHANGED_EVENT.on(() => {
-      this.loadNextPage()
-    })
-  }
-
-  aboutToDisappear() {
-    SOURCE_CHANGED_EVENT.off()
-  }
-
-  build() {
-    StateView(
-      {
-        state: this.state,
-        errorMessage: $errorMessage,
-        content: () => {
-          this.Content()
-        },
-        custom: undefined,
-        onRetry: () => {
-          this.loadNextPage()
-          return true;
-        }
-      }
-    )
-      .width('100%')
-      .layoutWeight(1)
-  }
-
-  @Builder Content() {
+  @Builder
+  Content() {
     Stack() {
       Scroll() {
         Column() {
           // 轮播图
           BannerView({bannerList: this.bannerList})
-          // 视频列表
-          ForEach(this.categoryList, (category: DramaList) => {
-            this.Category(category)
-          })
+          // 视频目录
+          CategroyView({categoryList: this.categoryList})
         }
         .constraintSize({
           minHeight: '100%'
@@ -150,48 +137,6 @@ struct Recommend {
     }
     .height('100%')
     .width('100%')
-  }
-
-  // 分类项
-  @Builder Category(category: DramaList) {
-    Column() {
-      this.Bar(category.title, category.moreUrl)
-      VideoList({
-        videoList: category.videoList,
-        scrollable: false
-      }).padding(16)
-    }
-  }
-  // 标题 & 更多行 TODO 更多
-  @Builder Bar(title: string, more: string) {
-    Row() {
-      Row()
-        .height(14)
-        .width(6)
-        .margin({ right: 2 })
-        .borderRadius(4)
-        .backgroundColor($r('app.color.primary_color'))
-      Text(title)
-        .fontColor($r('app.color.color_text_major'))
-        .fontSize(16)
-        .fontWeight(500)
-
-      Blank()
-
-      // TODO 打开更多
-      //      Text('更多')
-      //        .fontColor($r('app.color.color_text_major'))
-      //        .fontSize(12)
-      //      Image($r("app.media.ic_enter"))
-      //        .width(24)
-      //        .height(24)
-      //        .fillColor('#817977')
-      //        .alignSelf(ItemAlign.End)
-      //        .objectFit(ImageFit.Contain)
-    }
-    .alignSelf(ItemAlign.Start)
-    .width('100%')
-    .padding({ left: 16, top: 16, right: 16, bottom: 0 })
   }
 
   private loadNextPage() {

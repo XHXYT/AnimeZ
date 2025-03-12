@@ -26,14 +26,47 @@ export const TabVertical: BreakpointState<boolean> = BreakpointState.of({
 })
 
 /**
- * 首页底部偏移量
+ * 入口页Tab栏高度
  */
-export const MainEndOffset: BreakpointState<number> = BreakpointState.of({
-  xs: 180,
-  sm: 200,
-  md: 260,
-  lg: 30,
-  xl: 60
+export const TabBarHeight: BreakpointState<string> = BreakpointState.of({
+  xs: '45vp',
+  sm: '48vp',
+  md: '54vp',
+  lg: '100%',
+  xl: '100%'
+})
+
+/**
+ * 入口页Tab栏宽度
+ */
+export const TabBarWidth: BreakpointState<string> = BreakpointState.of({
+  xs: '100%',
+  sm: '100%',
+  md: '100%',
+  lg: '54vp',
+  xl: '60vp'
+})
+
+/**
+ * 入口页Tab栏位置
+ */
+export const TabBarPosition: BreakpointState<BarPosition> = BreakpointState.of({
+  xs: BarPosition.End,
+  sm: BarPosition.End,
+  md: BarPosition.End,
+  lg: BarPosition.Start,
+  xl: BarPosition.Start
+})
+
+/**
+ * 视频列表Grid列数
+ */
+export const VideoListColumnsTemplate: BreakpointState<string> = BreakpointState.of({
+  xs: "1fr 1fr ",
+  sm: "1fr 1fr 1fr",
+  md: "1fr 1fr 1fr 1fr",
+  lg: "1fr 1fr 1fr 1fr 1fr",
+  xl: "1fr 1fr 1fr 1fr 1fr 1fr"
 })
 
 /**

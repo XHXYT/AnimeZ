@@ -9,7 +9,7 @@ export default struct TitleBar {
       Row({space: 16}) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(28)
-          .fontColor([$r('app.color.color_text_major')])
+          .fontColor(['#817977'])
           .onClick(() => {
             this.pageStack.pop(true)
           })

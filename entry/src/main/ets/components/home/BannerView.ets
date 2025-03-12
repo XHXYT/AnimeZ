@@ -4,40 +4,6 @@ import { BaseDataSource } from "../common/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { BreakpointState } from "../../utils/BreakPointManager";
 
-class BannerDataSource extends BaseDataSource<VideoInfo> {
-  private dataArray: VideoInfo[] = []
-
-  public totalCount(): number {
-    return this.dataArray.length
-  }
-
-  public getData(index: number): VideoInfo {
-    return this.dataArray[index]
-  }
-
-  public addData(index: number, data: VideoInfo): void {
-    this.dataArray.splice(index, 0, data)
-    this.notifyDataAdd(index)
-  }
-
-  public pushData(data: VideoInfo[]): void {
-    this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
-  }
-
-  // 删除全部数据
-  public clear(): void {
-    this.empty()
-    this.refresh()
-  }
-
-  public empty(): void {
-    this.dataArray = []
-  }
-  public refresh(): void {
-    this.notifyDataReload()
-  }
-}
 
 @Component
 export struct BannerView {
@@ -73,18 +39,18 @@ export struct BannerView {
     Stack({ alignContent: Alignment.BottomStart }) {
       // 封面
       Image(item.imgUrl)
-        .aspectRatio(2)
         .layoutWeight(1)
         .borderRadius(16)
+        .aspectRatio(1.75)
         .objectFit(ImageFit.Cover)
         .alt($r('app.media.pic_load_failed')) // 占位图
         .shadow({ radius: 16, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
       // 遮罩
       Row()
         .width('100%')
-        .aspectRatio(2)
-        .backgroundColor(this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
         .borderRadius(16)
+        .aspectRatio(1.75)
+        .backgroundColor(this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
       // 标题
       Text(item.title)
         .fontColor(Color.White)
@@ -110,4 +76,39 @@ export struct BannerView {
     })
   }
 
+}
+
+class BannerDataSource extends BaseDataSource<VideoInfo> {
+  private dataArray: VideoInfo[] = []
+
+  public totalCount(): number {
+    return this.dataArray.length
+  }
+
+  public getData(index: number): VideoInfo {
+    return this.dataArray[index]
+  }
+
+  public addData(index: number, data: VideoInfo): void {
+    this.dataArray.splice(index, 0, data)
+    this.notifyDataAdd(index)
+  }
+
+  public pushData(data: VideoInfo[]): void {
+    this.dataArray = data
+    this.notifyDataAdd(this.dataArray.length - 1)
+  }
+
+  // 删除全部数据
+  public clear(): void {
+    this.empty()
+    this.refresh()
+  }
+
+  public empty(): void {
+    this.dataArray = []
+  }
+  public refresh(): void {
+    this.notifyDataReload()
+  }
 }

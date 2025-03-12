@@ -48,6 +48,7 @@ struct VideoDetailPage {
     episodes: [],
     recommends: []
   }
+  @Consume isPhoneLandscape: boolean
   // 收藏判断
   @State isCollect: boolean = false
   @State episodeIndex: number = 0;
@@ -144,9 +145,7 @@ struct VideoDetailPage {
   }
 
   private controller: webview.WebviewController = new webview.WebviewController()
-  // 横屏监听
-  landscapelistener: mediaquery.MediaQueryListener =
-    this.getUIContext().getMediaQuery().matchMediaSync('(orientation: landscape)')
+
   // 用于捕获视频链接
   private jsStr: string = `var video = document.querySelector("#artplayer > div > video");
             video ? video.src : "元素未找到或没有src属性";`
@@ -155,18 +154,13 @@ struct VideoDetailPage {
   aboutToAppear() {
     this.state = 0
     console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true))
-    // 启用重力感应（横屏监听）, 仅手机生效
-    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true) && deviceInfo.deviceType === 'phone') {
-      this.landscapelistener.on('change', (mediaQueryResult: mediaquery.MediaQueryResult) => {
-        console.info(`#媒体查询#设备横屏状态改变 结果: ${mediaQueryResult.matches}`)
-        if (mediaQueryResult.matches) {
-          // 横屏进入全屏
-          this.playerManager.enterFullScreen
-        } else {
-          // 竖屏退出全屏
-          this.playerManager.exitFullScreen
-        }
-      })
+    // 跟随重力感应旋转屏幕, 仅手机生效
+    if (this.isPhoneLandscape) {
+      // 横屏进入全屏
+      this.playerManager.enterFullScreen
+    } else {
+      // 竖屏退出全屏
+      this.playerManager.exitFullScreen
     }
     this.playerManager.addListener(this.playerListenerD)
     if (this.videoDetailInfo) {
@@ -187,7 +181,6 @@ struct VideoDetailPage {
     HISTORY_CHANGED_EVENT.emit()
     this.playerManager.removeListener(this.playerListenerD)
     this.playerManager.destroy()
-    this.landscapelistener.off('change')
     if (this.playerManager.isPlaying()) {
       this.playerManager.pause()
       this.pausedOnHide = true
@@ -385,10 +378,6 @@ struct VideoDetailPage {
   build() {
     NavDestination() {
       Stack() {
-        // Text(this.compStr.value)
-        //   .fontColor(Color.Red)
-        //   .fontSize(20)
-        //   .zIndex(2)
         StateView(
           {
             state: this.state,
