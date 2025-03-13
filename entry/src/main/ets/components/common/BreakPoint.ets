@@ -70,6 +70,17 @@ export const VideoListColumnsTemplate: BreakpointState<string> = BreakpointState
 })
 
 /**
+ * 视频目录列表Grid列数
+ */
+export const VideoCategoryColumnsTemplate: BreakpointState<string> = BreakpointState.of({
+  xs: "1fr",
+  sm: "1fr",
+  md: "1fr 1fr",
+  lg: "1fr 1fr 1fr 1fr",
+  xl: "1fr 1fr 1fr 1fr 1fr"
+})
+
+/**
  * 首页轮播图显示数量
  */
 export const HomeBannerDisplayCount: BreakpointState<number> = BreakpointState.of({

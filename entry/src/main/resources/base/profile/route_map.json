@@ -49,6 +49,11 @@
       "name": "WebPage",
       "pageSourceFile": "src/main/ets/pages/WebPage.ets",
       "buildFunction": "WebPageBuilder"
+    },
+    {
+      "name": "CategoryPage",
+      "pageSourceFile": "src/main/ets/components/CategoryPage.ets",
+      "buildFunction": "CategoryPageBuilder"
     }
   ]
 }

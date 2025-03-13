@@ -1,10 +1,9 @@
 import promptAction from '@ohos.promptAction';
-import router from '@ohos.router';
 import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { BreakpointState } from '../utils/BreakPointManager';
 import { BaseDataSource } from './common/BaseDataSource';
+import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 
 /**
  * 视频列表
@@ -41,33 +40,55 @@ export struct VideoList {
 
   @Builder
   VideoItem(item: VideoInfo) {
-    Column() {
-      if (item.imgUrl) {
-        Image(item.imgUrl)
-          .alt($r('app.media.pic_load_failed'))
-          .objectFit(ImageFit.Cover)
-          .borderRadius({ topLeft: 8, topRight: 8 })
-          .width('100%')
-          .layoutWeight(1)
-      } else {
-        Image($r('app.media.pic_load_failed'))
-          .width('100%')
-          .layoutWeight(1)
-          .borderRadius({ topLeft: 8, topRight: 8 })
+    Stack() {
+      Column() {
+        // 封面
+        if (item.imgUrl) {
+          Image(item.imgUrl)
+            .borderRadius({ topLeft: 8, topRight: 8 })
+            .alt($r('app.media.pic_load_failed'))
+            .objectFit(ImageFit.Fill)
+            .layoutWeight(1)
+            .width('100%')
+        } else {
+          Image($r('app.media.pic_load_failed'))
+            .borderRadius({ topLeft: 8, topRight: 8 })
+            .layoutWeight(1)
+            .width('100%')
+        }
+        // 番名
+        Text(item.title)
+          .height(40)
+          .maxLines(2)
+          .fontSize(12)
+          .fontWeight(500)
+          .fontColor($r('app.color.color_text_major'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: 2, right: 2 })
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
-      Text(item.title)
-        .height(40)
-        .maxLines(2)
-        .fontSize(12)
-        .fontWeight(500)
-        .fontColor($r('app.color.color_text_major'))
-        .textAlign(TextAlign.Center)
-        .padding({ left: 2, right: 2 })
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
+      .borderRadius(12)
+      .aspectRatio(0.65)
+      if (item.episode) {
+        // 集数
+        Column() {
+          Text(item.episode)
+            .fontColor(Color.White)
+            .fontSize(10)
+        }
+        .height(18)
+        .borderRadius(4)
+        .padding({left: 3, right: 3})
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .margin({right: 5, left: 5, bottom: 45})
+        .backgroundColor($r('app.color.color_text_normal'))
+      }
+
+    }.width('100%')
     .borderRadius(12)
-    .aspectRatio(0.72)
     .backgroundColor($r('app.color.background_color'))
+    .alignContent(Alignment.BottomEnd)
     .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
     .onClick(() => {
       // 默认为新增

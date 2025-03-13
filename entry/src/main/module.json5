@@ -41,6 +41,8 @@
         "startWindowIcon": "$media:layered_image",
         "startWindowBackground": "$color:start_window_background",
         "orientation": "auto_rotation_restricted",
+        "supportWindowMode": ["floating","split","fullscreen"],
+        "preferMultiWindowOrientation": "landscape_auto",
         "exported": true,
         "skills": [
           {

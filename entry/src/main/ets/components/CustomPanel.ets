@@ -1,35 +1,9 @@
 import { DEFAULT_DURATION } from "../utils/TransitionHelper";
 
-export class PanelController {
 
-  private listener: (show: boolean) => void = () => {}
-  private toShow: boolean = false
-
-  setListener(listener: (show: boolean) => void) {
-    this.listener = listener
-  }
-
-  isShow() {
-    return this.toShow;
-  }
-
-  close() {
-    this.toShow = false
-    if (this.listener) {
-      this.listener(false)
-    }
-  }
-
-  show() {
-    this.toShow = true
-    if (this.listener) {
-      this.listener(true)
-    }
-  }
-
-
-}
-
+/**
+ * 通用面板
+ */
 @Component
 export default struct CustomPanel {
   @StorageLink('currentColorMode') currentMode: number = 1
@@ -132,4 +106,35 @@ export default struct CustomPanel {
       }
     }
   }
+
+}
+
+/**面板控制器*/
+export class PanelController {
+
+  private listener: (show: boolean) => void = () => {}
+  private toShow: boolean = false
+
+  setListener(listener: (show: boolean) => void) {
+    this.listener = listener
+  }
+
+  isShow() {
+    return this.toShow;
+  }
+
+  close() {
+    this.toShow = false
+    if (this.listener) {
+      this.listener(false)
+    }
+  }
+
+  show() {
+    this.toShow = true
+    if (this.listener) {
+      this.listener(true)
+    }
+  }
+
 }

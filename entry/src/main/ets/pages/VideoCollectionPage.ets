@@ -5,8 +5,9 @@ import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
-import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
+import TitleBar from '../components/TitleBar';
+import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 
 // 系统路由
 @Builder
@@ -69,36 +70,13 @@ struct VideoCollectionPage {
 
   build() {
     NavDestination() {
-
-      Row({space: 16}) {
-        SymbolGlyph($r('sys.symbol.arrow_left'))
-          .fontSize(24)
-          .fontColor([$r('app.color.color_text_major')])
-          .onClick(() => {
-            this.pageStack.pop(true)
-          })
-        Text('我的收藏')
-          .fontColor($r('app.color.color_text_major'))
-          .fontSize(20)
-          .fontWeight(500)
-          .layoutWeight(1)
-          .align(Alignment.Start)
-        Blank()
-
-        if (this.state == ViewState.CONTENT) {
-          Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
-            .width(24)
-            .height(24)
-            .objectFit(ImageFit.Contain)
-            .fillColor($r('app.color.color_text_major'))
-            .onClick(() => {
-              this.selectionManager.toggleSelectionMode()
-            })
+      // 标题栏
+      TitleBar({
+        title: '我的收藏',
+        button: () => {
+          this.EditButton()
         }
-      }
-      .height(56)
-      .width('100%')
-      .padding({left: 16, right: 16})
+      })
 
       StateView(
         {
@@ -185,6 +163,20 @@ struct VideoCollectionPage {
     .hideToolBar(true)
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  EditButton() {
+    if (this.state == ViewState.CONTENT) {
+      Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
+        .width(24)
+        .height(24)
+        .objectFit(ImageFit.Contain)
+        .fillColor($r('app.color.color_text_major'))
+        .onClick(() => {
+          this.selectionManager.toggleSelectionMode()
+        })
+    }
   }
 
   @Builder CollectionList() {

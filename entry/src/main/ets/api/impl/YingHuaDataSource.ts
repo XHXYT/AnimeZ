@@ -2,14 +2,14 @@ import { DramaList } from '../../entity/HomepageData';
 import HomepageData from '../../entity/HomepageData';
 import Logger from '../../utils/Logger';
 import EpisodeInfo from '../../entity/EpisodeInfo';
-import VideoInfo from '../../entity/VideoInfo';
+import VideoInfo, { TypeInfo } from '../../entity/VideoInfo';
 import EpisodeList from '../../entity/EpisodeList';
 import VideoDetailInfo from '../../entity/VideoDetailInfo';
 import HttpUtils from '../../utils/HttpUtils';
 import DataSource from '../DataSource';
 import { select, selectAttributeValue, selectFirst, selectTextContent, textContent } from '../../thirdpart/htmlsoup';
 
-const BASE_URL = 'http://www.yinghuavideo.com/'
+const BASE_URL = 'http://www.yinghuavideo.com'
 
 /**
  * 樱花动漫 (http://www.yinghuavideo.com) 视频源
@@ -21,7 +21,7 @@ export default class YingHuaDataSource implements DataSource {
     }
 
     async search(keyword: string, page: number): Promise<VideoInfo[]> {
-        let url = BASE_URL + "search/" + encodeURIComponent(keyword) + "/?page=" + page
+        let url = BASE_URL + "/search/" + encodeURIComponent(keyword) + "/?page=" + page
 
         let videos: VideoInfo[] = []
         let doc = await HttpUtils.getHtml(url)
@@ -41,7 +41,7 @@ export default class YingHuaDataSource implements DataSource {
     }
 
     async getHomepageData(): Promise<HomepageData> {
-        let url = BASE_URL
+        let url = `${BASE_URL}/`
         const doc = await HttpUtils.getHtml(url)
         const bannerList: VideoInfo[] = []
         const categoryList: DramaList[] = []
@@ -54,7 +54,7 @@ export default class YingHuaDataSource implements DataSource {
                 url: 'http://www.yinghuavideo.com' + a.attr('href'),
                 imgUrl: img.attr('src'),
                 title: a.attr('title'),
-                episode: selectTextContent(li, 'em')
+                episode: selectTextContent(li, 'p:nth-child(3) > a')
             })
         })
 
@@ -81,7 +81,7 @@ export default class YingHuaDataSource implements DataSource {
 
             categoryList.push({
                 title: selectTextContent(title, "h2 > a"),
-                moreUrl: BASE_URL + selectAttributeValue(title, 'span > a', 'href'),
+                moreUrl: BASE_URL + '/' + selectAttributeValue(title, 'span > a', 'href'),
                 videoList: videos
             })
         }
@@ -91,30 +91,39 @@ export default class YingHuaDataSource implements DataSource {
         }
     }
 
-    // TODO 还不知道怎么用的
-    async getVideoList(page: number): Promise<VideoInfo[]> {
-        let url = "http://www.bimiacg4.net/type/riman-" + page
+    // 获取更多视频
+    async getVideoList(moreUrl: string, page: number): Promise<VideoInfo[]> {
+        let url = `${moreUrl}${page <= 0 ? '' : page}`
+        Logger.e(this, "CategoryPage #getVideoList parseHtml url = " + url)
         let doc = await HttpUtils.getHtml(url)
-        let drama = selectFirst(doc, 'ul.drama-module')
+        let drama = selectFirst(doc, 'div.lpic > ul')
         return this.parseVideoList(drama)
     }
     private async parseVideoList(drama): Promise<VideoInfo[]> {
-        //        let drama = selectFirst(doc, 'ul.drama-module')
-        Logger.e(this, 'parseHtml drama=' + drama)
         let elements = select(drama, 'li')
         Logger.e(this, 'parseHtml elements=' + elements)
         let videoList: VideoInfo[] = []
 
-        // TODO 代码优化
-        elements.forEach((el) => {
-            Logger.e(this, "parseHtml el=" + el)
-            let a = selectFirst(el, "div.info > a")
+        elements.forEach((li) => {
+            Logger.e(this, "parseHtml el=" + li)
+            const A = selectFirst(li, "a")
+            const h2 = selectFirst(li, 'h2')
+            const Ta = select(li, 'span:nth-child(4) > a')
+            let typeList: TypeInfo[] = []
+            Ta.forEach((a) => {
+                typeList.push({
+                    typeName: textContent(a),
+                    typeUrl: BASE_URL + a.attr('href')
+                })
+            })
             videoList.push({
                 sourceKey: this.getKey(),
-                url: "http://www.bimiacg4.net" + a.attr('href'),
-                imgUrl: selectAttributeValue(el, 'img', 'src'),
-                title: textContent(a),
-                episode: selectTextContent(el, "div.info > p > span.fl")
+                url: BASE_URL + A.attr('href'),
+                imgUrl: selectAttributeValue(A, 'img', 'src'),
+                title: selectAttributeValue(h2, 'a', 'title'),
+                episode: selectTextContent(li, "span:nth-child(3) > font"),
+                videoType: typeList,
+                videoIntroduction: selectTextContent(li, "p")
             })
         })
         return videoList

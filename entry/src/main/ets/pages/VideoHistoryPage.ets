@@ -6,8 +6,9 @@ import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
-import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
+import TitleBar from '../components/TitleBar';
+import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 
 // 系统路由
 @Builder
@@ -58,51 +59,16 @@ struct VideoHistoryPage {
     this.onShow = true
   }
 
-  onBackPress() {
-    if (this.selectionManager.isSelectionMode()) {
-      this.selectionManager.toggleSelectionMode()
-      return true
-    }
-    return false
-  }
-
-  onPageShow() {
-
-  }
-
 
   build() {
     NavDestination() {
       // 标题栏
-      Row({space: 16}) {
-        SymbolGlyph($r('sys.symbol.arrow_left'))
-          .fontSize(24)
-          .fontColor([$r('app.color.color_text_major')])
-          .onClick(() => {
-            this.pageStack.pop(true)
-          })
-        Text('观看历史')
-          .fontColor($r('app.color.color_text_major'))
-          .fontSize(20)
-          .fontWeight(500)
-          .layoutWeight(1)
-          .align(Alignment.Start)
-        Blank()
-
-        if (this.state == ViewState.CONTENT) {
-          Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
-            .width(24)
-            .height(24)
-            .objectFit(ImageFit.Contain)
-            .fillColor($r('app.color.color_text_major'))
-            .onClick(() => {
-              this.selectionManager.toggleSelectionMode()
-            })
+      TitleBar({
+        title: '观看历史',
+        button: () => {
+          this.EditButton()
         }
-      }
-      .height(56)
-      .width('100%')
-      .padding({left: 16, right: 16})
+      })
 
       StateView(
         {
@@ -151,7 +117,6 @@ struct VideoHistoryPage {
               if (this.selectCount == 0) {
                 return
               }
-
               AlertDialog.show(
                 {
                   title: '移除历史记录',
@@ -192,9 +157,31 @@ struct VideoHistoryPage {
     .hideToolBar(true)
     .width('100%')
     .height('100%')
+    .onBackPressed(() => {
+      if (this.selectionManager.isSelectionMode()) {
+        this.selectionManager.toggleSelectionMode()
+        return true
+      }
+      return false
+    })
   }
 
-  @Builder HistoryList() {
+  @Builder
+  EditButton() {
+    if (this.state == ViewState.CONTENT) {
+      Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
+        .width(24)
+        .height(24)
+        .objectFit(ImageFit.Contain)
+        .fillColor($r('app.color.color_text_major'))
+        .onClick(() => {
+          this.selectionManager.toggleSelectionMode()
+        })
+    }
+  }
+
+  @Builder
+  HistoryList() {
     List({space: 16}) {
       ForEach(this.items, (item: VideoHistoryInfo) => {
         ListItem() {

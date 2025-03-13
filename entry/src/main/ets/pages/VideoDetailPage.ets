@@ -12,7 +12,7 @@ import StateView, { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import EpisodeList from '../entity/EpisodeList';
-import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
+import VideoDetailInfo from '../entity/VideoDetailInfo';
 import Logger from '../utils/Logger';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { ShareDialog } from '../components/dialog/ShareDialog';
@@ -28,6 +28,7 @@ import { BreakpointState } from '../utils/BreakPointManager';
 import { VideoPlayerGridColSpan, VideoPlayerNewGridColSpan, VideoDetailGridColSpan,
   VideoDetailNewGridColSpan } from '../components/common/BreakPoint';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
+import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 
 
 // 系统路由
@@ -48,7 +49,7 @@ struct VideoDetailPage {
     episodes: [],
     recommends: []
   }
-  @Consume isPhoneLandscape: boolean
+
   // 收藏判断
   @State isCollect: boolean = false
   @State episodeIndex: number = 0;
@@ -63,6 +64,8 @@ struct VideoDetailPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  // 手机横屏
+  @Consume @Watch('onPhoneLandscape') isPhoneLandscape: boolean
   // 栅格区高度
   @Consume('VideoDetailGridColHeight') VideoDetailGridColHeight: BreakpointState<Length>
   // 颜色模式
@@ -150,18 +153,24 @@ struct VideoDetailPage {
   private jsStr: string = `var video = document.querySelector("#artplayer > div > video");
             video ? video.src : "元素未找到或没有src属性";`
 
+  /**
+   * 跟随重力感应旋转屏幕, 仅手机生效
+   */
+  onPhoneLandscape() {
+    console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true))
+    console.log('VideoDetailPage #aboutToAppear 手机横屏启用状态： ', this.isPhoneLandscape)
+    if (this.isPhoneLandscape) {
+      // 横屏进入全屏
+      this.playerManager.enterFullScreen()
+    } else {
+      // 竖屏退出全屏
+      this.pageStack.pop(true)
+      // setTimeout(() => {this.pageStack.pop(true)}, 300)
+    }
+  }
 
   aboutToAppear() {
     this.state = 0
-    console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true))
-    // 跟随重力感应旋转屏幕, 仅手机生效
-    if (this.isPhoneLandscape) {
-      // 横屏进入全屏
-      this.playerManager.enterFullScreen
-    } else {
-      // 竖屏退出全屏
-      this.playerManager.exitFullScreen
-    }
     this.playerManager.addListener(this.playerListenerD)
     if (this.videoDetailInfo) {
       if (this.pausedOnHide) {
@@ -423,7 +432,6 @@ struct VideoDetailPage {
       } catch (e) {
         console.log(`VideoTest Navigate onReady catch exception: ${JSON.stringify(e)}`)
       }
-
     })
     .onBackPressed(() => {
       console.log('VideoDetailPage #onBackPressed')

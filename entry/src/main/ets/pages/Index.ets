@@ -15,6 +15,7 @@ import { CompStr,
   TabVertical,
   TabBarPosition,
   VideoDetailGridColHeight,
+  VideoCategoryColumnsTemplate,
   VideoListColumnsTemplate } from '../components/common/BreakPoint';
 import { deviceInfo } from '@kit.BasicServicesKit';
 
@@ -56,6 +57,8 @@ struct Index {
   @Provide('VideoDetailGridColHeight') videoDetailGridColHeight: BreakpointState<Length> = VideoDetailGridColHeight
   // 视频列表Grid列数
   @Provide('VideoListColumnsTemplate') videoListColumnsTemplate: BreakpointState<string> = VideoListColumnsTemplate
+  // 视频目录列表Grid列数
+  @Provide('VideoCategoryColumnsTemplate') videoCategoryColumnsTemplate: BreakpointState<string> = VideoCategoryColumnsTemplate
 
   /**系统为深色模式时为true，否则为false*/
   DarkModeListener: mediaQuery.MediaQueryListener = mediaQuery.matchMediaSync('(dark-mode: true)')
@@ -79,12 +82,13 @@ struct Index {
     BreakpointSystem.getInstance().attach(this.homeBannerBannerMargin)
     BreakpointSystem.getInstance().attach(this.videoDetailGridColHeight)
     BreakpointSystem.getInstance().attach(this.videoListColumnsTemplate)
+    BreakpointSystem.getInstance().attach(this.videoCategoryColumnsTemplate)
     // 启用颜色模式监听
     this.DarkModeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
       this.DarkModeImage  = mediaQueryResult.matches as boolean
     })
     // 当开启自动旋屏和设备类型为手机时启用手机横屏监听
-    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true) /*&& deviceInfo.deviceType === 'phone'*/) {
+    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true) && deviceInfo.deviceType === 'phone') {
       this.PhoneLandscapeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
         this.isPhoneLandscape = mediaQueryResult.matches
         console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)

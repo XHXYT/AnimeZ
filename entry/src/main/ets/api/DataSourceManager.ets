@@ -9,20 +9,21 @@ import Logger from '../utils/Logger';
 import AGEDataSource from './impl/AGEDataSource';
 
 const MAP_DATA_SOURCE = 'map_data_source'
-const KEY_CURRENT_SOURCE = 'key_current_source'
+export const KEY_CURRENT_SOURCE = 'key_current_source'
 
 
 // 数据源信息接口
 interface SourceInfo {
   key: string,
   title: string,
+  uitype: number,
   source: () => DataSource
 }
 
 // TODO 通过注解配置key和title
-const ALL_SOURCES: SourceInfo[] = [
-  { key: 'key_yinghuavideo', title: '樱花动漫', source: () => new YingHuaDataSource() },
-  // { key: 'key_agedmvideo', title: 'AGE动漫', source: () => new AGEDataSource() }
+export const ALL_SOURCES: SourceInfo[] = [
+  { key: 'key_yinghuavideo', title: '樱花动漫', uitype: 0, source: () => new YingHuaDataSource() },
+  { key: 'key_agedmvideo', title: 'AGE动漫', uitype: 1, source: () => new AGEDataSource() }
 ]
 
 /**
@@ -63,6 +64,9 @@ export default class DataSourceManager {
     })
   }
 
+  /**
+   * 获取数据源标题
+   */
   static getSourceTitle(key: string): string {
     let targetSource = ALL_SOURCES.find((source) => {
       return source.key == key
@@ -71,6 +75,20 @@ export default class DataSourceManager {
       return targetSource.title
     } else {
       return ''
+    }
+  }
+
+  /**
+   * 获取数据源UI类型
+   */
+  static getSourceUItype(key: string): number {
+    let targetSource = ALL_SOURCES.find((source) => {
+      return source.key == key
+    })
+    if (targetSource) {
+      return targetSource.uitype
+    } else {
+      return -1
     }
   }
 

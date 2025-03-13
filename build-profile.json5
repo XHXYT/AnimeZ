@@ -6,12 +6,12 @@
         "type": "HarmonyOS",
         "material": {
           "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.cer",
-          "storePassword": "0000001B6F75A39A97F440E4B543138415A83FDA8B1608D59AAA4F9F590934C0DDD47777D647418EAE794E",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BA73184F7D912C027B00D3ADE991B45E8C6C4FD7395A41490571AECE041125A4C4BA783AFE09F25",
+          "keyPassword": "0000001B7CAA4B5EE6F2604052A1A40D87086E6284DBCC84DE8BDFE364F2DBC90DA74B2D922415019F9641",
           "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12"
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12",
+          "storePassword": "0000001B7FB282631E21C1792FACEC3F0441499ABD6930C54D55AA63A2860A436915063250699D9DE03617"
         }
       }
     ],

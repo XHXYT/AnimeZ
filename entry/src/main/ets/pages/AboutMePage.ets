@@ -58,7 +58,7 @@ struct AboutMePage {
     {
       title: '作者2',
       name: '小雅',
-      introduce: '开源鸿蒙应用开发爱好者，一只代码小白',
+      introduce: '鸿蒙应用开发爱好者，一只代码小白',
       image: $rawfile('ya.png'),
       settings: [
         {

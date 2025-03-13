@@ -1,8 +1,8 @@
-import { VideoNavigateInfo } from "../../entity/VideoDetailInfo";
 import VideoInfo from "../../entity/VideoInfo";
 import { BaseDataSource } from "../common/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { BreakpointState } from "../../utils/BreakPointManager";
+import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
 
 
 @Component

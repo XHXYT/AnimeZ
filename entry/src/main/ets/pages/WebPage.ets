@@ -4,6 +4,7 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { GoToWeb } from '../utils/GoOutWeb';
+import TitleBar from '../components/TitleBar';
 
 // 系统路由
 @Builder
@@ -112,48 +113,14 @@ struct WebPage {
 
   build() {
     NavDestination() {
-      Row({space: 12}) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(28)
-          .fontColor([$r('app.color.color_text_major')])
-          .onClick(() => {
-            this.pageStack.pop(true)
-          })
-        Column() {
-          Text(this.title)
-            .fontColor($r('app.color.color_text_major'))
-            .fontSize(16)
-            .maxLines(1)
-            .fontWeight(500)
-            .textOverflow({overflow: TextOverflow.Ellipsis})
-            .textAlign(TextAlign.Start)
-
-          Text(this.info)
-            .fontColor($r('app.color.color_text_major'))
-            .fontSize(10)
-            .maxLines(1)
-            .textOverflow({overflow: TextOverflow.Ellipsis})
-            .margin({top: 4})
-            .textAlign(TextAlign.Start)
+      TitleBar({
+        title: this.title,
+        subtitle: this.info,
+        button: () => {
+          this.FunctionButton()
         }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-        // 刷新
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(24)
-          .fontColor([$r('app.color.color_text_major')])
-          .onClick(() => {
-            this.controller.refresh()
-          })
-        // 更多
-        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(28)
-          .bindMenu(this.MoreMenu())
-          .fontColor([$r('app.color.color_text_major')])
-      }
-      .height(56)
-      .width('100%')
-      .padding({left: 12, right: 12})
+      })
+
       if (this.loadingProgress < 100) {
         Progress({ value: this.loadingProgress, total: 100, type: ProgressType.Linear })
           .color($r('app.color.primary_color'))
@@ -215,7 +182,22 @@ struct WebPage {
       }
     })
 
-
-
   }
+
+  @Builder
+  FunctionButton() {
+    // 刷新
+    SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+      .fontSize(24)
+      .fontColor([$r('app.color.color_text_major')])
+      .onClick(() => {
+        this.controller.refresh()
+      })
+    // 更多
+    SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+      .fontSize(28)
+      .bindMenu(this.MoreMenu())
+      .fontColor([$r('app.color.color_text_major')])
+  }
+
 }

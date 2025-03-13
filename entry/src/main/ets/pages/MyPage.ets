@@ -3,10 +3,10 @@ import { More } from '../components/MoreContainer';
 import promptAction from '@ohos.promptAction';
 import { common } from '@kit.AbilityKit';
 import { setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
-import { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import DataStore from '../utils/DataStore';
 import Settings from '../utils/Settings';
+import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 
 const TAG: string = 'MyPage'
 const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;

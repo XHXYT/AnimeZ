@@ -25,7 +25,7 @@ export default interface DataSource {
     /**
      * 获取某页视频数据
      */
-    getVideoList(page: number): Promise<VideoInfo[]>
+    getVideoList(moreUrl: string, page: number): Promise<VideoInfo[]>
     
 //    getBannerList(): Promise<VideoInfo[]>
 

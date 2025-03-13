@@ -1,5 +1,8 @@
+import DataSourceManager, { ALL_SOURCES, KEY_CURRENT_SOURCE } from "../../api/DataSourceManager"
 import { DramaList } from "../../entity/HomepageData"
 import VideoInfo from "../../entity/VideoInfo"
+import { VideoCategoryNavigateInfo } from "../../entity/VideoNavigateInfo"
+import DataStore from "../../utils/DataStore"
 import { BaseDataSource } from "../common/BaseDataSource"
 import { VideoList } from "../VideoList"
 
@@ -53,8 +56,12 @@ export struct CategroyView {
           .fontColor(['#817977'])
           .alignSelf(ItemAlign.End)
       }.onClick(() => {
-        //  TODO 跳转至分类更多
-
+        const params: VideoCategoryNavigateInfo = {
+          sourceKey: DataStore.get(KEY_CURRENT_SOURCE, ALL_SOURCES[0].key),
+          title: title,
+          url: moreUrl
+        }
+        this.pageStack.pushPathByName('CategoryPage', params)
       })
     }
     .alignSelf(ItemAlign.Start)

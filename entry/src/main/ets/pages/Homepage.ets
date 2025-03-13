@@ -8,7 +8,6 @@ import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
 import { VideoList } from '../components/VideoList';
 import DataSourceManager from '../api/DataSourceManager';
 import Logger from '../utils/Logger';
-import VideoDetailInfo, { VideoNavigateInfo } from '../entity/VideoDetailInfo';
 import { BannerView } from '../components/home/BannerView';
 import { CategroyView } from '../components/home/CategoryView';
 
@@ -32,7 +31,6 @@ export struct HomePage {
   @State errorMessage: string = ''
 
   aboutToAppear() {
-    this.state = ViewState.LOADING
     this.loadNextPage()
     // 启用数据源监听
     SOURCE_CHANGED_EVENT.on(() => {
