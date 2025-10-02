@@ -100,7 +100,7 @@ export default class AGEDataSource implements DataSource {
         }
     }
 
-    // TODO 还不知道怎么用的
+    //
     async getVideoList(moreUrl: string, page: number): Promise<VideoInfo[]> {
         let url = "http://www.bimiacg4.net/type/riman-" + page
         let doc = await HttpUtils.getHtml(url)

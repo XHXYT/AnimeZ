@@ -32,8 +32,12 @@ export default class Logger {
     /**
      * error
      */
-    static e(tag: any, ...args: string[]) {
-        hilog.error(DOMAIN, PREFIX, FORMAT, this.wrapArgs(tag, args))
+    static e(type: 'fail' | 'tips' = 'tips', descr?: string, err?: any) {
+        if (type === 'fail') {
+            hilog.error(DOMAIN, PREFIX, FORMAT, `${descr}失败，code: ${err.code} message: ${err.messsage}`)
+        } else {
+            hilog.error(DOMAIN, PREFIX, FORMAT, descr)
+        }
     }
 
     /**

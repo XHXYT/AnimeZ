@@ -9,6 +9,7 @@ import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/V
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由
 @Builder
@@ -31,7 +32,9 @@ struct VideoHistoryPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
   private readonly selectionManager: SelectionManager<VideoHistoryInfo> = new SelectionManager<VideoHistoryInfo>()
+
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
@@ -117,7 +120,7 @@ struct VideoHistoryPage {
               if (this.selectCount == 0) {
                 return
               }
-              AlertDialog.show(
+              this.UIContext.showAlertDialog(
                 {
                   title: '移除历史记录',
                   message: `确认移除选中的${this.selectCount}项历史记录？`,
@@ -134,7 +137,7 @@ struct VideoHistoryPage {
                       data.forEach((item: VideoHistoryInfo) => {
                         this.deleteHistoryList(item.id)
                       })
-                      promptAction.showToast({ message: "删除成功" })
+                      ToastUtil.showToast({ message: "删除成功" })
                       // 通知历史记录变化
                       HISTORY_CHANGED_EVENT.emit()
                       this.selectionManager.toggleSelectionMode()
@@ -220,7 +223,7 @@ struct VideoHistoryPage {
         })
         .gesture(LongPressGesture({ repeat: false })
           .onAction((event) => {
-            Logger.e(this, 'onLongPress')
+            Logger.e('tips', 'onLongPress')
             // 长按多选
             if (!this.selectionManager.isSelectionMode()) {
               this.selectionManager.toggleSelectionMode()
@@ -319,14 +322,14 @@ struct HistoryItem {
     },
     onSelectChange: (item: VideoHistoryInfo, isSelected) => {
       if (this.item && this.item.link == item.link) {
-        Logger.e(this, 'onSelectChange isSelect=' + isSelected)
+        Logger.e('tips', 'onSelectChange isSelect=' + isSelected)
         this.isSelected = isSelected
       }
     }
   }
 
   aboutToAppear() {
-    Logger.e(this, 'aboutToAppear')
+    Logger.e('tips', 'aboutToAppear')
     if (this.selectionManager !== undefined) {
       this.selectionManager.addObserver(this.selectionObserver)
       this.isSelected = this.selectionManager.isSelect(this.item)
@@ -334,7 +337,7 @@ struct HistoryItem {
   }
 
   aboutToDisappear() {
-    Logger.e(this, 'aboutToDisappear')
+    Logger.e('tips', 'aboutToDisappear')
     if (this.selectionManager !== undefined) {
       this.selectionManager.removeObserver(this.selectionObserver)
     }

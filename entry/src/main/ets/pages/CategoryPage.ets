@@ -1,12 +1,13 @@
-import DataSourceManager from "../api/DataSourceManager"
+import { dataSourceManager } from "../api/DataSourceManager"
 import VideoInfo, { TypeInfo } from "../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../entity/VideoNavigateInfo"
 import { BreakpointState } from "../utils/BreakPointManager"
 import Logger from "../utils/Logger"
-import { BaseDataSource } from "./common/BaseDataSource"
-import StateView, { ViewState } from "./StateView"
-import TitleBar from "./TitleBar"
-import { VideoList } from "./VideoList"
+import { BaseDataSource } from "../components/common/BaseDataSource"
+import StateView, { ViewState } from "../components/StateView"
+import TitleBar from "../components/TitleBar"
+import { VideoList } from "../components/VideoList"
+import { VideoCategoryColumnsTemplate } from "../utils/breakpoint/BreakPoint"
 
 
 // 系统路由
@@ -33,42 +34,11 @@ export struct CategoryPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  // 宽度断点
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
+  // 高度断点
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
   @State categoryDataSource: CategoryDataSource = new CategoryDataSource([])
-  @Consume('VideoCategoryColumnsTemplate') videoCategoryColumnsTemplate: BreakpointState<string>
-
-  aboutToAppear(): void {
-
-  }
-
-  checkSourceUItype(key: string) {
-    this.sourceUItype = DataSourceManager.getSourceUItype(key)
-    console.log('CategoryPage 视频目录页UI类型：', this.sourceUItype)
-  }
-
-  loadFirstPage() {
-    this.state = ViewState.LOADING
-    DataSourceManager.getCurrentSource()
-      .getVideoList(this.url, this.page)
-      .then((data) => {
-        Logger.e(this, 'CategoryPage #loadNextPage list=' + JSON.stringify(data))
-        this.videoList = data
-        this.state = ViewState.CONTENT
-        if (this.sourceUItype === 0) {
-          console.log('CategoryPage 视频目录页推送懒加载数据：', this.sourceUItype)
-          // 推送数据
-          this.categoryDataSource.pushData(this.videoList)
-          console.log('CategoryPage 视频目录页已推送懒加载数据：', this.sourceUItype)
-        }
-      })
-      .catch((e: Error) => {
-        this.errorMessage = JSON.stringify(e)
-        this.state = ViewState.ERROR
-      })
-  }
-
-  loadNextPage() {
-
-  }
 
   build() {
     NavDestination() {
@@ -132,7 +102,7 @@ export struct CategoryPage {
       }.padding(16)
       .columnsGap(6)
       .rowsGap(8)
-      .columnsTemplate(this.videoCategoryColumnsTemplate.value)
+      .columnsTemplate(VideoCategoryColumnsTemplate(this.widthBp))
     }
 
   }
@@ -198,6 +168,39 @@ export struct CategoryPage {
     .width('100%')
     .borderRadius(12)
     .backgroundColor($r('app.color.image_mask_color'))
+  }
+
+  aboutToAppear(): void {
+
+  }
+
+  checkSourceUItype(key: string) {
+    // this.sourceUItype = DataSourceManager.getSourceUItype(key)
+    console.log('CategoryPage 视频目录页UI类型：', this.sourceUItype)
+  }
+
+  loadFirstPage() {
+    this.state = ViewState.LOADING
+    dataSourceManager.getVideoList(this.url, this.page)
+      .then((data) => {
+        Logger.e('tips', 'CategoryPage #loadNextPage list=' + JSON.stringify(data))
+        this.videoList = data
+        this.state = ViewState.CONTENT
+        if (this.sourceUItype === 0) {
+          console.log('CategoryPage 视频目录页推送懒加载数据：', this.sourceUItype)
+          // 推送数据
+          this.categoryDataSource.pushData(this.videoList)
+          console.log('CategoryPage 视频目录页已推送懒加载数据：', this.sourceUItype)
+        }
+      })
+      .catch((e: Error) => {
+        this.errorMessage = JSON.stringify(e)
+        this.state = ViewState.ERROR
+      })
+  }
+
+  loadNextPage() {
+
   }
 
 }

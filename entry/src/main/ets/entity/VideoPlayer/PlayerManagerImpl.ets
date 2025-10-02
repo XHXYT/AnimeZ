@@ -47,7 +47,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   init(player: IPlayer) {
     this.player = player
-    Logger.e(this, 'init url=' + this.url)
+    Logger.e('tips', 'init url=' + this.url)
     if (this.url && this.status == PlayerStatus.IDLE && !this.isInitializing) {
       this.isInitializing = true
       this.player.setDataSource(this.url)
@@ -73,7 +73,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     //    this.listeners.forEach((l) => {
     //      l.onEpisodeChanged(episode)
     //    })
-    Logger.e(this, '')
+    Logger.e('tips', '')
     await this.setPlayerUrl(episode.videoUrl as string)
     await this.start()
   }
@@ -83,7 +83,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
   //  }
 
   async playEpisodeList(episodeList: EpisodeInfo[], episodeIndex: number = 0): Promise<void> {
-    Logger.e(this, 'playEpisodeList index=' + episodeIndex + ' episodeList=' + JSON.stringify(episodeList))
+    Logger.e('tips', 'playEpisodeList index=' + episodeIndex + ' episodeList=' + JSON.stringify(episodeList))
     this.episodeList = episodeList
     this.episodeIndex = episodeIndex
     this.listeners.forEach((l) => {
@@ -111,7 +111,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private isInitializing = false
 
   async setPlayerUrl(url: string) {
-    Logger.e(this, 'setPlayerUrl status=' + this.status + ' url=' + url)
+    Logger.e('tips', 'setPlayerUrl status=' + this.status + ' url=' + url)
     this.url = url;
     if (this.player) {
       if (this.isPlaying()) {
@@ -128,7 +128,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   async start(): Promise<void> {
-    Logger.e(this, 'start isPlaying=' + this.isPlaying() + ' status=' + this.status + ' url=' + this.url)
+    Logger.e('tips', 'start isPlaying=' + this.isPlaying() + ' status=' + this.status + ' url=' + this.url)
     if (!this.url || this.isPlaying()) {
       return
     }
@@ -166,7 +166,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   async pause() {
     if (this.player) {
-      Logger.e(this, 'pause isPlaying=' + this.isPlaying() + ' status=' + this.status)
+      Logger.e('tips', 'pause isPlaying=' + this.isPlaying() + ' status=' + this.status)
       if (this.isPlaying()) {
         await this.player.pause()
       }
@@ -220,7 +220,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     if (this.status === status) {
       return
     }
-    Logger.e(this, 'setStatus status=' + status + ' playAfterInit=' + this.playAfterInit)
+    Logger.e('tips', 'setStatus status=' + status + ' playAfterInit=' + this.playAfterInit)
     this.status = status;
     for (let listener of this.listeners) {
       listener.onStatusChanged(status)
@@ -280,7 +280,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   addListener(listener: PlayerListener) {
     this.listeners.push(listener)
-    Logger.e(this, 'addListener len=' + this.listeners.length)
+    Logger.e('tips', 'addListener len=' + this.listeners.length)
 
     if (this.episodeList.length != 0) {
       listener.onEpisodeChanged(this.episodeList, this.episodeIndex)

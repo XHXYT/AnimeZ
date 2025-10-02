@@ -1,25 +1,44 @@
-// 代码来自官方示例
-
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 
-const setColorMode = (context: common.UIAbilityContext, colorMode: ConfigurationConstant.ColorMode) => {
-  context.getApplicationContext().setColorMode(colorMode);
-}
 /**
- * 设置主题模式为跟随系统变化
+ * 颜色模式工具类
  */
-export const setAutoColorMode = (context: common.UIAbilityContext) => {
-  setColorMode(context, ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+export class ColorModeManager {
+  /**
+   * 设置颜色模式
+   * @param context UIAbilityContext
+   * @param mode 模式类型
+   */
+  static SetColorMode(
+    context: common.UIAbilityContext,
+    mode: ConfigurationConstant.ColorMode
+  ) {
+    try {
+      context.getApplicationContext().setColorMode(mode);
+    } catch (error) {
+      console.error(`颜色模式设置失败：${error.mode} message: ${error.message}`)
+    }
+  }
+
+  /**
+   * 切换颜色模式
+   * @param context UIAbilityContext
+   * @param mode 模式标识（ThemeColorMode）
+   */
+  static switchColorMode(
+    context: common.UIAbilityContext,
+    mode: ThemeColorMode
+  ) {
+    const modeMap: Record<number, ConfigurationConstant.ColorMode> = {
+      0: ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET,
+      1: ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT,
+      2: ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+    }
+    const targetMode = modeMap[mode] as ConfigurationConstant.ColorMode
+
+    ColorModeManager.SetColorMode(context, targetMode)
+  }
+
 }
-/**
- * 设置主题模式为始终深色
- */
-export const setDarkColorMode = (context: common.UIAbilityContext) => {
-  setColorMode(context, ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-}
-/**
- * 设置主题模式为始终浅色
- */
-export const setLightColorMode = (context: common.UIAbilityContext) => {
-  setColorMode(context, ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
-}
+
+

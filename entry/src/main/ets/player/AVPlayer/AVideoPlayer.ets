@@ -32,36 +32,36 @@ class AVPlayerWrapper {
         if (this.avPlayer.url == url) {
           return
         }
-        Logger.e(this, 'setDataSource url=' + url)
+        Logger.e('tips', 'setDataSource url=' + url)
         this.avPlayer.url = url
       },
       start: async () => {
-        Logger.e(this, 'setDataSource start')
+        Logger.e('tips', 'setDataSource start')
         return this.avPlayer.play()
       },
       prepare: async () => {
         // this.controller.prepareAsync()
-        Logger.e(this, 'setDataSource prepare')
+        Logger.e('tips', 'setDataSource prepare')
         return this.avPlayer.prepare()
       },
       pause: async () => {
-        Logger.e(this, 'setDataSource pause')
+        Logger.e('tips', 'setDataSource pause')
         return this.avPlayer.pause()
       },
       stop: async () => {
-        Logger.e(this, 'setDataSource stop')
+        Logger.e('tips', 'setDataSource stop')
         return this.avPlayer.stop()
       },
       reset: async () => {
-        Logger.e(this, 'setDataSource reset')
+        Logger.e('tips', 'setDataSource reset')
         return this.avPlayer.reset()
       },
       release: async () => {
-        Logger.e(this, 'setDataSource release')
+        Logger.e('tips', 'setDataSource release')
         return this.avPlayer.release()
       },
       seekTo: async (value: number) => {
-        Logger.e(this, 'setDataSource seekTo value=' + value)
+        Logger.e('tips', 'setDataSource seekTo value=' + value)
         return this.avPlayer.seek(value as number)
       },
       setSpeed: (speed: media.PlaybackSpeed): Promise<void> => {
@@ -96,7 +96,7 @@ class AVPlayerWrapper {
 
   private bindState(avPlayer: media.AVPlayer, manager: IPlayerManager) {
     avPlayer.on('stateChange', (state: media.AVPlayerState) => {
-      Logger.e(this, 'AVPlayer stateChange state=' + state)
+      Logger.e('tips', 'AVPlayer stateChange state=' + state)
       switch (state) {
         case 'idle':
           break;
@@ -133,26 +133,26 @@ class AVPlayerWrapper {
       }
     });
     avPlayer.on('timeUpdate', (time: number) => {
-      Logger.e(this, 'timeUpdate time=' + time)
+      Logger.e('tips', 'timeUpdate time=' + time)
       manager.notifyCurrentTime(time)
     });
     avPlayer.on('durationUpdate', (time: number) => {
-      Logger.e(this, 'durationUpdate time=' + time)
+      Logger.e('tips', 'durationUpdate time=' + time)
       manager.notifyDuration(time)
     });
     avPlayer.on('seekDone', (value: number) => {
-      Logger.e(this, 'seekDone value=' + value)
+      Logger.e('tips', 'seekDone value=' + value)
     })
     avPlayer.on('videoSizeChange', (w: number, h: number) => {
-      Logger.e(this, 'videoSizeChange w=' + w + ' h=' + h)
+      Logger.e('tips', 'videoSizeChange w=' + w + ' h=' + h)
       manager.onVideoSizeChanged(w, h)
     })
     avPlayer.on('error', (error) => {
-      Logger.e(this, 'onError e=' + JSON.stringify(error))
+      Logger.e('tips', 'onError e=' + JSON.stringify(error))
       manager.setStatus(PlayerStatus.ERROR)
     })
     avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
-      Logger.e(this, 'bufferingUpdate infoType=' + infoType + ' value=' + value)
+      Logger.e('tips', 'bufferingUpdate infoType=' + infoType + ' value=' + value)
       manager.notifyBuffering(infoType, value)
     })
   }
@@ -229,7 +229,7 @@ export struct AVideoPlayer {
       })
     },
     onVideoSizeChange: (w: number, h: number) => {
-      Logger.e(this, `onVideoSizeChange w=${w} h=${h}`);
+      Logger.e('tips', `onVideoSizeChange w=${w} h=${h}`);
       this.originalVideoAspRatio = w / h;
       animateTo({
         duration: DEFAULT_DURATION,
@@ -243,7 +243,7 @@ export struct AVideoPlayer {
         } else {
           this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
         }
-        Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
+        Logger.e('tips', 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
       })
     },
     onProgressChange: (totalTime: number, currentTime: number) => {
@@ -281,7 +281,7 @@ export struct AVideoPlayer {
         })
           .onLoad((context) => {
             const surfaceId = this.componentController.getXComponentSurfaceId()
-            Logger.e(this, 'XComponent onLoad surfaceId = ' + surfaceId)
+            Logger.e('tips', 'XComponent onLoad surfaceId = ' + surfaceId)
             media.createAVPlayer()
               .then((player) => {
                 const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
@@ -289,7 +289,7 @@ export struct AVideoPlayer {
               })
           })
           .onDestroy(() => {
-            Logger.e(this, 'XComponent onDestroy')
+            Logger.e('tips', 'XComponent onDestroy')
           })
           .width('100%')
           .aspectRatio(this.videoAspRatio)

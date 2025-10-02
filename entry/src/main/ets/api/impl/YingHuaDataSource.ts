@@ -94,18 +94,19 @@ export default class YingHuaDataSource implements DataSource {
     // 获取更多视频
     async getVideoList(moreUrl: string, page: number): Promise<VideoInfo[]> {
         let url = `${moreUrl}${page <= 0 ? '' : page}`
-        Logger.e(this, "CategoryPage #getVideoList parseHtml url = " + url)
+        Logger.e('tips', "CategoryPage #getVideoList parseHtml url = " + url)
         let doc = await HttpUtils.getHtml(url)
         let drama = selectFirst(doc, 'div.lpic > ul')
         return this.parseVideoList(drama)
     }
+
     private async parseVideoList(drama): Promise<VideoInfo[]> {
         let elements = select(drama, 'li')
-        Logger.e(this, 'parseHtml elements=' + elements)
+        Logger.e('tips', 'parseHtml elements=' + elements)
         let videoList: VideoInfo[] = []
 
         elements.forEach((li) => {
-            Logger.e(this, "parseHtml el=" + li)
+            Logger.e('tips', "parseHtml el=" + li)
             const A = selectFirst(li, "a")
             const h2 = selectFirst(li, 'h2')
             const Ta = select(li, 'span:nth-child(4) > a')
@@ -132,11 +133,11 @@ export default class YingHuaDataSource implements DataSource {
     async getVideoDetailInfo(url: string): Promise<VideoDetailInfo> {
         let doc = await HttpUtils.getHtml(url);
 
-        Logger.e(this, 'getVideoDetailInfo 1')
+        Logger.e('tips', 'getVideoDetailInfo 1')
 
         let title = selectTextContent(doc, 'div.fire > div.rate > h1')
 
-        Logger.e(this, 'getVideoDetailInfo title=' + title)
+        Logger.e('tips', 'getVideoDetailInfo title=' + title)
 
         let recommends: VideoInfo[] = []
         let list = select(doc, 'div.sido > div.pics > ul > li')
@@ -154,7 +155,7 @@ export default class YingHuaDataSource implements DataSource {
 
         let episodes: EpisodeList[] = []
         let lis = select(doc, '#main0 > div > ul > li')
-        Logger.e(this, 'getVideoDetailInfo lis.len=' + lis.length)
+        Logger.e('tips', 'getVideoDetailInfo lis.len=' + lis.length)
         let episodeList: EpisodeList = {
             title: "路线0",
             episodes: []
@@ -166,7 +167,7 @@ export default class YingHuaDataSource implements DataSource {
                 title: textContent(a),
                 desc: title + ' ' + textContent(a)
             }
-            Logger.e(this, 'getEpisodes info=' + JSON.stringify(info))
+            Logger.e('tips', 'getEpisodes info=' + JSON.stringify(info))
             episodeList.episodes.push(info)
         })
         episodes.push(episodeList)
@@ -188,11 +189,11 @@ export default class YingHuaDataSource implements DataSource {
     }
 
     async parseVideoUrl(link: string): Promise<string> {
-        Logger.e(this, 'parseVideoUrl link=' + link)
+        Logger.e('tips', 'parseVideoUrl link=' + link)
         const doc = await HttpUtils.getHtml(link)
 
         let url = selectAttributeValue(doc, 'a#play_1', 'onclick')
-        Logger.e(this, 'parseVideoUrl old url=' + url)
+        Logger.e('tips', 'parseVideoUrl old url=' + url)
         if (url) {
             url = url.substring(url.indexOf('\'') + 1, url.lastIndexOf('\''))
             const i = url.indexOf('$')
@@ -200,7 +201,7 @@ export default class YingHuaDataSource implements DataSource {
                 url = url.substring(0, i)
             }
         }
-        Logger.e(this, 'parseVideoUrl url=' + url)
+        Logger.e('tips', 'parseVideoUrl url=' + url)
         return url;
     }
 }

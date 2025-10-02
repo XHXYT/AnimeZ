@@ -3,10 +3,8 @@ import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
 import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../entity/VideoPlayer/IPlayerManager';
 import media from '@ohos.multimedia.media';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
-import DataSourceManager from '../api/DataSourceManager';
 import PlayerManagerImpl from '../entity/VideoPlayer/PlayerManagerImpl';
 // import { VideoCacheList } from '../components/VideoCacheList';
-import Settings from '../utils/Settings';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import StateView, { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
@@ -21,14 +19,19 @@ import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/V
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { BusinessError, settings } from '@kit.BasicServicesKit';
 import { webview } from '@kit.ArkWeb';
-import DataStore from '../utils/DataStore';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { deviceInfo } from '@kit.BasicServicesKit'
 import { BreakpointState } from '../utils/BreakPointManager';
-import { VideoPlayerGridColSpan, VideoPlayerNewGridColSpan, VideoDetailGridColSpan,
-  VideoDetailNewGridColSpan } from '../components/common/BreakPoint';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { ToastUtil } from '../utils/ToastUtils';
+import { AppConfigs } from '../entryability/Settings';
+import { dataSourceManager } from '../api/DataSourceManager';
+import {
+  VideoDetailGridColHeight,
+  VideoDetailGridColSpan,
+  VideoDetailNewGridColSpan,
+  VideoPlayerGridColSpan, VideoPlayerNewGridColSpan } from '../utils/breakpoint/BreakPoint';
 
 
 // 系统路由
@@ -36,8 +39,6 @@ import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 export function VideoDetailPageBuilder(name: string, param: Object) {
   VideoDetailPage()
 }
-
-const context = getContext(this) as common.UIAbilityContext
 
 @Entry
 @Component
@@ -64,10 +65,12 @@ struct VideoDetailPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  // 宽度断点
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
+  // 高度断点
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
   // 手机横屏
   @Consume @Watch('onPhoneLandscape') isPhoneLandscape: boolean
-  // 栅格区高度
-  @Consume('VideoDetailGridColHeight') VideoDetailGridColHeight: BreakpointState<Length>
   // 颜色模式
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
@@ -84,6 +87,8 @@ struct VideoDetailPage {
   private isFirstPlay: boolean = true
   @Consume('CompStr') compStr: BreakpointState<string>
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
+  // 应用设置
+  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   // 收藏信息
   @State collectionInfo: VideoCollectionInfo = CollectionInfo
   // 历史信息
@@ -100,7 +105,7 @@ struct VideoDetailPage {
   private readonly playerListenerD: PlayerListener = {
     onStatusChanged: (status: number) => {
       if (status == PlayerStatus.DONE) {
-        if (Settings.isAutoPlayNextEpisode() && this.videoDetailInfo.episodes !== undefined) {
+        if (this.appSettings.auto_play_next_episode && this.videoDetailInfo.episodes !== undefined) {
           let episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
           if (this.episodeIndex < episodeList.episodes.length - 1) {
             this.playVideo(this.episodeListIndex, this.episodeIndex + 1)
@@ -133,7 +138,7 @@ struct VideoDetailPage {
     },
     onVideoSizeChange: (w: number, h: number) => {},
     onProgressChange: (totalTime: number, currentTime: number) => {
-      Logger.e(this, 'totalTime=' + totalTime + ' currentTime=' + currentTime)
+      Logger.e('tips', 'totalTime=' + totalTime + ' currentTime=' + currentTime)
       if (this.historyInfo) {
         this.historyInfo.totalTime = totalTime
         this.historyInfo.currentTime = currentTime
@@ -154,10 +159,10 @@ struct VideoDetailPage {
             video ? video.src : "元素未找到或没有src属性";`
 
   /**
-   * 跟随重力感应旋转屏幕, 仅手机生效
+   * TODO 跟随重力感应旋转屏幕全屏, 仅手机生效
    */
   onPhoneLandscape() {
-    console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true))
+    console.log('VideoDetailPage #aboutToAppear 自动旋屏启用状态： ', this.appSettings.auto_sensor_rotate)
     console.log('VideoDetailPage #aboutToAppear 手机横屏启用状态： ', this.isPhoneLandscape)
     if (this.isPhoneLandscape) {
       // 横屏进入全屏
@@ -238,7 +243,7 @@ struct VideoDetailPage {
 
   private getDetailInfo() {
     console.log(`VideoTest #getDetailInfo当前数据源: ${this.sourceKey}`)
-    DataSourceManager.getSource(this.sourceKey).getVideoDetailInfo(this.url)
+    dataSourceManager.getVideoDetailInfo(this.url)
       .then(async (info) => {
         this.videoDetailInfo = info
         this.historyInfo.link = this.videoDetailInfo.url as string // 保存页面链接
@@ -252,26 +257,26 @@ struct VideoDetailPage {
       })
       .catch((e: Error) => {
         this.errorMessage = JSON.stringify(e)
-        Logger.e(this, 'VideoTest #getDetailInfo error = ' + this.errorMessage)
+        Logger.e('tips', 'VideoTest #getDetailInfo error = ' + this.errorMessage)
         this.state = ViewState.ERROR
       })
   }
 
   private playVideo(episodeListIndex: number, episodeIndex: number) {
-    Logger.e(this, 'playVideo episodeListIndex = ' + episodeListIndex + " episodeIndex=" + episodeIndex)
+    Logger.e('tips', 'playVideo episodeListIndex = ' + episodeListIndex + " episodeIndex=" + episodeIndex)
     // 跳转至历史记录的播放列表
     this.episodeListIndex = episodeListIndex
     // 跳转至历史记录的播放集数
     this.episodeIndex = episodeIndex
     const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
-    Logger.e(this, 'VideoTest #playVideo historyInfo=' + JSON.stringify(episodeList))
+    Logger.e('tips', 'VideoTest #playVideo historyInfo=' + JSON.stringify(episodeList))
     let episode = episodeList.episodes[this.episodeIndex];
-    Logger.e(this, 'playVideo episode=' + JSON.stringify(episode))
+    Logger.e('tips', 'playVideo episode=' + JSON.stringify(episode))
     this.historyInfo.episodeListIndex = episodeListIndex
     this.historyInfo.episodeIndex = episodeIndex
     this.historyInfo.episodeName = episode.title
     this.historyInfo.videoUrl = episode.videoUrl as string
-    Logger.e(this, 'VideoTest #playVideo historyInfo=' + JSON.stringify(this.historyInfo))
+    Logger.e('tips', 'VideoTest #playVideo historyInfo=' + JSON.stringify(this.historyInfo))
     if (episode.videoUrl) {
       console.log('VideoTest #playVideo 存在视频链接的视频播放调用保存')
       this.saveHistoryInfo()
@@ -280,7 +285,7 @@ struct VideoDetailPage {
       this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
     } else {
       // 查找视频播放链接
-      DataSourceManager.getSource(this.videoDetailInfo.sourceKey).parseVideoUrl(episode.link)
+      dataSourceManager.parseVideoUrl(episode.link)
         .then((url) => {
           // if (this.videoDetailInfo.sourceKey !== 'key_agedmvideo') {
           //
@@ -300,7 +305,7 @@ struct VideoDetailPage {
         })
         .catch((e: Error) => {
           this.playerManager.setStatus(PlayerStatus.ERROR)
-          Logger.e(this, 'parseVideoUrl failed! e=' + JSON.stringify(e))
+          Logger.e('tips', 'parseVideoUrl failed! e=' + JSON.stringify(e))
         })
     }
   }
@@ -524,7 +529,7 @@ struct VideoDetailPage {
         .backgroundColor(Color.Black)
         .alignContent(Alignment.Center)
         .padding({top: this.isFullScreen ? 0 : this.topHeight - 10})
-        .height(this.VideoDetailGridColHeight.value)
+        .height(VideoDetailGridColHeight(this.widthBp))
       }
       // 视频详情区
       GridCol({
@@ -983,14 +988,14 @@ struct VideoDetailPage {
         '缓存',
         () => {
           this.panelContentType = 1
-          promptAction.showToast({ message: "开发中" })
+          ToastUtil.showToast({ message: "开发中" })
           // this.panelController.show()
         }
       )
       // 分享
       this.IconWithText($r('app.media.ic_share'), "分享", () => {
-        promptAction.showToast({ message: "开发中" })
-        Logger.e(this, 'videoDetailInfo=' + JSON.stringify(this.videoDetailInfo))
+        ToastUtil.showToast({ message: "开发中" })
+        Logger.e('tips', 'videoDetailInfo=' + JSON.stringify(this.videoDetailInfo))
         /*let sourceController = new CustomDialogController({
           builder: ShareDialog(
             {

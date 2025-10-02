@@ -1,9 +1,9 @@
-import promptAction from '@ohos.promptAction';
+
 import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { BreakpointState } from '../utils/BreakPointManager';
 import { BaseDataSource } from './common/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { VideoListColumnsTemplate } from '../utils/breakpoint/BreakPoint';
 
 /**
  * 视频列表
@@ -13,8 +13,11 @@ export struct VideoList {
   @State videoList: VideoInfo[] = []
   @State scrollable: boolean = true
   @Consume('pageStack') pageStack: NavPathStack
+  // 宽度断点
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
+  // 高度断点
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
   @State videoListDataSource: VideoListDataSource = new VideoListDataSource([])
-  @Consume('VideoListColumnsTemplate') videoListColumnsTemplate: BreakpointState<string>
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   aboutToAppear(): void {
@@ -31,7 +34,7 @@ export struct VideoList {
         }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
       }
       .hitTestBehavior(this.scrollable ? HitTestMode.Default : HitTestMode.None)
-      .columnsTemplate(this.videoListColumnsTemplate.value)
+      .columnsTemplate(VideoListColumnsTemplate(this.widthBp))
       .width('100%')
       .columnsGap(8)
       .rowsGap(8)

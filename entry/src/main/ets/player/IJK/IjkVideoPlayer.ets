@@ -137,7 +137,7 @@ export struct IjkVideoPlayer {
         } else {
           this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
         }
-        Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
+        Logger.e('tips', 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
       })
     },
     onProgressChange: (totalTime: number, currentTime: number) => {
@@ -168,13 +168,13 @@ export struct IjkVideoPlayer {
           libraryname: 'ijkplayer_napi'
         })
           .onLoad((context: IjkPlayerNapi) => {
-            Logger.e(this, 'XComponent onLoad')
+            Logger.e('tips', 'XComponent onLoad')
 
             this.initIjk(context)
             this.playerManager?.init(this.player)
           })
           .onDestroy(() => {
-            Logger.e(this, 'XComponent onDestroy')
+            Logger.e('tips', 'XComponent onDestroy')
           })
           .width('100%')
           .aspectRatio(this.videoAspRatio)
@@ -191,7 +191,7 @@ export struct IjkVideoPlayer {
   }
 
   initIjk(context: IjkPlayerNapi) {
-    Logger.e(this, 'init context=' + context)
+    Logger.e('tips', 'init context=' + context)
     //设置XComponent回调的context
     this.ijkPlayer.setContext(context);
     this.ijkPlayer.reset();
@@ -222,34 +222,34 @@ export struct IjkVideoPlayer {
 
     this.ijkPlayer.setOnBufferingUpdateListener({
       onBufferingUpdate: (percent: number) => {
-        Logger.e(this, 'onBufferingUpdate p=' + percent)
+        Logger.e('tips', 'onBufferingUpdate p=' + percent)
       }
     })
 
     this.ijkPlayer.setOnCompletionListener({
       onCompletion: () => {
-        Logger.e(this, 'onCompletion')
+        Logger.e('tips', 'onCompletion')
         this.playerManager?.setStatus(PlayerStatus.DONE)
       }
     })
 
     this.ijkPlayer.setOnSeekCompleteListener({
       onSeekComplete: () => {
-        Logger.e(this, 'onSeekComplete')
+        Logger.e('tips', 'onSeekComplete')
       }
     })
 
 
     this.ijkPlayer.setOnErrorListener({
       onError: (what: number, extra: number) => {
-        Logger.e(this, 'onError what=' + what + " extra=" + extra)
+        Logger.e('tips', 'onError what=' + what + " extra=" + extra)
         this.playerManager?.setStatus(PlayerStatus.ERROR)
       }
     })
 
     this.ijkPlayer.setOnPreparedListener({
       onPrepared: () => {
-        Logger.e(this, 'onPrepared')
+        Logger.e('tips', 'onPrepared')
         this.playerManager?.setStatus(PlayerStatus.PREPARED)
       }
     })
@@ -280,7 +280,7 @@ export struct IjkVideoPlayer {
   }
 
   protected onInfo(what: number, extra: number) {
-    Logger.e(this, "OnInfoListener-->go:" + what + "===" + extra);
+    Logger.e('tips', "OnInfoListener-->go:" + what + "===" + extra);
     if (what == IJKMediaInfo.MEDIA_INFO_BUFFERING_START) {
       this.playerManager?.notifyBuffering(media.BufferingInfoType.BUFFERING_START, 0)
     } else if (what == IJKMediaInfo.MEDIA_INFO_BUFFERING_END) {
@@ -308,7 +308,7 @@ export struct IjkVideoPlayer {
       this.lastTime = currentTime
       this.playerManager?.notifyTime(totalTime, currentTime)
     }, 1000);
-    Logger.e(this, 'startProgress updateProgressTimer=' + this.updateProgressTimer)
+    Logger.e('tips', 'startProgress updateProgressTimer=' + this.updateProgressTimer)
   }
 
   private stopProgress() {

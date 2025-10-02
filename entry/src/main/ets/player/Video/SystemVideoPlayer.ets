@@ -148,7 +148,7 @@ export struct SystemVideoPlayer {
         } else {
           this.aspRatio = Math.min(DEFAULT_ASPECT, this.videoAspRatio);
         }
-        Logger.e(this, 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
+        Logger.e('tips', 'VideoSizeChange w=' + w + ' h=' + h + ' videoAspRatio=' + this.videoAspRatio + ' aspRatio=' + this.aspRatio)
       })
     },
     onProgressChange: (totalTime: number, currentTime: number) => {
@@ -188,21 +188,21 @@ export struct SystemVideoPlayer {
           .objectFit(this.videoFit)
           .aspectRatio(this.videoAspRatio)
           .onStart(() => {
-            Logger.e(this, 'onStart')
+            Logger.e('tips', 'onStart')
             this.playerManager?.setStatus(PlayerStatus.PLAY)
           })
           .onError(() => {
-            Logger.e(this, 'onError')
+            Logger.e('tips', 'onError')
             this.playerManager?.setStatus(PlayerStatus.ERROR)
           })
           .onPrepared((e) => {
-            Logger.e(this, 'onPrepared')
+            Logger.e('tips', 'onPrepared')
             this.playerManager?.setStatus(PlayerStatus.PREPARED)
             this.playerManager?.notifyDuration(e.duration * 1000)
           })
           .onPause(() => {
             let status = this.playerManager?.getStatus()
-            Logger.e(this, 'onPause currentStatus=' + status)
+            Logger.e('tips', 'onPause currentStatus=' + status)
             if (status == PlayerStatus.ERROR || status == PlayerStatus.STOP) {
               return
             }
@@ -217,18 +217,18 @@ export struct SystemVideoPlayer {
           })
           .onSeeking((e) => {
             // TODO seek时没有回调该函数？
-            Logger.e(this, 'onSeeking time=' + e.time)
+            Logger.e('tips', 'onSeeking time=' + e.time)
           })
           .onSeeked((e) => {
             // TODO seek时没有回调该函数？
-            Logger.e(this, 'onSeeked time=' + e.time)
+            Logger.e('tips', 'onSeeked time=' + e.time)
           })
           .onFinish(() => {
-            Logger.e(this, 'onFinish')
+            Logger.e('tips', 'onFinish')
             this.playerManager?.setStatus(PlayerStatus.DONE)
           })
           .onUpdate((e) => {
-            Logger.e(this, 'onUpdate time=' + e.time + ' status=' + this.playerManager?.getStatus())
+            Logger.e('tips', 'onUpdate time=' + e.time + ' status=' + this.playerManager?.getStatus())
             this.checkPlayingStatus()
             this.playerManager?.notifyCurrentTime(e.time * 1000)
           })

@@ -1,4 +1,4 @@
-import DataSourceManager, { ALL_SOURCES, KEY_CURRENT_SOURCE } from "../../api/DataSourceManager"
+import { dataSourceManager } from "../../api/DataSourceManager"
 import { DramaList } from "../../entity/HomepageData"
 import VideoInfo from "../../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../../entity/VideoNavigateInfo"
@@ -57,7 +57,7 @@ export struct CategroyView {
           .alignSelf(ItemAlign.End)
       }.onClick(() => {
         const params: VideoCategoryNavigateInfo = {
-          sourceKey: DataStore.get(KEY_CURRENT_SOURCE, ALL_SOURCES[0].key),
+          sourceKey: dataSourceManager.getKey(),
           title: title,
           url: moreUrl
         }

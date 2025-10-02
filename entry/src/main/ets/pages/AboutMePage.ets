@@ -3,6 +3,7 @@ import TitleBar from '../components/TitleBar'
 import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingRow } from '../components/common/Common';
+import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由
 @Builder
@@ -49,7 +50,7 @@ struct AboutMePage {
           info: '赞助作者一杯咖啡',
           icon: $r('app.media.ic_java'),
           onClick: (item, callback) => {
-            promptAction.showToast({message: '该功能暂未实现，感谢您的支持！'})
+            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
             callback?.()
           }
         },
@@ -84,7 +85,7 @@ struct AboutMePage {
           info: '赞助作者一杯咖啡',
           icon: $r('app.media.ic_java'),
           onClick: (item, callback) => {
-            promptAction.showToast({message: '该功能暂未实现，感谢您的支持！'})
+            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
             callback?.()
           }
         },

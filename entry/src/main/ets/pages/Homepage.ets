@@ -6,10 +6,10 @@ import { ConfigurationConstant } from '@kit.AbilityKit';
 import StateView, { ViewState } from '../components/StateView';
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
 import { VideoList } from '../components/VideoList';
-import DataSourceManager from '../api/DataSourceManager';
 import Logger from '../utils/Logger';
 import { BannerView } from '../components/home/BannerView';
 import { CategroyView } from '../components/home/CategoryView';
+import { dataSourceManager } from '../api/DataSourceManager';
 
 // 系统路由
 @Builder
@@ -139,13 +139,12 @@ export struct HomePage {
 
   private loadNextPage() {
     this.state = ViewState.LOADING
-    DataSourceManager.getCurrentSource()
-      .getHomepageData()
+    dataSourceManager.getHomepageData()
       .then((data) => {
-        Logger.e(this, 'loadNextPage list=' + JSON.stringify(data))
+        Logger.e('tips', 'loadNextPage list=' + JSON.stringify(data))
         this.bannerList = data.bannerList
         this.categoryList = data.categoryList
-        Logger.e(this, 'categoryList=' + JSON.stringify(data.categoryList))
+        Logger.e('tips', 'categoryList=' + JSON.stringify(data.categoryList))
         this.state = ViewState.CONTENT
       })
       .catch((e: Error) => {

@@ -3,6 +3,7 @@ import { BaseDataSource } from "../common/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { BreakpointState } from "../../utils/BreakPointManager";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
+import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";
 
 
 @Component
@@ -10,8 +11,10 @@ export struct BannerView {
   @Link bannerList: VideoInfo[]
   @Consume('pageStack') pageStack: NavPathStack
   private bannerDataSource: BannerDataSource = new BannerDataSource([])
-  @Consume('HomeBannerDisplayCount') homeBannerDisplayCount: BreakpointState<number>
-  @Consume('HomeBannerBannerMargin') homeBannerBannerMargin: BreakpointState<number>
+  // 宽度断点
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
+  // 高度断点
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   aboutToAppear(): void {
@@ -29,9 +32,9 @@ export struct BannerView {
     .autoPlay(true)
     .interval(6000)
     .indicator(false)
-    .prevMargin(this.homeBannerBannerMargin.value)
-    .nextMargin(this.homeBannerBannerMargin.value)
-    .displayCount(this.homeBannerDisplayCount.value)
+    .prevMargin(HomeBannerBannerMargin(this.widthBp))
+    .nextMargin(HomeBannerBannerMargin(this.widthBp))
+    .displayCount(HomeBannerDisplayCount(this.widthBp))
   }
 
   // 轮播图项

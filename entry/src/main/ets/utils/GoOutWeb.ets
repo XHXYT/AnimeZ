@@ -16,6 +16,6 @@ export async function GoToWeb(url: string, context: common.UIAbilityContext) {
     await context.startAbility(want)
     console.info(`explicit start ability succeed`)
   } catch (error) {
-    console.info(`explicit start ability failed with ${error.code}`)
+    console.error(`explicit start ability failed with ${error.code}`)
   }
 }

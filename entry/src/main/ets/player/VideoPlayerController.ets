@@ -63,7 +63,7 @@ export struct VideoPlayerController {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
       this.initLoading()
-      Logger.e(this, 'PlayerController status=' + status + " playerStatus=" + this.playerStatus)
+      Logger.e('tips', 'PlayerController status=' + status + " playerStatus=" + this.playerStatus)
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
       this.episodeList = episodeList
@@ -101,7 +101,7 @@ export struct VideoPlayerController {
       } else if (type == media.BufferingInfoType.BUFFERING_END) {
         this.isLoading = false
       }
-      Logger.e(this, 'onBuffering isLoading=' + this.isLoading)
+      Logger.e('tips', 'onBuffering isLoading=' + this.isLoading)
     }
   }
 
@@ -304,13 +304,13 @@ export struct VideoPlayerController {
               //                .showTips(true)
             .enabled(this.slideEnable)
             .onChange((value: number, mode: SliderChangeMode) => {
-              Logger.e(this, 'Slider onChange mode=' + mode + ' value=' + value + ' typeof mode=' + (typeof mode)
+              Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value + ' typeof mode=' + (typeof mode)
               + ' result=' + (mode == SliderChangeMode.End || mode == SliderChangeMode.Click)
               + ' result2=' + (mode == SliderChangeMode.Click) + ' click=' + SliderChangeMode.Click + ' result3=' + (mode === SliderChangeMode.Click))
               if (mode == SliderChangeMode.End || mode == 3) {
                 this.progress = value
                 let seekValue = value / 100 * (this.playerManager.getDuration() as number);
-                Logger.e(this, 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
+                Logger.e('tips', 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
 
                 this.setProgress(this.playerManager.getDuration() as number, seekValue)
 
@@ -351,7 +351,7 @@ export struct VideoPlayerController {
               .margin({ right: 12 })
               .objectFit(ImageFit.Contain)
               .onClick(() => {
-                // promptAction.showToast({ message: 'TODO 全屏' })
+                // 全屏
                 this.playerManager.enterFullScreen()
               })
           }
@@ -623,7 +623,7 @@ export struct VideoPlayerController {
       pos = curPercent * 100;
       this.progress = pos;
     }
-    Logger.e(this, "setProgress position:" + position + ",duration:" + duration + ",progressValue:" + pos);
+    Logger.e('tips', "setProgress position:" + position + ",duration:" + duration + ",progressValue:" + pos);
     this.totalTime = VideoTimeUtils.stringForTime(duration);
     if (position > duration) {
       position = duration;

@@ -29,7 +29,7 @@ export default class HttpUtils {
      */
     static async getString(url: string, headers?: object): Promise<string> {
         let httpRequest = http.createHttp()
-        Logger.e(this, 'getString createHttp')
+        Logger.e('tips', 'getString createHttp')
 
         let header = {
             'user-agent': USER_AGENT
@@ -37,7 +37,7 @@ export default class HttpUtils {
         if (headers) {
             header = Object.assign(header, headers)
         }
-        Logger.e(this, 'getString header=' + JSON.stringify(header))
+        Logger.e('tips', 'getString header=' + JSON.stringify(header))
 
         let resp: http.HttpResponse = await httpRequest.request(url, {
             method: http.RequestMethod.GET,
@@ -46,7 +46,7 @@ export default class HttpUtils {
             expectDataType: http.HttpDataType.STRING,
             header: header
         })
-        Logger.e(this, 'getString resp=' + JSON.stringify(resp))
+        Logger.e('tips', 'getString resp=' + JSON.stringify(resp))
         if (resp.result) {
             return resp.result as string
         } else {

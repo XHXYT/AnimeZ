@@ -1,25 +1,12 @@
 import { MyPage } from './MyPage';
 import { HomePage } from './Homepage';
 import mediaQuery from '@ohos.mediaquery'
-import { initDataSources } from '../api/DataSourceManager';
-import { setAutoColorMode, setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
 import { common } from '@kit.AbilityKit';
-import DataStore from '../utils/DataStore';
-import Settings from '../utils/Settings';
-import { BreakpointState, BreakpointSystem } from '../utils/BreakPointManager';
-import { CompStr,
-  HomeBannerBannerMargin,
-  HomeBannerDisplayCount,
-  TabBarHeight,
-  TabBarWidth,
-  TabVertical,
-  TabBarPosition,
-  VideoDetailGridColHeight,
-  VideoCategoryColumnsTemplate,
-  VideoListColumnsTemplate } from '../components/common/BreakPoint';
+import { AppConfigs } from '../entryability/Settings';
+import { BreakpointSystem } from '../utils/BreakPointManager';
 import { deviceInfo } from '@kit.BasicServicesKit';
-
-const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+import { ColorModeManager } from '../utils/ColorModeManager';
+import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
 
 @Entry
 @Component
@@ -36,30 +23,17 @@ struct Index {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageLink('currentColorMode') currentMode: number = -1
+  // 宽度断点
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
+  // 高度断点
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
+
   private controller: TabsController = new TabsController()
   @Provide('pageStack') pageStack: NavPathStack = new NavPathStack()
-  // 断点
-  @Provide('CompStr') compStr: BreakpointState<string> = CompStr
-  // Tab栏宽度
-  @Provide('TabBarWidth') tabBarWidth: BreakpointState<string> = TabBarWidth
-  // tab栏位置
-  @Provide('TabVertical') tabVertical: BreakpointState<boolean> = TabVertical
-  // Tab栏高度
-  @Provide('TabBarHeight') tabBarHeight: BreakpointState<string> = TabBarHeight
-  // Tab栏位置
-  @Provide('TabBarPosition') tabBarPosition: BreakpointState<BarPosition> = TabBarPosition
-  // 首页轮播图显示数量
-  @Provide('HomeBannerDisplayCount') homeBannerDisplayCount: BreakpointState<number> = HomeBannerDisplayCount
-  // 首页轮播图前&后边距（前后露出的部分
-  @Provide('HomeBannerBannerMargin') homeBannerBannerMargin: BreakpointState<number> = HomeBannerBannerMargin
-  // 视频详情页GridCol高度
-  @Provide('VideoDetailGridColHeight') videoDetailGridColHeight: BreakpointState<Length> = VideoDetailGridColHeight
-  // 视频列表Grid列数
-  @Provide('VideoListColumnsTemplate') videoListColumnsTemplate: BreakpointState<string> = VideoListColumnsTemplate
-  // 视频目录列表Grid列数
-  @Provide('VideoCategoryColumnsTemplate') videoCategoryColumnsTemplate: BreakpointState<string> = VideoCategoryColumnsTemplate
+  // 应用设置
+  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
 
+  private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
   /**系统为深色模式时为true，否则为false*/
   DarkModeListener: mediaQuery.MediaQueryListener = mediaQuery.matchMediaSync('(dark-mode: true)')
   /**手机横屏监听*/
@@ -67,28 +41,15 @@ struct Index {
     this.getUIContext().getMediaQuery().matchMediaSync('(320vp< height <= 500vp) and (640vp< width <= 1000vp)')
 
   aboutToAppear() {
-    // 初始化视频数据源
-    initDataSources()
     // 初始化颜色模式
-    this.switchColorMode(DataStore.getInt(Settings.KEY_COLOR_MODE, -1))
-    // 初始化断点系统
-    BreakpointSystem.getInstance().start()
-    BreakpointSystem.getInstance().attach(this.compStr)
-    BreakpointSystem.getInstance().attach(this.tabBarWidth)
-    BreakpointSystem.getInstance().attach(this.tabVertical)
-    BreakpointSystem.getInstance().attach(this.tabBarHeight)
-    BreakpointSystem.getInstance().attach(this.tabBarPosition)
-    BreakpointSystem.getInstance().attach(this.homeBannerDisplayCount)
-    BreakpointSystem.getInstance().attach(this.homeBannerBannerMargin)
-    BreakpointSystem.getInstance().attach(this.videoDetailGridColHeight)
-    BreakpointSystem.getInstance().attach(this.videoListColumnsTemplate)
-    BreakpointSystem.getInstance().attach(this.videoCategoryColumnsTemplate)
+    console.log(`当前颜色模式：${this.appSettings.color_mode}`)
+    ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
     // 启用颜色模式监听
     this.DarkModeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
       this.DarkModeImage  = mediaQueryResult.matches as boolean
     })
     // 当开启自动旋屏和设备类型为手机时启用手机横屏监听
-    if (DataStore.getBoolean(Settings.KEY_SENSOR_ROTATE, true) && deviceInfo.deviceType === 'phone') {
+    if (this.appSettings.auto_sensor_rotate && deviceInfo.deviceType === 'phone') {
       this.PhoneLandscapeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
         this.isPhoneLandscape = mediaQueryResult.matches
         console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)
@@ -103,32 +64,11 @@ struct Index {
     this.PhoneLandscapeListener.off('change')
   }
 
-  /**
-   * 切换颜色模式
-   * @param index 颜色模式序号
-   */
-  switchColorMode(index: number) {
-    switch (index) {
-      case -1:
-        // 跟随系统
-        setAutoColorMode(context)
-        break;
-      case 0:
-        // 夜晚
-        setDarkColorMode(context)
-        break
-      case 1:
-        // 白天
-        setLightColorMode(context)
-        break
-    }
-  }
-
 
   build() {
     Navigation(this.pageStack) {
       Tabs({
-        barPosition: this.isPhoneLandscape ? BarPosition.Start : this.tabBarPosition.value,
+        barPosition: TabBarPosition(this.widthBp, this.heightBp),
         controller: this.controller
       }) {
         TabContent() {
@@ -147,9 +87,9 @@ struct Index {
         })
       }.layoutWeight(1)
       .barMode(BarMode.Fixed)
-      .vertical(this.isPhoneLandscape ? true : this.tabVertical.value)
-      .barWidth(this.isPhoneLandscape ? '54vp' : this.tabBarWidth.value)
-      .barHeight(this.isPhoneLandscape ? '100%' : this.tabBarHeight.value)
+      .vertical(TabBarVertical(this.widthBp, this.heightBp))
+      .barWidth(TabBarWidth(this.widthBp, this.heightBp))
+      .barHeight(TabBarHeight(this.widthBp, this.heightBp))
       .onChange((index: number) => {
         this.currentIndex = index
       })

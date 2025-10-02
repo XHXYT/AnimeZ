@@ -7,11 +7,11 @@
         "material": {
           "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B7CAA4B5EE6F2604052A1A40D87086E6284DBCC84DE8BDFE364F2DBC90DA74B2D922415019F9641",
+          "keyPassword": "0000001A3CAA9BFF8E80410E518F69A5A1F97D7671A6CB7AD4B4FA5094CE3929B1C8E5EEDB93A61D469B",
           "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12",
-          "storePassword": "0000001B7FB282631E21C1792FACEC3F0441499ABD6930C54D55AA63A2860A436915063250699D9DE03617"
+          "storePassword": "0000001ACADB73D89D458DCE5610361ECFBC8CF3E4406A5333B2A6342056F9707965B38A5810FB7AB71B"
         }
       }
     ],
@@ -19,13 +19,14 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "5.0.2(14)",
+        "compatibleSdkVersion": "5.0.5(17)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
             "useNormalizedOHMUrl": true
           }
-        }
+        },
+        "targetSdkVersion": "6.0.0(20)"
       }
     ]
   },

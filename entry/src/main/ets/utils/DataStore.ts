@@ -8,9 +8,9 @@ export default class DataStore {
         if (!AppStorage.has(key)) {
             // 初始化Persist属性
             PersistentStorage.persistProp<T>(key, defaultValue)
-            Logger.e(this, 'get not has key=' + key)
+            Logger.e('tips', 'get not has key=' + key)
         } else {
-            Logger.e(this, 'get has key=' + key)
+            Logger.e('tips', 'get has key=' + key)
         }
         return AppStorage.get<T>(key)
     }

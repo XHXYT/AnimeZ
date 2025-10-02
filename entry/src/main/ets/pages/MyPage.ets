@@ -1,12 +1,11 @@
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { More } from '../components/MoreContainer';
-import promptAction from '@ohos.promptAction';
 import { common } from '@kit.AbilityKit';
-import { setDarkColorMode, setLightColorMode } from '../utils/ColorModeManager';
 import { VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
-import DataStore from '../utils/DataStore';
-import Settings from '../utils/Settings';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { ToastUtil } from '../utils/ToastUtils';
+import { AppConfigs } from '../entryability/Settings';
+import { ColorModeManager } from '../utils/ColorModeManager';
 
 const TAG: string = 'MyPage'
 const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -21,12 +20,14 @@ export struct MyPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageLink('currentColorMode') currentMode: number = -1
+  // 应用设置
+  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @Watch('onShowChanged') @Consume onShow: boolean
   @Consume DarkModeImage: boolean
   @State items: VideoHistoryInfo[] = []
   @State bgHeight: number = 0
   private readonly scroller = new Scroller()
+  private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
 
   aboutToAppear() {
     this.loadHistoryList()
@@ -88,7 +89,7 @@ export struct MyPage {
               this.pageStack.pushPathByName("VideoCollectionPage", '')
             })
             this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
-              promptAction.showToast({ message: "开发中" })
+              ToastUtil.showToast({ message: "开发中" })
               // router.pushUrl({ url: 'pages/DownloadManagerPage' })
             })
           }
@@ -168,29 +169,17 @@ export struct MyPage {
         .borderRadius(10)
         .objectFit(ImageFit.Contain)
         .onClick(() => {
-          if (this.currentMode === 1) {
+          if (this.appSettings.color_mode ===  ThemeColorMode.LIGHT) {
             // 设置为 黑暗
-            this.currentMode = 0
-            setDarkColorMode(context)
-            DataStore.set(Settings.KEY_COLOR_MODE, 0)
-          } else if (this.currentMode === 0){
+            this.appSettings.color_mode = ThemeColorMode.DARK
+          } else if (this.appSettings.color_mode === ThemeColorMode.DARK) {
             // 设置为 日间
-            this.currentMode = 1
-            setLightColorMode(context)
-            DataStore.set(Settings.KEY_COLOR_MODE, 1)
+            this.appSettings.color_mode = ThemeColorMode.LIGHT
           } else {
-            if (this.DarkModeImage) {
-              // 设置为 日间
-              this.currentMode = 1
-              setLightColorMode(context)
-              DataStore.set(Settings.KEY_COLOR_MODE, 1)
-            } else {
-              // 设置为 黑暗
-              this.currentMode = 0
-              setDarkColorMode(context)
-              DataStore.set(Settings.KEY_COLOR_MODE, 0)
-            }
+            ToastUtil.showToast({ message: '当前设置为跟随系统捏' })
+            return
           }
+          ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
         })
     }
     .margin({ left: 16, right: 16, top: 56, bottom: 16 })

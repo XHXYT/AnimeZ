@@ -1,6 +1,5 @@
 import Logger from '../utils/Logger';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import DataSourceManager from '../api/DataSourceManager';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
@@ -8,6 +7,8 @@ import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../d
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { dataSourceManager } from '../api/DataSourceManager';
+import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由
 @Builder
@@ -31,6 +32,7 @@ struct VideoCollectionPage {
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   // 当前颜色模式
   @StorageLink('currentColorMode') currentMode: number = 1
+  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
 
   private readonly selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
   private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
@@ -125,7 +127,7 @@ struct VideoCollectionPage {
                 return
               }
 
-              AlertDialog.show(
+              this.UIContext.showAlertDialog(
                 {
                   title: '移除收藏动漫',
                   message: `确认移除选中的${this.selectCount}项收藏动漫？`,
@@ -142,7 +144,7 @@ struct VideoCollectionPage {
                       data.forEach((item: VideoCollectionInfo) => {
                         this.deleteCollectionList(item.id)
                       })
-                      promptAction.showToast({ message: "删除成功" })
+                      ToastUtil.showToast({ message: "删除成功" })
                       this.selectionManager.toggleSelectionMode()
                       this.loadCollectionList()
                     }
@@ -218,7 +220,7 @@ struct VideoCollectionPage {
         })
         .gesture(LongPressGesture({ repeat: false })
           .onAction((event) => {
-            Logger.e(this, 'onLongPress')
+            Logger.e('tips', 'onLongPress')
             // 长按多选
             if (!this.selectionManager.isSelectionMode()) {
               this.selectionManager.toggleSelectionMode()
@@ -280,59 +282,10 @@ struct CollectionItem {
   @State isSelected: boolean = false
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
   @State selectionManager: SelectionManager<VideoCollectionInfo> | undefined = undefined
+  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
   @State item: VideoCollectionInfo = CollectionInfo
   @State selectionIconMargin: number = 0
   @State selectionIconSize: number = 0
-  private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
-    onSelectionModeChange: (isSelectionMode: boolean) => {
-      if (isSelectionMode) {
-        this.selectionMode = true
-        animateTo({
-          duration: DEFAULT_DURATION,
-          curve: Curve.ExtremeDeceleration,
-          iterations: 1,
-          playMode: PlayMode.Normal
-        }, () => {
-          this.selectionIconSize = 24
-          this.selectionIconMargin = 16
-        })
-      } else {
-        animateTo({
-          duration: DEFAULT_DURATION,
-          curve: Curve.ExtremeDeceleration,
-          iterations: 1,
-          playMode: PlayMode.Normal,
-          onFinish: () => {
-            this.selectionMode = false
-          }
-        }, () => {
-          this.selectionIconSize = 0
-          this.selectionIconMargin = 0
-        })
-      }
-    },
-    onSelectChange: (item: VideoCollectionInfo, isSelected) => {
-      if (this.item && this.item.src == item.src) {
-        Logger.e(this, 'onSelectChange isSelect=' + isSelected)
-        this.isSelected = isSelected
-      }
-    }
-  }
-
-  aboutToAppear() {
-    Logger.e(this, 'aboutToAppear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.addObserver(this.selectionObserver)
-      this.isSelected = this.selectionManager.isSelect(this.item)
-    }
-  }
-
-  aboutToDisappear() {
-    Logger.e(this, 'aboutToDisappear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.removeObserver(this.selectionObserver)
-    }
-  }
 
   build() {
     Row() {
@@ -361,7 +314,7 @@ struct CollectionItem {
             .margin({ top: 4 })
             .fontSize(12)
             .fontColor($r('app.color.color_text_minor'))
-          Text(DataSourceManager.getSourceTitle(this.item.sourceKey))
+          Text(dataSourceManager.getSourceTitle(this.item.sourceKey))
             .alignSelf(ItemAlign.Start)
             .margin({ top: 4 })
             .padding(4)
@@ -379,4 +332,56 @@ struct CollectionItem {
     .width('100%')
     .height(80)
   }
+
+  private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
+    onSelectionModeChange: (isSelectionMode: boolean) => {
+      if (isSelectionMode) {
+        this.selectionMode = true
+        this.UIContext.animateTo({
+          duration: DEFAULT_DURATION,
+          curve: Curve.ExtremeDeceleration,
+          iterations: 1,
+          playMode: PlayMode.Normal
+        }, () => {
+          this.selectionIconSize = 24
+          this.selectionIconMargin = 16
+        })
+      } else {
+        this.UIContext.animateTo({
+          duration: DEFAULT_DURATION,
+          curve: Curve.ExtremeDeceleration,
+          iterations: 1,
+          playMode: PlayMode.Normal,
+          onFinish: () => {
+            this.selectionMode = false
+          }
+        }, () => {
+          this.selectionIconSize = 0
+          this.selectionIconMargin = 0
+        })
+      }
+    },
+    onSelectChange: (item: VideoCollectionInfo, isSelected) => {
+      if (this.item && this.item.src == item.src) {
+        Logger.e('tips', 'onSelectChange isSelect=' + isSelected)
+        this.isSelected = isSelected
+      }
+    }
+  }
+
+  aboutToAppear() {
+    Logger.e('tips', 'aboutToAppear')
+    if (this.selectionManager !== undefined) {
+      this.selectionManager.addObserver(this.selectionObserver)
+      this.isSelected = this.selectionManager.isSelect(this.item)
+    }
+  }
+
+  aboutToDisappear() {
+    Logger.e('tips', 'aboutToDisappear')
+    if (this.selectionManager !== undefined) {
+      this.selectionManager.removeObserver(this.selectionObserver)
+    }
+  }
+
 }

@@ -4,6 +4,7 @@ import TitleBar from '../components/TitleBar'
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
 import { SettingRow } from '../components/common/Common';
+import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由
 @Builder
@@ -47,12 +48,12 @@ struct AppInfoPage {
         },
         { title: '开源社区', info: 'https://gitee.com/ohos-dev', icon: $r('app.media.ic_community'),
           onClick: () => {
-            router.pushUrl({url: 'pages/WebPage', params: {url: 'https://gitee.com/ohos-dev'}})
+            this.pageStack.pushPathByName("WebPage", "https://gitee.com/ohos-dev")
           }
         },
         { title: '开源社区交流群', info: '752399947', icon: $r('app.media.ic_qq'),
           onClick: () => {
-            promptAction.showToast({message: '开发中'})
+            ToastUtil.showToast({message: '开发中'})
           }
         }
       ]

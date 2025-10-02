@@ -52,7 +52,7 @@
     },
     {
       "name": "CategoryPage",
-      "pageSourceFile": "src/main/ets/components/CategoryPage.ets",
+      "pageSourceFile": "src/main/ets/pages/CategoryPage.ets",
       "buildFunction": "CategoryPageBuilder"
     }
   ]

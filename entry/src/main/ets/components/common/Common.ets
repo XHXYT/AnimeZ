@@ -3,6 +3,7 @@ import Logger from "../../utils/Logger"
 import { RadioDialog } from "../dialog/RadioDialog"
 import { Preference, SettingItem } from "./Constants"
 import { SymbolGlyphModifier } from "@kit.ArkUI"
+import { AppConfigs } from "../../entryability/Settings"
 
 /**
  * 普通设置行(可带跳转符号)
@@ -90,7 +91,6 @@ export struct ToggleSettingRow {
     defaultValue: false,
     values: []
   }
-
   @BuilderParam toggle: () => void = this.defaultBuilder
   // 默认开关
   @Builder
@@ -105,25 +105,21 @@ export struct ToggleSettingRow {
         height: '100%'
       })
       .onAreaChange((_, newArea: Area) => {
-        Logger.e(this, 'onAreaChange newArea=' + JSON.stringify(newArea))
+        // Logger.e('tips', 'onAreaChange newArea=' + JSON.stringify(newArea))
         if (newArea.position.x !== undefined) {
           this.toggleX = parseInt(newArea.position.x.toString())
         }
       })
     .onChange((isOn) => {
-        if (this.isOn == isOn) {
-          return
-        }
-        this.isOn = isOn
-        DataStore.set(this.preference.key, isOn)
-        if (this.preference.onValueChange) {
-          this.preference.onValueChange(this.preference.key, isOn)
-        }
-      })
-  }
-
-  aboutToAppear() {
-    this.isOn = DataStore.getBoolean(this.preference.key, this.preference.defaultValue)
+      if (this.isOn == isOn || typeof this.preference.key !== 'string') {
+        return
+      }
+      this.isOn = isOn
+      // 执行已配置函数
+      if (this.preference.onValueChange) {
+        this.preference.onValueChange(this.preference.key, isOn)
+      }
+    })
   }
 
   build() {
@@ -159,7 +155,7 @@ export struct ToggleSettingRow {
     .padding(16)
     .width('100%')
     .onAreaChange((_, newArea) => {
-      Logger.e(this, 'onAreaChange newArea=' + JSON.stringify(newArea))
+      // Logger.e('tips', 'onAreaChange newArea=' + JSON.stringify(newArea))
       this.rowWidth = parseInt(newArea.width.toString())
     })
   }
@@ -170,7 +166,7 @@ export struct ToggleSettingRow {
  */
 @Component
 export struct MenuSettingRow {
-  @State selected: number = -1
+  @State selected: number = 0
   @State title: ResourceStr = ''
   @State tips: ResourceStr = ''
   @State info: string = ''
@@ -178,13 +174,13 @@ export struct MenuSettingRow {
   @State iconBlendColor: Color = Color.White
   @State rowWidth: number = 0
   @State toggleX: number = 0
+  @State isShowMenu: boolean = false
   @State preference: Preference<number> = {
     key: "",
     type: "menu",
     defaultValue: 0,
     values: []
   }
-
   // 菜单
   @BuilderParam menu: () => void = this.defaultMenuBuilder
   // 默认菜单
@@ -198,15 +194,15 @@ export struct MenuSettingRow {
         })
           .selected(this.selected === index)
           .onChange((selected) => {
-            if (this.selected === index) {
+            if (this.selected === index || typeof this.preference.key !== 'string') {
               return
             }
             this.selected = index
             this.tips = menuItem
-            DataStore.set(this.preference.key, index - 1)
             if (this.preference.onValueChange) {
-              this.preference.onValueChange(this.preference.key, index - 1)
+              this.preference.onValueChange(this.preference.key, index)
             }
+            this.isShowMenu = false
           })
       }, (menuItem: string) => menuItem)
     }
@@ -215,7 +211,6 @@ export struct MenuSettingRow {
   aboutToAppear() {
     console.log('#MenuSettingRow preference值：', JSON.stringify(this.preference))
     console.log('#MenuSettingRow value值：', JSON.stringify(this.preference.values))
-    this.selected = DataStore.getInt(this.preference.key, this.preference.defaultValue) + 1
     this.tips = this.preference.values[this.selected]
     console.log('#MenuSettingRow selected值：', this.selected)
   }
@@ -250,7 +245,11 @@ export struct MenuSettingRow {
           .margin({left: 5, right: 8})
           .fontColor([$r('app.color.color_text_minor')])
       }
-      .bindMenu(this.menu())
+      .bindContextMenu(this.isShowMenu, this.menu(), {
+        onDisappear: () => {
+          this.isShowMenu = false
+        }
+      })
       .responseRegion({
         x: -this.toggleX,
         y: 0,
@@ -260,8 +259,13 @@ export struct MenuSettingRow {
     }
     .padding(16)
     .width('100%')
+    .onClick(() => {
+      if (this.isShowMenu)
+        return
+      this.isShowMenu = true
+    })
     .onAreaChange((_, newArea) => {
-      Logger.e(this, 'onAreaChange newArea=' + JSON.stringify(newArea))
+      // Logger.e('tips', 'onAreaChange newArea=' + JSON.stringify(newArea))
       this.rowWidth = parseInt(newArea.width.toString())
     })
   }

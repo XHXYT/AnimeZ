@@ -24,7 +24,7 @@ struct LocalVideoPlayerPage {
     // 转换成Record类型，用来访问对象的属性
     let params = router.getParams() as Record<string, EpisodeInfo>
     let episode: EpisodeInfo = params.episode as EpisodeInfo
-    Logger.e(this, 'aboutToAppear episode=' + JSON.stringify(episode))
+    Logger.e('tips', 'aboutToAppear episode=' + JSON.stringify(episode))
     this.playerManager.addListener({
       onStatusChanged: (status: number) => {
       },

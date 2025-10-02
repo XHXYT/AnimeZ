@@ -1,11 +1,12 @@
-import DataSourceManager from '../api/DataSourceManager';
+
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
-import promptAction from '@ohos.promptAction';
 import { SearchHistoryInfo, searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
+import { dataSourceManager } from '../api/DataSourceManager';
+import { ToastUtil } from '../utils/ToastUtils';
 
 const tag: string = 'SearchPage'
 
@@ -26,6 +27,7 @@ struct SearchPage {
   @StorageLink('currentColorMode') currentMode: number = 1
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
   @State searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
   @State state: number = 0
   @State errorMessage: string = ''
@@ -34,12 +36,11 @@ struct SearchPage {
   async aboutToAppear() {
     this.state = ViewState.CUSTOM
     // 查询搜索历史
-    const searchlist = await searchHistoryInfoDB.query()
-    if (searchlist) {
-      this.searchHistoryList = searchlist
+    const search_list = await searchHistoryInfoDB.query()
+    if (search_list) {
+      this.searchHistoryList = search_list
     }
   }
-
 
   build() {
     NavDestination() {
@@ -202,10 +203,10 @@ struct SearchPage {
   }
 
   private async doSearch(keyword: string) {
-    Logger.e(this, 'doSearch keyword=' + keyword)
+    Logger.e('tips', 'doSearch keyword=' + keyword)
     this.keyword = keyword
     if (this.keyword.length == 0) {
-      promptAction.showToast({ message: '请输入关键词' })
+      ToastUtil.showToast({ message: '请输入关键词' }, `${tag}.doSearch`)
       return
     }
     this.state = ViewState.LOADING
@@ -222,8 +223,7 @@ struct SearchPage {
         console.error("SearchTest #doSearch 插入操作失败: ", error)
       })
 
-    // TODO 支持更多数据源
-    DataSourceManager.getCurrentSource().search(keyword, 1)
+    dataSourceManager.search(keyword, 1)
       .then((videoList) => {
         this.videoList = videoList
         if (this.videoList.length == 0) {
@@ -239,7 +239,7 @@ struct SearchPage {
   }
 
   private clearHistory() {
-    AlertDialog.show(
+    this.UIContext.showAlertDialog(
       {
         title: '清空搜索历史',
         message: '确认清空搜索历史记录？',
