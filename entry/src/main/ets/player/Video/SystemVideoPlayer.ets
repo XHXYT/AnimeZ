@@ -11,7 +11,7 @@ const DEFAULT_ASPECT = 1.9
 
 
 /**
- * 视频播放器，封装系统Video
+ * 视频播放器，封装系统Video TODO 已损坏
  */
 @Component
 export struct SystemVideoPlayer {
@@ -232,9 +232,11 @@ export struct SystemVideoPlayer {
             this.checkPlayingStatus()
             this.playerManager?.notifyCurrentTime(e.time * 1000)
           })
-        VideoPlayerController({ playerManager: this.playerManager! })
-          .width('100%')
-          .height('100%')
+        if (this.playerManager) {
+          VideoPlayerController({ playerManager: this.playerManager! })
+            .width('100%')
+            .height('100%')
+        }
       }
       .backgroundColor(Color.Black)
       .width('100%')

@@ -17,7 +17,7 @@ export default class HttpUtils {
     static async getHtml(url: string, headers?: object): Promise<AnyNode> {
         const str = await this.getString(url, headers)
         if (str) {
-            Logger.d('tips', 'HttpUtils.getHtml 解析前str = ' + str)
+           // Logger.d('tips', 'HttpUtils.getHtml 解析前str = ' + str)
             return parse(str)
         } else {
             throw new Error("content is empty!")
@@ -30,7 +30,7 @@ export default class HttpUtils {
      */
     static async getString(url: string, headers?: object): Promise<string> {
         let httpRequest = http.createHttp()
-        Logger.d('tips', `HttpUtils.getString 已使用 ${url} 创建Http`)
+       // Logger.d('tips', `HttpUtils.getString 已使用 ${url} 创建Http`)
 
         let header = {
             'user-agent': USER_AGENT
@@ -38,7 +38,7 @@ export default class HttpUtils {
         if (headers) {
             header = Object.assign(header, headers)
         }
-        Logger.d('tips', 'HttpUtils.getString 请求头 = ' + JSON.stringify(header))
+       // Logger.d('tips', 'HttpUtils.getString 请求头 = ' + JSON.stringify(header))
 
         const resp: http.HttpResponse = await httpRequest.request(url, {
             method: http.RequestMethod.GET,
@@ -48,7 +48,7 @@ export default class HttpUtils {
             header: header
         })
         if (resp.result) {
-            Logger.d('tips', 'HttpUtils.getString resp.result = ' + JSON.stringify(resp.result, null, 2))
+           // Logger.d('tips', 'HttpUtils.getString resp.result = ' + JSON.stringify(resp.result, null, 2))
             return resp.result as string
         } else {
             throw new Error(resp.responseCode.toString())

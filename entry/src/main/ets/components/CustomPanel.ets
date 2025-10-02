@@ -14,7 +14,7 @@ export default struct CustomPanel {
   @State panelOpacity: number = 0
   @State panelHeight: number = 0
   @BuilderParam panelContent: () => void
-  private controller: PanelController | undefined = undefined
+  @Link controller: PanelController
   private onClose: () => void = () => {}
 
   aboutToAppear() {

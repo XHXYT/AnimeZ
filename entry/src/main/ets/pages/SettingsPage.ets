@@ -171,7 +171,7 @@ struct SettingsPage {
               key: 'default_player',
               type: 'menu',
               defaultValue: this.appSettings.default_player,
-              values: ['AVPlayer', 'VideoPlayer', 'IjkPlayer'],
+              values: ['VideoPlayer', 'AVPlayer', 'IjkPlayer'],
               onValueChange: (key, value) => {
               }
             }

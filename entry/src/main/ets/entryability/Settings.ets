@@ -24,7 +24,7 @@ export class AppConfigs {
   /**
    * 默认播放器
    */
-  default_player: number = 0
+  default_player: number = 1
   /**
    * 颜色模式，默认为 跟随系统
    */

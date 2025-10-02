@@ -287,6 +287,9 @@ export struct AVideoPlayer {
                 const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
                 avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
               })
+              .catch(() => {
+                console.error(`AVPlayer XComponent 加载失败`)
+              })
           })
           .onDestroy(() => {
             Logger.e('tips', 'XComponent onDestroy')

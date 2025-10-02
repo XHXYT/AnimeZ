@@ -2,7 +2,6 @@ import { dataSourceManager } from "../../api/DataSourceManager"
 import { DramaList } from "../../entity/HomepageData"
 import VideoInfo from "../../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../../entity/VideoNavigateInfo"
-import DataStore from "../../utils/DataStore"
 import { BaseDataSource } from "../common/BaseDataSource"
 import { VideoList } from "../VideoList"
 

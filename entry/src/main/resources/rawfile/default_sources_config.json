@@ -76,9 +76,10 @@
           }
         },
         "videoUrl": {
-          "urlSelector": "a#play_1",
-          "attribute": "onclick",
-          "postProcess": "substringBetween('', '$')"
+          "urlExtractor": "javascript",
+          "urlSelector": "#playbox",
+          "attribute": "data-vid",
+          "postProcess": "replaceAll('^', 'https://tup.iyinghua.com/?vid=')"
         }
       }
     },

@@ -145,13 +145,13 @@ export default class GenericDataSource implements DataSource {
 
       const recommends = this.extractRecommends(doc, config.recommends);
       const episodes = this.extractEpisodes(doc, config.episodes);
-
+      const [sel, attr] = config.coverSelector.split('@')
       const info: VideoDetailInfo = {
         sourceKey: this.key,
         title: title,
         url: url,
         desc: this.selectText(doc, config.descSelector).trim(),
-        coverUrl: this.selectAttribute(doc, config.coverSelector, 'src'),
+        coverUrl: this.selectAttribute(doc, sel, attr),
         category: config.categorySelector ? this.selectText(doc, config.categorySelector) : '',
         director: config.directorSelector ? this.selectText(doc, config.directorSelector) : '',
         updateTime: config.updateTimeSelector ? this.selectText(doc, config.updateTimeSelector) : '',
@@ -195,7 +195,7 @@ export default class GenericDataSource implements DataSource {
         // 使用选择器方式提取URL
         const doc = await HttpUtils.getHtml(link);
         let url = this.selectAttribute(doc, config.urlSelector, config.attribute);
-        Logger.e('tips', 'parseVideoUrl extracted attribute value=' + url);
+        Logger.e('tips', `parseVideoUrl extracted attribute value url = ${url}`);
 
         if (url && config.postProcess) {
           // 应用后处理
@@ -220,7 +220,7 @@ export default class GenericDataSource implements DataSource {
           }
         }
 
-        Logger.e('tips', 'parseVideoUrl final url=' + url);
+        Logger.e('tips', `parseVideoUrl final url = ${url}`);
         return url;
       } else if (config.urlExtractor === 'regex' && config.pattern) {
         // 使用正则表达式方式提取URL
@@ -252,7 +252,6 @@ export default class GenericDataSource implements DataSource {
               url = url.replace(new RegExp(search, 'g'), replace);
             }
           }
-
           return url;
         }
       }
@@ -378,11 +377,12 @@ export default class GenericDataSource implements DataSource {
       if (container) {
         const items = select(container, config.itemSelector);
         const episodeInfos: EpisodeInfo[] = items.map(item => {
-          const url = this.selectAttribute(item, config.itemSelectors.url);
+          const [sel, attr] = config.itemSelectors.url.split('@')
+          const url = this.selectAttribute(item, sel, attr);
           const title = this.selectText(item, config.itemSelectors.title);
-
+          console.log(`extractEpisodes 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
-            link: url.startsWith('http') ? url : this.baseUrl + url,
+            link: url.includes('http') ? url : (this.baseUrl + url),
             title,
             desc: title
           };
