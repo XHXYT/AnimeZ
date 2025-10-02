@@ -389,7 +389,7 @@ function readChildren(string: string, index: number, parent: HtmlTag | null, tri
 }
 
 function parse(str: string, trimText = true): AnyNode {
-	//Assumes a correctly formatted HTML string
+	// 假设HTML字符串格式正确
 	const root = new HtmlTag({type: '', attributes: {}, parent: null})
 	const {children} = readChildren(str, 0, root, trimText)
 	root.setChildren(children)

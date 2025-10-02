@@ -148,8 +148,10 @@ export struct HomePage {
         this.state = ViewState.CONTENT
       })
       .catch((e: Error) => {
-        this.errorMessage = JSON.stringify(e)
+        this.errorMessage = e.message
         this.state = ViewState.ERROR
+        console.log(`主页state状态：${this.state}`)
+        Logger.e('fail', '主页数据加载', e)
       })
   }
 

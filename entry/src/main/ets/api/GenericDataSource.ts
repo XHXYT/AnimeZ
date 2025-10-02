@@ -87,15 +87,17 @@ export default class GenericDataSource implements DataSource {
 
   async getHomepageData(): Promise<HomepageData> {
     const config = this.parserConfig.homepage;
+    console.log(`获取主页配置：${JSON.stringify(config)}`)
     try {
-      const doc = await this.parseHtml(this.baseUrl);
+      const doc = await this.parseHtml(this.baseUrl)
+      console.log(`网页doc已获取`)
       const bannerList = this.extractBannerList(doc, config.banner);
       const categoryList = this.extractCategoryList(doc, config.category);
 
       return { bannerList, categoryList };
     } catch (e) {
       Logger.e('fail', `获取主页数据`, e);
-      return { bannerList: [], categoryList: [] };
+      throw e;
     }
   }
 
@@ -291,6 +293,7 @@ export default class GenericDataSource implements DataSource {
       if (key === 'url' && info[key] && !info[key]?.startsWith('http') && urlNeedBaseUrl) {
         info[key] = this.baseUrl + info[key];
       }
+      console.log(`extractVideoInfo 提取 ${key} 信息：${info[key]}`)
     }
 
     return info;

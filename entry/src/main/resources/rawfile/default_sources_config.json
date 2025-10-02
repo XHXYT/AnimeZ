@@ -4,7 +4,7 @@
     {
       "key": "key_yinghuavideo",
       "name": "樱花动漫",
-      "baseUrl": "http://www.yinghuavideo.com",
+      "baseUrl": "http://www.iyinghua.com/",
       "enabled": true,
       "priority": 1,
       "defaultSource": true,
@@ -85,7 +85,7 @@
     {
       "key": "key_agedmvideo",
       "name": "AGE动漫",
-      "baseUrl": "https://www.agedm.org/",
+      "baseUrl": "https://www.agedm.io/",
       "enabled": true,
       "priority": 2,
       "defaultSource": false,

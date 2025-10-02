@@ -2,7 +2,7 @@ import Logger from '../utils/Logger';
 import GenericDataSource from './GenericDataSource';
 import { DataSourceConfig } from './DataSourceConfig';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { fileIo } from '@kit.CoreFileKit';
+import { fileIo, fileUri } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import Url from '@ohos.url'
 import { common } from '@kit.AbilityKit';
@@ -268,7 +268,7 @@ class DataSourceManager {
         await this.loadConfigData(sandboxConfig)
         Logger.i(this, 'DataSourceManager.loadFromConfig Loaded data sources from sandbox config');
       } else {
-        // 如果沙箱中没有配置文件，从rawfile读取默认配置
+        // 如果沙箱中没有配置文件，从rawfile获取默认配置
         const defaultConfig = await this.readRawFileConfig()
         await this.loadConfigData(defaultConfig)
 
@@ -449,7 +449,7 @@ class DataSourceManager {
       const value: Uint8Array = await resourceManager.getRawFileContent(this.defaultConfigFileName);
       const textDecoder = util.TextDecoder.create("UTF-8", { ignoreBOM: false })
       const content = textDecoder.decodeToString(value);
-
+      // console.log(`从rawfile读取的默认配置文件：${content}`)
       return JSON.parse(content) as DataSourceConfigFile;
     } catch (error) {
       Logger.e('tips', `DataSourceManager.readRawFileConfig Failed to read rawfile config: ${error.message}`);
@@ -483,13 +483,17 @@ class DataSourceManager {
     try {
 
       const sandboxPath = this.context.filesDir + '/' + this.configFileName;
-
+      Logger.i(this, `DataSourceManager.saveConfigToSandbox sandbox 配置地址：${sandboxPath}`);
       // 转换为JSON字符串
       const jsonContent = JSON.stringify(config, null, 2);
-
+      const sandboxUri = fileUri.getUriFromPath(sandboxPath)
+      Logger.i(this, `DataSourceManager.saveConfigToSandbox sandbox 配置地址uri：${sandboxUri}`);
       // 写入配置文件
-      let fileModify = fileIo.openSync(sandboxPath, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      let fileModify = fileIo.openSync(sandboxUri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
       fileIo.writeSync(fileModify.fd, jsonContent);
+      // fileIo.fsync(fileModify.fd).catch((error: Error) => {
+      //   console.error(`DataSourceManager.saveConfigToSandbox 文件的缓存数据同步到存储失败：`, error)
+      // })
       fileIo.close(fileModify);
 
       Logger.i(this, 'DataSourceManager.saveConfigToSandbox Configuration saved to sandbox');
@@ -619,7 +623,7 @@ class DataSourceManager {
       (prev.priority || 0) < (current.priority || 0) ? prev : current
       );
       this.currentDataSourceKey = highestPriorityDefault.key;
-      Logger.i(this, `DataSourceManager.setDefaultDataSource Set default data source from config: ${this.currentDataSourceKey}`);
+      Logger.i(this, `DataSourceManager.setDefaultDataSource Set 默认数据源 from config: ${this.currentDataSourceKey}`);
       return;
     }
 
