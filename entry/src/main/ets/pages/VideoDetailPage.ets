@@ -85,7 +85,6 @@ struct VideoDetailPage {
   private sourceKey: string = ''
   private title: string = ''
   private isFirstPlay: boolean = true
-  @Consume('CompStr') compStr: BreakpointState<string>
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
