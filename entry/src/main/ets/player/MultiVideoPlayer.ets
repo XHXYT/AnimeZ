@@ -26,9 +26,9 @@ export struct MultiVideoPlayer {
       if (this.appSettings.default_player === 0) {
         SystemVideoPlayer({ playerManager: this.playerManager })
       } else if (this.appSettings.default_player === 1) {
-        IjkVideoPlayer({ playerManager: this.playerManager })
-      } else {
         AVideoPlayer({ playerManager: this.playerManager })
+      } else {
+        IjkVideoPlayer({ playerManager: this.playerManager })
       }
     }
     .width('100%')
