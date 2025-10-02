@@ -79,7 +79,7 @@
           "urlExtractor": "javascript",
           "urlSelector": "#playbox",
           "attribute": "data-vid",
-          "postProcess": "replaceAll('^', 'https://tup.iyinghua.com/?vid=')"
+          "postProcess": "replaceAll('\\$mp4$', '')"
         }
       }
     },
