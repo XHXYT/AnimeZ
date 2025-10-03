@@ -1,11 +1,13 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import hilog from '@ohos.hilog';
 import window from '@ohos.window';
-import { AbilityConstant, common, Configuration, Want } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { AbilityConstant, Configuration, Want } from '@kit.AbilityKit';
+import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { AppSettings } from './Settings';
 import { ToastUtil } from '../utils/ToastUtils';
+import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
+
 
 export default class EntryAbility extends UIAbility {
 
@@ -21,6 +23,16 @@ export default class EntryAbility extends UIAbility {
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
         // 初始化源管理器上下文
         await dataSourceManager.init(this.context)
+        // 检查设备形式
+        AppStorage.setOrCreate<string>('DeviceProductModel', deviceInfo.productModel)
+        // 构建RedPlayer
+        const redPlayerConfigBuilder = new RedPlayerConfigBuilder()
+        // redPlayerConfigBuilder.cachePath = 'your player cache path'
+        // redPlayerConfigBuilder.logger?.d('your custom logger')
+        // 初始化 RedPlayer
+        RedPlayerInitManager.initPlayer(redPlayerConfigBuilder)
+        // Init RedPlayer preload component
+        // RedPlayerPreload.globalInit('your preload cache path', 20, 4, 0)
     }
 
     onDestroy() {

@@ -3,6 +3,7 @@ import { IjkVideoPlayer } from './IJK/IjkVideoPlayer';
 import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
 import { AppConfigs } from '../entryability/Settings';
+import { RedVideoPlayer } from './REDPlayer/RedPlayer';
 
 
 /**
@@ -24,10 +25,16 @@ export struct MultiVideoPlayer {
   build() {
     Stack() {
       if (this.appSettings.default_player === 0) {
+        // 系统Video组件
         SystemVideoPlayer({ playerManager: this.playerManager })
       } else if (this.appSettings.default_player === 1) {
+        // AVPlayer
         AVideoPlayer({ playerManager: this.playerManager })
+      } else if (this.appSettings.default_player === 2) {
+        // 红薯播放器
+        RedVideoPlayer({ playerManager: this.playerManager })
       } else {
+        // IJK播放器
         IjkVideoPlayer({ playerManager: this.playerManager })
       }
     }
