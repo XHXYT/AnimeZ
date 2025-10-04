@@ -135,10 +135,9 @@ export default class GenericDataSource implements DataSource {
 
   async getVideoDetailInfo(url: string): Promise<VideoDetailInfo> {
     try {
+      console.log(`GenericDataSource.getVideoDetailInfo 等待加载的链接：${url}`)
       const doc = await this.parseHtml(url);
       const config = this.parserConfig.detail;
-
-      Logger.e('tips', 'getVideoDetailInfo 1');
 
       const title = this.selectText(doc, config.titleSelector);
       Logger.e('tips', 'getVideoDetailInfo title=' + title);
@@ -196,6 +195,11 @@ export default class GenericDataSource implements DataSource {
         const doc = await HttpUtils.getHtml(link);
         let url = this.selectAttribute(doc, config.urlSelector, config.attribute);
         Logger.e('tips', `parseVideoUrl extracted attribute value url = ${url}`);
+
+        if (url == '') {
+          Logger.e('tips', `parseVideoUrl 解析失败，输入url为空`)
+          throw ('parseVideoUrl 解析失败，输入url为空')
+        }
 
         if (url && config.postProcess) {
           // 应用后处理
@@ -287,10 +291,13 @@ export default class GenericDataSource implements DataSource {
         const value = this.selectText(element, selector);
         info[key as keyof VideoInfo] = value as any;
       }
-
       // 片源URL自动补全
       if (key === 'url' && info[key] && !info[key]?.startsWith('http') && urlNeedBaseUrl) {
         info[key] = this.baseUrl + info[key];
+      }
+      // 把http替换成https
+      if (info[key].startsWith('http://')) {
+        info[key] =  'https://' + info[key].substring(7);
       }
       console.log(`extractVideoInfo 提取 ${key} 信息：${info[key]}`)
     }
@@ -303,7 +310,7 @@ export default class GenericDataSource implements DataSource {
 
     const bannerList: VideoInfo[] = [];
     const list = select(doc, config.listSelector);
-
+    console.log(`解析到的BannerList数目：${list.length}`)
     list.forEach((li) => {
       bannerList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl));
     });
@@ -318,13 +325,14 @@ export default class GenericDataSource implements DataSource {
     const titles = select(doc, categoriesConfig.titles);
     const videoLists = select(doc, categoriesConfig.videoLists);
     const count = Math.min(titles.length, videoLists.length);
-
+    console.log(`GenericDataSource.extractCategoryList 解析到的标题数：${titles.length}, 番剧列表数：${videoLists.length}, 最后取值：${count}`)
     for (let i = 0; i < count; i++) {
       const title = titles[i];
       const list = videoLists[i];
       const videos: VideoInfo[] = [];
 
       const lis = select(list, categoriesConfig.videos.listSelector);
+      console.log(`解析到第${i}项CategoryList番剧数目：${lis.length}`)
       // 推送目录内的片源列表
       lis.forEach((li) => {
         videos.push(this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors, categoriesConfig.videos.urlNeedBaseUrl));
@@ -333,11 +341,16 @@ export default class GenericDataSource implements DataSource {
       // 解析更多链接
       const [sel, attr] = categoriesConfig.moreUrl.split('@');
       const rawMoreUrl = this.selectAttribute(title, sel, attr);
-
+      // 提取原始项标题
+      const rawTitle = this.selectText(title, categoriesConfig.title);
+      console.log(`GenericDataSource.extractCategoryList 原始项标题: ${rawTitle}`)
+      // 使用更通用的正则表达式，同时处理开头和结尾的情况, 过滤掉“更多”等杂质
+      const cleanTitle = rawTitle.replace(/^\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*|\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*$/g, '').trim();
+      console.log(`GenericDataSource.extractCategoryList 过滤后项标题: ${cleanTitle}`)
       // 推送目录列表
       categoryList.push({
-        title: this.selectText(title, categoriesConfig.title),
-        moreUrl: categoriesConfig.moreUrlNeedBaseUrl ? this.baseUrl + rawMoreUrl : rawMoreUrl,
+        title: cleanTitle,
+        moreUrl: categoriesConfig.moreUrlNeedBaseUrl ? (this.baseUrl + rawMoreUrl) : rawMoreUrl,
         videoList: videos
       });
     }
@@ -359,11 +372,12 @@ export default class GenericDataSource implements DataSource {
 
         const items = select(container, config.itemSelector);
         const episodeInfos: EpisodeInfo[] = items.map(item => {
-          const url = this.selectAttribute(item, config.itemSelectors.url);
+          const [sel, attr] = config.itemSelectors.url.split('@')
+          const url = this.selectAttribute(item, sel, attr);
           const title = this.selectText(item, config.itemSelectors.title);
-
+          console.log(`extractEpisodes 多路线 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
-            link: url.startsWith('http') ? url : this.baseUrl + url,
+            link: url.includes('http') ? url : (this.baseUrl + url),
             title,
             desc: title
           };
@@ -380,7 +394,7 @@ export default class GenericDataSource implements DataSource {
           const [sel, attr] = config.itemSelectors.url.split('@')
           const url = this.selectAttribute(item, sel, attr);
           const title = this.selectText(item, config.itemSelectors.title);
-          console.log(`extractEpisodes 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
+          console.log(`extractEpisodes 单路线 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
             link: url.includes('http') ? url : (this.baseUrl + url),
             title,

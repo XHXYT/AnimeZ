@@ -18,7 +18,7 @@ import {
   VideoPlayerGridColSpan,
   VideoPlayerNewGridColSpan
 } from '../utils/breakpoint/BreakPoint';
-import PlayerManagerImpl from '../entity/VideoPlayer/PlayerManagerImpl';
+import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
 import { VideoDetailViewModel } from '../viewmodel/VideoDetailViewModel';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import EpisodeList from '../entity/EpisodeList';

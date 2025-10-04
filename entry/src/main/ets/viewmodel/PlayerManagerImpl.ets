@@ -1,10 +1,10 @@
 import media from '@ohos.multimedia.media';
-import { IPlayer } from './IPlayer';
-import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from './IPlayerManager';
+import { IPlayer } from '../entity/VideoPlayer/IPlayer';
+import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from '../entity/VideoPlayer/IPlayerManager';
 import window from '@ohos.window';
-import EpisodeInfo from '../EpisodeInfo';
-import Logger from '../../utils/Logger';
-import SystemBarUtils from '../../utils/SystemBarUtils';
+import EpisodeInfo from '../entity/EpisodeInfo';
+import Logger from '../utils/Logger';
+import SystemBarUtils from '../utils/SystemBarUtils';
 
 /**
  * 播放器管理（总）

@@ -233,7 +233,7 @@ export struct SystemVideoPlayer {
             this.playerManager?.notifyCurrentTime(e.time * 1000)
           })
         if (this.playerManager) {
-          VideoPlayerController({ playerManager: this.playerManager! })
+          VideoPlayerController({ playerManager: this.playerManager })
             .width('100%')
             .height('100%')
         }

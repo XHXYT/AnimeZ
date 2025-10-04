@@ -1,5 +1,5 @@
 import IPlayerManager, { VideoFit } from '../entity/VideoPlayer/IPlayerManager';
-import PlayerManagerImpl from '../entity/VideoPlayer/PlayerManagerImpl';
+import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import { IjkVideoPlayer } from '../player/IJK/IjkVideoPlayer';
 import Logger from '../utils/Logger';

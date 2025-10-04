@@ -7,7 +7,7 @@
       "baseUrl": "http://www.iyinghua.com/",
       "enabled": true,
       "priority": 1,
-      "defaultSource": true,
+      "defaultSource": false,
       "parserConfig": {
         "search": {
           "videos": {
@@ -89,7 +89,7 @@
       "baseUrl": "https://www.agedm.io/",
       "enabled": true,
       "priority": 2,
-      "defaultSource": false,
+      "defaultSource": true,
       "parserConfig": {
         "search": {
           "videos": {
@@ -120,9 +120,9 @@
             "titles": "div.video_list_box--hd",
             "moreUrl": "h6 > a@href",
             "moreUrlNeedBaseUrl": false,
-            "videoLists": "div.video_list_box--bd",
+            "videoLists": "div.video_list_box > div.video_list_box--bd",
             "videos": {
-              "listSelector": "div > div",
+              "listSelector": "div.col",
               "urlNeedBaseUrl": false,
               "itemSelectors": {
                 "url": "a@href",

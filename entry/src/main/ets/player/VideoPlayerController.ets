@@ -4,6 +4,7 @@ import EpisodeInfo from '../entity/EpisodeInfo';
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
+import { ToastUtil } from '../utils/ToastUtils';
 
 interface KeyValue {
   name: string,
@@ -222,7 +223,7 @@ export struct VideoPlayerController {
               .margin({ left: 24 })
               .objectFit(ImageFit.Contain)
               .onClick(() => {
-                promptAction.showToast({ message: 'TODO 投屏' })
+                ToastUtil.showToast({ message: 'TODO 投屏' })
               })
           }
           Image($r("app.media.ic_float_window"))
@@ -232,7 +233,7 @@ export struct VideoPlayerController {
             .margin({ left: this.isFullScreen ? 24 : 16 })
             .objectFit(ImageFit.Contain)
             .onClick(() => {
-              promptAction.showToast({ message: 'TODO 小窗播放' })
+              ToastUtil.showToast({ message: 'TODO 小窗播放' })
             })
           Image($r("app.media.ic_setting"))
             .width(24)

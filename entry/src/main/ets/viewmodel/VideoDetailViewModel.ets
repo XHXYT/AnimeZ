@@ -308,7 +308,7 @@ export class VideoDetailViewModel {
     HISTORY_CHANGED_EVENT.emit();
 
     if (this.playerManager.isPlaying()) {
-      this.playerManager.pause();
+      this.playerManager.stop();
       this.pausedOnHide = true;
     } else {
       this.pausedOnHide = false;

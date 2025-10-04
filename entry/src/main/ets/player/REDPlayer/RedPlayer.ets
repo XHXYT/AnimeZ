@@ -50,7 +50,7 @@ export struct RedVideoPlayer {
         await this.player.setDataSource({
           url: url,
           // ⚠️ 注意：在模拟器上必须强制使用软解码
-          useSoftDecoder: DeviceProductModel !== 'emulator'
+          useSoftDecoder: DeviceProductModel === 'emulator'
         });
         this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
         Logger.i('RedVideoPlayer', 'DataSource set.');

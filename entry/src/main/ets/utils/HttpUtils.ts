@@ -3,7 +3,7 @@ import http from '@ohos.net.http';
 import { parse } from '../thirdpart/htmlsoup';
 import { AnyNode } from '../thirdpart/htmlsoup/parse';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36 HBPC/12.1.4.300'
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 /**
  * 网络工具类
@@ -30,7 +30,7 @@ export default class HttpUtils {
      */
     static async getString(url: string, headers?: object): Promise<string> {
         let httpRequest = http.createHttp()
-       // Logger.d('tips', `HttpUtils.getString 已使用 ${url} 创建Http`)
+       // Logger.d('HttpUtils.getString', `已使用 ${url} 创建Http`)
 
         let header = {
             'user-agent': USER_AGENT
@@ -38,7 +38,7 @@ export default class HttpUtils {
         if (headers) {
             header = Object.assign(header, headers)
         }
-       // Logger.d('tips', 'HttpUtils.getString 请求头 = ' + JSON.stringify(header))
+       // Logger.d('HttpUtils.getString', '请求头 = ' + JSON.stringify(header))
 
         const resp: http.HttpResponse = await httpRequest.request(url, {
             method: http.RequestMethod.GET,
@@ -47,9 +47,10 @@ export default class HttpUtils {
             expectDataType: http.HttpDataType.STRING,
             header: header
         })
+        // Logger.d('HttpUtils.getString', `响应Code = ${resp.responseCode}`)
         if (resp.result) {
-           // Logger.d('tips', 'HttpUtils.getString resp.result = ' + JSON.stringify(resp.result, null, 2))
-            return resp.result as string
+           Logger.d('HttpUtils.getString', 'resp.result = ' + JSON.stringify(resp.result, null, 2))
+           return resp.result as string
         } else {
             throw new Error(resp.responseCode.toString())
         }

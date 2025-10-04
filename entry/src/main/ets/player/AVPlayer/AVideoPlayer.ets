@@ -37,28 +37,40 @@ class AVPlayerWrapper {
       },
       start: async () => {
         Logger.e('tips', 'setDataSource start')
-        return this.avPlayer.play()
+        return this.avPlayer.play().catch(() => {
+          console.log(`AVPlayer 视频播放失败`)
+        })
       },
       prepare: async () => {
         // this.controller.prepareAsync()
         Logger.e('tips', 'setDataSource prepare')
-        return this.avPlayer.prepare()
+        return this.avPlayer.prepare().catch(() => {
+          console.log(`AVPlayer 视频准备失败`)
+        })
       },
       pause: async () => {
         Logger.e('tips', 'setDataSource pause')
-        return this.avPlayer.pause()
+        return this.avPlayer.pause().catch(() => {
+          console.log(`AVPlayer 视频暂停失败`)
+        })
       },
       stop: async () => {
         Logger.e('tips', 'setDataSource stop')
-        return this.avPlayer.stop()
+        return this.avPlayer.stop().catch(() => {
+          console.log(`AVPlayer 视频停止失败`)
+        })
       },
       reset: async () => {
         Logger.e('tips', 'setDataSource reset')
-        return this.avPlayer.reset()
+        return this.avPlayer.reset().catch(() => {
+          console.log(`AVPlayer 视频重置失败`)
+        })
       },
       release: async () => {
         Logger.e('tips', 'setDataSource release')
-        return this.avPlayer.release()
+        return this.avPlayer.release().catch(() => {
+          console.log(`AVPlayer 资源释放失败`)
+        })
       },
       seekTo: async (value: number) => {
         Logger.e('tips', 'setDataSource seekTo value=' + value)
@@ -133,26 +145,26 @@ class AVPlayerWrapper {
       }
     });
     avPlayer.on('timeUpdate', (time: number) => {
-      Logger.e('tips', 'timeUpdate time=' + time)
+      Logger.e('tips', 'AVPlayer timeUpdate time=' + time)
       manager.notifyCurrentTime(time)
     });
     avPlayer.on('durationUpdate', (time: number) => {
-      Logger.e('tips', 'durationUpdate time=' + time)
+      Logger.e('tips', 'AVPlayer durationUpdate time=' + time)
       manager.notifyDuration(time)
     });
     avPlayer.on('seekDone', (value: number) => {
-      Logger.e('tips', 'seekDone value=' + value)
+      Logger.e('tips', 'v seekDone value=' + value)
     })
     avPlayer.on('videoSizeChange', (w: number, h: number) => {
-      Logger.e('tips', 'videoSizeChange w=' + w + ' h=' + h)
+      Logger.e('tips', 'AVPlayer videoSizeChange w=' + w + ' h=' + h)
       manager.onVideoSizeChanged(w, h)
     })
     avPlayer.on('error', (error) => {
-      Logger.e('tips', 'onError e=' + JSON.stringify(error))
+      Logger.e('tips', 'AVPlayer onError e=' + JSON.stringify(error))
       manager.setStatus(PlayerStatus.ERROR)
     })
     avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
-      Logger.e('tips', 'bufferingUpdate infoType=' + infoType + ' value=' + value)
+      Logger.e('tips', 'AVPlayer bufferingUpdate infoType=' + infoType + ' value=' + value)
       manager.notifyBuffering(infoType, value)
     })
   }
@@ -281,7 +293,7 @@ export struct AVideoPlayer {
         })
           .onLoad((context) => {
             const surfaceId = this.componentController.getXComponentSurfaceId()
-            Logger.e('tips', 'XComponent onLoad surfaceId = ' + surfaceId)
+            Logger.e('tips', `'AVPlayer XComponent onLoad surfaceId = ${surfaceId}`)
             media.createAVPlayer()
               .then((player) => {
                 const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
@@ -292,7 +304,7 @@ export struct AVideoPlayer {
               })
           })
           .onDestroy(() => {
-            Logger.e('tips', 'XComponent onDestroy')
+            Logger.e('tips', 'AVPlayer XComponent onDestroy')
           })
           .width('100%')
           .aspectRatio(this.videoAspRatio)
