@@ -51,10 +51,32 @@ class DataSourceManager {
   }
 
   /**
+   * 获取所有数据源key
+   */
+  getTotalKey(): string[] {
+    const keys: string[] = []
+    this.dataSources.forEach(item => {
+      keys.push(item.getKey())
+    })
+    return keys;
+  }
+
+  /**
    * 获取指定key的数据源名称
    */
   getSourceTitle(key: string): string {
     return this.dataSources.get(key)?.getName()
+  }
+
+  /**
+   * 获取所有的数据源名称
+   */
+  getTotalSourceTitle(): string[] {
+    const names: string[] = []
+    this.dataSources.forEach(item => {
+      names.push(item.getName())
+    })
+    return names;
   }
 
   /**

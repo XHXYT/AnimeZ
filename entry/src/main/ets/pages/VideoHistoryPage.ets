@@ -138,10 +138,9 @@ struct VideoHistoryPage {
                         this.deleteHistoryList(item.id)
                       })
                       ToastUtil.showToast({ message: "删除成功" })
-                      // 通知历史记录变化
-                      HISTORY_CHANGED_EVENT.emit()
                       this.selectionManager.toggleSelectionMode()
-                      this.loadHistoryList()
+                      // 触发历史记录更新事件
+                      HISTORY_CHANGED_EVENT.emit()
                     }
                   }
                 }

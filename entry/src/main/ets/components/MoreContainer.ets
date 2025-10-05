@@ -1,9 +1,6 @@
-import { RadioDialog } from './dialog/RadioDialog';
-import DataStore from '../utils/DataStore';
-import Logger from '../utils/Logger';
-import { router } from '@kit.ArkUI';
-import { SettingGroup, SettingGroupType, SettingItem } from './common/Constants';
-import { SettingRow } from './common/Common';
+
+import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
+import { SettingRow } from './SettingsItem';
 
 @Preview
 @Component

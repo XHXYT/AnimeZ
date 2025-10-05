@@ -4,9 +4,10 @@ import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
 import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";
 
-
+// 主页轮播图
 @Component
 export struct BannerView {
+
   @Link bannerList: VideoInfo[]
   @Consume('pageStack') pageStack: NavPathStack
   private bannerDataSource: BannerDataSource = new BannerDataSource([])

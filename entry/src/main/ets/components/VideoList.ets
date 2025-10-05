@@ -4,23 +4,26 @@ import { ConfigurationConstant } from '@kit.AbilityKit';
 import { BaseDataSource } from './common/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { VideoListColumnsTemplate } from '../utils/breakpoint/BreakPoint';
+import { CategoryDataSource } from '../entity/CategoryData';
 
 /**
  * 视频列表
  */
 @Component
 export struct VideoList {
-  @State videoList: VideoInfo[] = []
+
+  @State videoList?: VideoInfo[] = undefined
   @State scrollable: boolean = true
   @Consume('pageStack') pageStack: NavPathStack
   // 宽度断点
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
   // 高度断点
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
-  @State videoListDataSource: VideoListDataSource = new VideoListDataSource([])
+  @State videoListDataSource: CategoryDataSource = new CategoryDataSource([])
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   aboutToAppear(): void {
+    if (this.videoList)
     this.videoListDataSource.pushData(this.videoList)
   }
 
@@ -105,40 +108,5 @@ export struct VideoList {
       console.log('VideoTest 视频列表传递的params：', JSON.stringify(params))
       this.pageStack.pushPathByName("VideoDetailPage", params)
     })
-  }
-}
-
-class VideoListDataSource extends BaseDataSource<VideoInfo> {
-  private dataArray: VideoInfo[] = []
-
-  public totalCount(): number {
-    return this.dataArray.length
-  }
-
-  public getData(index: number): VideoInfo {
-    return this.dataArray[index]
-  }
-
-  public addData(index: number, data: VideoInfo): void {
-    this.dataArray.splice(index, 0, data)
-    this.notifyDataAdd(index)
-  }
-
-  public pushData(data: VideoInfo[]): void {
-    this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
-  }
-
-  // 删除全部数据
-  public clear(): void {
-    this.empty()
-    this.refresh()
-  }
-
-  public empty(): void {
-    this.dataArray = []
-  }
-  public refresh(): void {
-    this.notifyDataReload()
   }
 }

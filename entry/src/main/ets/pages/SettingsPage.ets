@@ -1,11 +1,14 @@
 
 import TitleBar from '../components/TitleBar'
-import { Preference, SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants'
-import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/common/Common'
+import { MenuItem, Preference, SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData'
+import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/SettingsItem'
 import { ColorModeManager } from '../utils/ColorModeManager'
 import { common } from '@kit.AbilityKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
 import { AppConfigs } from '../entryability/Settings'
+import { dataSourceManager } from '../api/DataSourceManager'
+import Logger from '../utils/Logger'
+import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
 
 // 系统路由
 @Builder
@@ -69,11 +72,11 @@ struct SettingsPage {
 
                       } else if (setting.preference?.type === 'menu') {
                         MenuSettingRow({
-                          selected: setting.preference.defaultValue as number,
+                          selected: setting.preference.defaultValue as string,
                           title: setting.title,
                           icons: setting.icon,
                           info: setting.info as string,
-                          preference: setting.preference as Preference<number>
+                          preference: setting.preference as Preference<string>
                         })
                       } else {
                         SettingRow({
@@ -91,7 +94,7 @@ struct SettingsPage {
                         })
                       }
                     },
-                    (setting: SettingItem<SettingGroupType>) => setting.title
+                    (setting: SettingItem<SettingGroupType>) => setting.preference?.key
                   )
                 }
                 .backgroundColor($r('app.color.background_color'))
@@ -135,32 +138,55 @@ struct SettingsPage {
       {
         title: '界面',
         settings: [
-          // { title: '首页数据源',
-          //   preference: {
-          //     key: Settings.KEY_HOMEPAGE_SOURCE,
-          //     type: 'radio',
-          //     defaultValue: 0,
-          //     values: DataSourceManager.getAllSources(),
-          //     onValueChange: (key: string, value: string | boolean | number) => {
-          //       if (typeof value === 'number') {
-          //         DataSourceManager.setCurrentSourceIndex(value)
-          //         SOURCE_CHANGED_EVENT.emit()
-          //       }
-          //     }
-          //   }
-          // },
           { title: '颜色主题', info: '自动',
             preference: {
               key: 'color_mode',
               type: 'menu',
-              defaultValue: this.appSettings.color_mode,
-              values: ['自动', '白天', '夜晚' ],
+              defaultValue: this.appSettings.color_mode.toString(),
+              menu: [
+                {
+                  view: '自动',
+                  value: '0'
+                },
+                {
+                  view: '白天',
+                  value: '1'
+                },
+                {
+                  view: '夜晚',
+                  value: '2'
+                }
+              ],
               onValueChange: (key, value) => {
-                this.appSettings.color_mode = value as number
+                this.appSettings.color_mode = Number(value)
                 ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
               }
             }
           }
+        ]
+      },
+      {
+        title: '数据',
+        settings: [
+          { title: '首页数据源',
+            preference: {
+              key: 'homepage_source',
+              type: 'menu',
+              defaultValue: dataSourceManager.getKey(),
+              menu: this.getSourcesMenu(dataSourceManager.getTotalSourceTitle(), dataSourceManager.getTotalKey()),
+              onValueChange: (key: string, value: string | boolean | number) => {
+                if (typeof value === 'string') {
+                  // 设置主页数据源
+                  dataSourceManager.setDataSourceAsDefault(value).then(() => {
+                    SOURCE_CHANGED_EVENT.emit()
+                    console.log('主页数据源设置成功' + value)
+                  }).catch((err: Error) => {
+                    Logger.e('fail', '设置主页数据源', err)
+                  })
+                }
+              }
+            }
+          },
         ]
       },
       {
@@ -171,9 +197,26 @@ struct SettingsPage {
               key: 'default_player',
               type: 'menu',
               defaultValue: this.appSettings.default_player,
-              values: ['VideoPlayer', 'AVPlayer', 'RedPlayer', 'IjkPlayer'],
+              menu: [
+                {
+                  view: 'VideoPlayer',
+                  value: 'video'
+                },
+                {
+                  view: 'AVPlayer',
+                  value: 'av'
+                },
+                {
+                  view: 'RedPlayer',
+                  value: 'red'
+                },
+                {
+                  view: 'IjkPlayer',
+                  value: 'ijk'
+                }
+              ],
               onValueChange: (key, value) => {
-                this.appSettings.default_player = value as number
+                this.appSettings.default_player = value as string
               }
             }
           },
@@ -183,7 +226,7 @@ struct SettingsPage {
             preference: {
               key: 'auto_sensor_rotate',
               type: 'switch',
-              values: [],
+              menu: [],
               defaultValue: this.appSettings.auto_sensor_rotate
             }
           },
@@ -193,7 +236,7 @@ struct SettingsPage {
             preference: {
               key: 'auto_play_next_episode',
               type: 'switch',
-              values: [],
+              menu: [],
               defaultValue: this.appSettings.auto_play_next_episode
             }
           },
@@ -203,7 +246,7 @@ struct SettingsPage {
             preference: {
               key: 'auto_play_on_no_wifi',
               type: 'switch',
-              values: [],
+              menu: [],
               defaultValue: this.appSettings.auto_play_on_no_wifi
             }
           }
@@ -274,6 +317,20 @@ struct SettingsPage {
         ]
       }
     ]
+  }
+
+  /**
+   * 获取Source菜单
+   * @param views name 数组
+   * @param values key 数组
+   * @returns 合并后的 MenuItem 数组
+   */
+  getSourcesMenu(views: ResourceStr[], values: string[]): MenuItem[] {
+    // 使用 map 遍历 views 数组，同时获取 index
+    return views.map((view, index) => {
+      const value = values[index];
+      return { view: view, value: value } as MenuItem
+    })
   }
 
 }

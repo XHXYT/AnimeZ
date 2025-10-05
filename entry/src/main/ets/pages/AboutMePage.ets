@@ -1,8 +1,8 @@
 import promptAction from '@ohos.promptAction'
 import TitleBar from '../components/TitleBar'
-import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
+import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { SettingRow } from '../components/common/Common';
+import { SettingRow } from '../components/SettingsItem';
 import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由

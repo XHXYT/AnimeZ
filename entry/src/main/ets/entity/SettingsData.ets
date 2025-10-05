@@ -6,13 +6,13 @@ export interface Preference<T extends SettingGroupType> {
   key: string,
   type: 'switch' | 'radio' | 'menu'
   defaultValue: T
-  values: string[]
+  menu: MenuItem[]
   onValueChange?: (key: string, value: T) => void
 }
 
-interface NormalPreference {
-  info: string,
-  onClick?: (event?: ClickEvent) => void
+export interface MenuItem {
+  view: ResourceStr
+  value: string
 }
 
 export interface SettingItem<T extends SettingGroupType> {

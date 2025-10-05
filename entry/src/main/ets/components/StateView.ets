@@ -6,7 +6,6 @@ export enum ViewState {
   EMPTY,
   ERROR,
   CUSTOM
-
 }
 
 @Component

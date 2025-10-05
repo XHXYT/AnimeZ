@@ -1,9 +1,6 @@
-import DataStore from "../../utils/DataStore"
-import Logger from "../../utils/Logger"
-import { RadioDialog } from "../dialog/RadioDialog"
-import { Preference, SettingItem } from "./Constants"
+
+import { MenuItem, Preference, SettingItem } from "../entity/SettingsData"
 import { SymbolGlyphModifier } from "@kit.ArkUI"
-import { AppConfigs } from "../../entryability/Settings"
 
 /**
  * 普通设置行(可带跳转符号)
@@ -89,7 +86,7 @@ export struct ToggleSettingRow {
     key: "",
     type: "switch",
     defaultValue: false,
-    values: []
+    menu: []
   }
   @BuilderParam toggle: () => void = this.defaultBuilder
   // 默认开关
@@ -166,52 +163,47 @@ export struct ToggleSettingRow {
  */
 @Component
 export struct MenuSettingRow {
-  @State selected: number = 0
+
+  @State selected: string = ''
   @State title: ResourceStr = ''
-  @State tips: ResourceStr = ''
+  @State tips?: ResourceStr = ''
   @State info: string = ''
   @State icons: ResourceStr = ''
   @State iconBlendColor: Color = Color.White
   @State rowWidth: number = 0
   @State toggleX: number = 0
   @State isShowMenu: boolean = false
-  @State preference: Preference<number> = {
-    key: "",
-    type: "menu",
-    defaultValue: 0,
-    values: []
-  }
+  @Prop preference: Preference<string>
   // 菜单
   @BuilderParam menu: () => void = this.defaultMenuBuilder
   // 默认菜单
   @Builder
   defaultMenuBuilder() {
     Menu() {
-      ForEach(this.preference.values, (menuItem: string, index: number) => {
+      ForEach(this.preference.menu, (menuItem: MenuItem) => {
         MenuItem({
-          content: menuItem,
-          symbolEndIcon: this.selected === index ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+          content: menuItem.view,
+          symbolEndIcon: this.selected === menuItem.value ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
         })
-          .selected(this.selected === index)
+          .selected(this.selected === menuItem.value)
           .onChange((selected) => {
-            if (this.selected === index || typeof this.preference.key !== 'string') {
+            if (this.selected === menuItem.value || typeof this.preference.key !== 'string') {
               return
             }
-            this.selected = index
-            this.tips = menuItem
+            this.selected = menuItem.value
+            this.tips = menuItem.view
             if (this.preference.onValueChange) {
-              this.preference.onValueChange(this.preference.key, index)
+              this.preference.onValueChange(this.preference.key, menuItem.value)
             }
             this.isShowMenu = false
           })
-      }, (menuItem: string) => menuItem)
+      }, (menuItem: MenuItem) => menuItem.value)
     }
   }
 
   aboutToAppear() {
-    console.log('#MenuSettingRow preference值：', JSON.stringify(this.preference))
-    console.log('#MenuSettingRow value值：', JSON.stringify(this.preference.values))
-    this.tips = this.preference.values[this.selected]
+    console.log('#MenuSettingRow menu：', JSON.stringify(this.preference.menu))
+    this.tips = this.preference.menu.find(item => item.value === this.selected)?.view
     console.log('#MenuSettingRow selected值：', this.selected)
   }
 

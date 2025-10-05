@@ -8,7 +8,7 @@ import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
 import { VideoList } from '../components/VideoList';
 import Logger from '../utils/Logger';
 import { BannerView } from '../components/home/BannerView';
-import { CategroyView } from '../components/home/CategoryView';
+import { CategoryView } from '../components/home/CategoryView';
 import { dataSourceManager } from '../api/DataSourceManager';
 
 // 系统路由
@@ -123,7 +123,7 @@ export struct HomePage {
           // 轮播图
           BannerView({bannerList: this.bannerList})
           // 视频目录
-          CategroyView({categoryList: this.categoryList})
+          CategoryView({categoryList: this.categoryList})
         }
         .constraintSize({
           minHeight: '100%'

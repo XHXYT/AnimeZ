@@ -1,30 +1,30 @@
 import { dataSourceManager } from "../../api/DataSourceManager"
+import { CategoryListDataSource } from "../../entity/CategoryData"
 import { DramaList } from "../../entity/HomepageData"
-import VideoInfo from "../../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../../entity/VideoNavigateInfo"
-import { BaseDataSource } from "../common/BaseDataSource"
 import { VideoList } from "../VideoList"
 
+// 主页视频目录
 @Component
-export struct CategroyView {
+export struct CategoryView {
 
   @Link categoryList: DramaList[]
   @Consume('pageStack') pageStack: NavPathStack
-  private categroyListDataSource: CategoryListDataSource = new CategoryListDataSource([])
+  private categoryListDataSource: CategoryListDataSource = new CategoryListDataSource([])
 
   aboutToAppear(): void {
-    this.categroyListDataSource.pushData(this.categoryList)
+    this.categoryListDataSource.pushData(this.categoryList)
   }
 
   build() {
     Column() {
-      LazyForEach(this.categroyListDataSource, (category: DramaList, index: number) => {
+      LazyForEach(this.categoryListDataSource, (category: DramaList, index: number) => {
         Column() {
           // 标题 & 更多
           this.Bar(category.title, category.moreUrl)
           // 视频列表
           VideoList({
-            videoList: category.videoList as VideoInfo[],
+            videoList: category.videoList,
             scrollable: false
           }).padding(16)
         }
@@ -70,37 +70,3 @@ export struct CategroyView {
 
 }
 
-class CategoryListDataSource extends BaseDataSource<DramaList> {
-  private dataArray: DramaList[] = []
-
-  public totalCount(): number {
-    return this.dataArray.length
-  }
-
-  public getData(index: number): DramaList {
-    return this.dataArray[index]
-  }
-
-  public addData(index: number, data: DramaList): void {
-    this.dataArray.splice(index, 0, data)
-    this.notifyDataAdd(index)
-  }
-
-  public pushData(data: DramaList[]): void {
-    this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
-  }
-
-  // 删除全部数据
-  public clear(): void {
-    this.empty()
-    this.refresh()
-  }
-
-  public empty(): void {
-    this.dataArray = []
-  }
-  public refresh(): void {
-    this.notifyDataReload()
-  }
-}

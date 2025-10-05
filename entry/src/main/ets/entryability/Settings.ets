@@ -24,7 +24,7 @@ export class AppConfigs {
   /**
    * 默认播放器
    */
-  default_player: number = 1
+  default_player: string = 'av'
   /**
    * 颜色模式，默认为 跟随系统
    */
@@ -33,6 +33,10 @@ export class AppConfigs {
    * 自动旋转
    */
   auto_sensor_rotate: number = 21
+  /**
+   * 视频目录页列表类型
+   */
+  category_UI_type: number = 0
 
   constructor() {
   }

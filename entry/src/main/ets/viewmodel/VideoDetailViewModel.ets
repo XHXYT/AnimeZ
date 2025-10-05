@@ -305,6 +305,7 @@ export class VideoDetailViewModel {
   public onPageHide() {
     this.saveHistoryInfo();
     ToastUtil.showToast({ message: '历史记录已保存' });
+    // 触发历史记录更新事件
     HISTORY_CHANGED_EVENT.emit();
 
     if (this.playerManager.isPlaying()) {

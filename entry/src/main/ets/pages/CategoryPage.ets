@@ -1,13 +1,14 @@
 import { dataSourceManager } from "../api/DataSourceManager"
 import VideoInfo, { TypeInfo } from "../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../entity/VideoNavigateInfo"
-import { BreakpointState } from "../utils/BreakPointManager"
 import Logger from "../utils/Logger"
 import { BaseDataSource } from "../components/common/BaseDataSource"
 import StateView, { ViewState } from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { VideoList } from "../components/VideoList"
 import { VideoCategoryColumnsTemplate } from "../utils/breakpoint/BreakPoint"
+import { AppConfigs } from "../entryability/Settings"
+import { CategoryDataSource } from "../entity/CategoryData"
 
 
 // 系统路由
@@ -26,9 +27,7 @@ export struct CategoryPage {
   @State url: string = ''
   @State page: number = 0
   @State title: string = ''
-  @State sourceUItype: number = 0
   @State errorMessage: string = ''
-  @State videoList: VideoInfo[] = []
   @Consume('pageStack') pageStack: NavPathStack
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
@@ -38,6 +37,8 @@ export struct CategoryPage {
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
   // 高度断点
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
+  // 应用设置
+  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @State categoryDataSource: CategoryDataSource = new CategoryDataSource([])
 
   build() {
@@ -50,7 +51,7 @@ export struct CategoryPage {
           state: this.state,
           errorMessage: $errorMessage,
           content: () => {
-            this.Content(this.sourceUItype)
+            this.Content(this.appSettings.category_UI_type)
           },
           custom: undefined,
           onRetry: () => {
@@ -76,29 +77,28 @@ export struct CategoryPage {
         this.url = params.url
         this.loadFirstPage()
         console.log('CategoryPage 视频目录页接收的params：', JSON.stringify(params))
-        this.checkSourceUItype(params.sourceKey)
       } catch (e) {
-        console.log(`VideoList Navigate onReady catch exception: ${JSON.stringify(e)}`)
+        console.log(`VideoList Navigate onReady catch exception: ${e.code} ${e.message}`)
       }
     })
 
   }
 
   @Builder
-  Content(UItype: number) {
-    if (UItype === 1) {
+  Content(UI_type: number) {
+    if (UI_type === 1) {
       // 图片 + 标题 1
       VideoList({
-        videoList: this.videoList
+        videoListDataSource: this.categoryDataSource
       }).padding(16)
     } else {
       // 详细 0
       Grid() {
-        LazyForEach(this.categoryDataSource, (item: VideoInfo, index: number) => {
+        LazyForEach(this.categoryDataSource, (item: VideoInfo) => {
           GridItem() {
             this.VideoItemDetailed(item)
           }
-        }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
+        }, (item: VideoInfo) => item.title + item.imgUrl)
       }.padding(16)
       .columnsGap(6)
       .rowsGap(8)
@@ -174,29 +174,19 @@ export struct CategoryPage {
 
   }
 
-  checkSourceUItype(key: string) {
-    // this.sourceUItype = DataSourceManager.getSourceUItype(key)
-    console.log('CategoryPage 视频目录页UI类型：', this.sourceUItype)
-  }
-
-  loadFirstPage() {
+  async loadFirstPage() {
     this.state = ViewState.LOADING
-    dataSourceManager.getVideoList(this.url, this.page)
-      .then((data) => {
-        Logger.e('tips', 'CategoryPage #loadNextPage list=' + JSON.stringify(data))
-        this.videoList = data
-        this.state = ViewState.CONTENT
-        if (this.sourceUItype === 0) {
-          console.log('CategoryPage 视频目录页推送懒加载数据：', this.sourceUItype)
-          // 推送数据
-          this.categoryDataSource.pushData(this.videoList)
-          console.log('CategoryPage 视频目录页已推送懒加载数据：', this.sourceUItype)
-        }
-      })
-      .catch((e: Error) => {
-        this.errorMessage = JSON.stringify(e)
-        this.state = ViewState.ERROR
-      })
+    try {
+      const data = await dataSourceManager.getVideoList(this.url, this.page)
+      Logger.d('CategoryPage', '#loadNextPage list=' + JSON.stringify(data))
+      this.state = ViewState.CONTENT
+      // 推送数据
+      this.categoryDataSource.pushData(data)
+    } catch (err) {
+      this.errorMessage = err.message
+      this.state = ViewState.ERROR
+      Logger.e('fail', '获取界面视频数据', err)
+    }
   }
 
   loadNextPage() {
@@ -206,39 +196,4 @@ export struct CategoryPage {
 }
 
 
-class CategoryDataSource extends BaseDataSource<VideoInfo> {
-  private dataArray: VideoInfo[] = []
 
-  public totalCount(): number {
-    return this.dataArray.length
-  }
-
-  public getData(index: number): VideoInfo {
-    return this.dataArray[index]
-  }
-
-  public addData(index: number, data: VideoInfo): void {
-    this.dataArray.splice(index, 0, data)
-    this.notifyDataAdd(index)
-  }
-
-  public pushData(data: VideoInfo[]): void {
-    this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
-  }
-
-  // 删除全部数据
-  public clear(): void {
-    this.empty()
-    this.refresh()
-  }
-
-  public empty(): void {
-    this.dataArray = []
-  }
-
-  public refresh(): void {
-    this.notifyDataReload()
-  }
-
-}

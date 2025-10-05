@@ -24,13 +24,13 @@ export struct MultiVideoPlayer {
 
   build() {
     Stack() {
-      if (this.appSettings.default_player === 0) {
+      if (this.appSettings.default_player === 'video') {
         // 系统Video组件
         SystemVideoPlayer({ playerManager: this.playerManager })
-      } else if (this.appSettings.default_player === 1) {
+      } else if (this.appSettings.default_player === 'av') {
         // AVPlayer
         AVideoPlayer({ playerManager: this.playerManager })
-      } else if (this.appSettings.default_player === 2) {
+      } else if (this.appSettings.default_player === 'red') {
         // 红薯播放器
         RedVideoPlayer({ playerManager: this.playerManager })
       } else {

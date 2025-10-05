@@ -2,8 +2,8 @@ import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
 import TitleBar from '../components/TitleBar'
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { SettingGroup, SettingGroupType, SettingItem } from '../components/common/Constants';
-import { SettingRow } from '../components/common/Common';
+import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
+import { SettingRow } from '../components/SettingsItem';
 import { ToastUtil } from '../utils/ToastUtils';
 
 // 系统路由

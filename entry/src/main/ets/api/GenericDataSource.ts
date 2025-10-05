@@ -116,7 +116,7 @@ export default class GenericDataSource implements DataSource {
       return this.parseVideoList(drama, this.parserConfig.homepage.category.videos);
     } catch (e) {
       Logger.e('fail', `获取视频列表`, e);
-      return [];
+      throw e
     }
   }
 
@@ -340,7 +340,10 @@ export default class GenericDataSource implements DataSource {
 
       // 解析更多链接
       const [sel, attr] = categoriesConfig.moreUrl.split('@');
-      const rawMoreUrl = this.selectAttribute(title, sel, attr);
+      let rawMoreUrl = this.selectAttribute(title, sel, attr);
+      if (rawMoreUrl.startsWith('http://')) {
+        rawMoreUrl =  'https://' + rawMoreUrl.substring(7);
+      }
       // 提取原始项标题
       const rawTitle = this.selectText(title, categoriesConfig.title);
       console.log(`GenericDataSource.extractCategoryList 原始项标题: ${rawTitle}`)
