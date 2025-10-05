@@ -1,13 +1,12 @@
 // VideoDetailPage.ets
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager, { PlayerStatus } from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager from '../entity/VideoPlayer/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
-import StateView, { ViewState } from '../components/StateView';
+import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
-import { common, ConfigurationConstant } from '@kit.AbilityKit';
+import { ConfigurationConstant } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
-import { deviceInfo } from '@kit.BasicServicesKit';
-import { DEFAULT_DURATION } from '../utils/TransitionHelper';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppConfigs } from '../entryability/Settings';
@@ -23,6 +22,7 @@ import { VideoDetailViewModel } from '../viewmodel/VideoDetailViewModel';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import EpisodeList from '../entity/EpisodeList';
 import EpisodeInfo from '../entity/EpisodeInfo';
+import Logger from '../utils/Logger';
 
 // 系统路由
 @Builder
@@ -38,6 +38,11 @@ struct VideoDetailPage {
   @State errorMessage: string = ''
 
   @Consume('pageStack') pageStack: NavPathStack;
+  @StorageLink('showWebView') showWebView: boolean = false
+  @StorageProp('webview_url') webUrl: string = ''
+  @StorageProp('run_js') runJavaScript: string = ''
+  @StorageLink('web_js_video_link') videJsLink: string = ''
+
   @StorageProp('topRectHeight') topHeight: number = 0;
   @StorageProp('bottomRectHeight') bottomHeight: number = 0;
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
@@ -53,7 +58,7 @@ struct VideoDetailPage {
   @State panelController: PanelController = new PanelController()
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
-  private controller: webview.WebviewController = new webview.WebviewController();
+  private webviewController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear() {
     this.viewModel = new VideoDetailViewModel(this.playerManager, this.appSettings)
@@ -101,6 +106,10 @@ struct VideoDetailPage {
         })
           .width('100%')
           .height('100%')
+        // WebView
+        if (this.showWebView) {
+          this.WebViewContent()
+        }
       }
       .width('100%')
       .height('100%')
@@ -130,6 +139,37 @@ struct VideoDetailPage {
 
       return true;
     })
+  }
+
+  @Builder WebViewContent() {
+    Web({ src: this.webUrl, controller: this.webviewController })
+      .backgroundColor(Color.Transparent)
+      .javaScriptAccess(true)
+      .width(1).height(1)
+      .onPageBegin((event) => {
+        console.log(`链接 ${event.url} 成功加载`)
+      })
+      .onPageEnd(e => {
+        try {
+          if (e) {
+            Logger.e('tips', `URL ${e.url} 开始加载JavaScript`)
+            setTimeout(() => {
+              this.webviewController.runJavaScript(this.runJavaScript)
+                .then((result) => {
+                  console.info(`URL ${e.url} 执行 result: ${result}`)
+                  this.videJsLink = result
+                  this.showWebView = false
+                  console.info(`URL ${e.url} 显示状态: ${this.showWebView} 解析后链接：${this.videJsLink}`)
+                })
+                .catch((error: BusinessError) => {
+                  Logger.e('fail', '加载JavaScript', error)
+                })
+            }, 4000)
+          }
+        } catch (error) {
+          Logger.e('fail', 'webviewController 加载JavaScript', error)
+        }
+      })
   }
 
   @Builder Content() {

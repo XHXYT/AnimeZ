@@ -54,7 +54,7 @@ export interface DetailConfig {
 /** 视频URL配置接口 */
 export interface VideoUrlConfig {
   urlSelector?: string;
-  attribute?: string; // 指定提取视频链接的URL属性名
+  // attribute?: string; // 指定提取视频链接的URL属性名
   urlExtractor?: 'regex' | 'javascript';
   pattern?: string;
   postProcess?: string; // 后处理

@@ -9,12 +9,14 @@ export struct More {
   /**
    * 更多列表数据
    */
-  @Provide private moreItemData: SettingGroup<boolean | string | number>[] = [ // 联合类型覆盖所有可能类型
+  @Provide moreItemData: SettingGroup<boolean | string | number>[] = [
     {
       title: '更多',
+      key: 'more',
       settings: [
         {
           title: '设置',
+          settings_key: 'settings',
           icon: $r('app.media.gearshape'),
           onClick: (item, callback) => {
             this.pageStack.pushPathByName("SettingsPage", '')
@@ -23,6 +25,7 @@ export struct More {
         },
         {
           title: '免责声明',
+          settings_key: 'disclaimer',
           icon: $r('app.media.ic_gitee'),
           onClick: (item, callback) => {
             this.pageStack.pushPathByName("WebPage", "disclaimer.html")
@@ -31,6 +34,7 @@ export struct More {
         },
         {
           title: '原开源仓库',
+          settings_key: 'raw',
           info: 'https://github.com/Z-P-J/AnimeZ',
           icon: $r('app.media.ic_github'),
           onClick: (item, callback) => {
@@ -40,6 +44,7 @@ export struct More {
         },
         {
           title: '新开源仓库',
+          settings_key: 'new',
           info: 'https://github.com/XHXYT/AnimeZ',
           icon: $r('app.media.ic_github'),
           onClick: (item, callback) => {

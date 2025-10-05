@@ -160,7 +160,7 @@ class AVPlayerWrapper {
       manager.onVideoSizeChanged(w, h)
     })
     avPlayer.on('error', (error) => {
-      Logger.e('tips', 'AVPlayer onError e=' + JSON.stringify(error))
+      Logger.e('fail', 'AVPlayer onError err = ', error)
       manager.setStatus(PlayerStatus.ERROR)
     })
     avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {

@@ -83,7 +83,6 @@ export struct ToggleSettingRow {
   @State rowWidth: number = 0
   @State toggleX: number = 0
   @State preference: Preference<boolean> = {
-    key: "",
     type: "switch",
     defaultValue: false,
     menu: []
@@ -108,13 +107,13 @@ export struct ToggleSettingRow {
         }
       })
     .onChange((isOn) => {
-      if (this.isOn == isOn || typeof this.preference.key !== 'string') {
+      if (this.isOn == isOn) {
         return
       }
       this.isOn = isOn
       // 执行已配置函数
       if (this.preference.onValueChange) {
-        this.preference.onValueChange(this.preference.key, isOn)
+        this.preference.onValueChange(isOn)
       }
     })
   }
@@ -187,13 +186,13 @@ export struct MenuSettingRow {
         })
           .selected(this.selected === menuItem.value)
           .onChange((selected) => {
-            if (this.selected === menuItem.value || typeof this.preference.key !== 'string') {
+            if (this.selected === menuItem.value) {
               return
             }
             this.selected = menuItem.value
             this.tips = menuItem.view
             if (this.preference.onValueChange) {
-              this.preference.onValueChange(this.preference.key, menuItem.value)
+              this.preference.onValueChange(menuItem.value)
             }
             this.isShowMenu = false
           })

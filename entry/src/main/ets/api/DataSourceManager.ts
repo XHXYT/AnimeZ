@@ -272,7 +272,11 @@ class DataSourceManager {
     }
 
     try {
-      return await source.parseVideoUrl(link);
+      const videoLink = await source.parseVideoUrl(link)
+      if (videoLink) {
+        return videoLink
+      }
+      throw new Error('DataSourceManager.parseVideoUrl，视频链接解析值为空，解析失败')
     } catch (error) {
       Logger.e('tips', `DataSourceManager.parseVideoUrl Failed to parse video URL from ${source.getKey()}: ${error.message}`);
       throw error;

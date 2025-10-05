@@ -159,8 +159,8 @@
           }
         },
         "videoUrl": {
-          "urlSelector": "iframe#iframeForVideo",
-          "attribute": "src"
+          "urlSelector": "iframe#iframeForVideo@src",
+          "iframeSelector": "var video = document.querySelector(\"#artplayer > div > video\");\n            video ? video.src : \"元素未找到或没有src属性\""
         }
       }
     }

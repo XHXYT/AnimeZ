@@ -171,29 +171,12 @@ export default class GenericDataSource implements DataSource {
 
     try {
       const config = this.parserConfig.videoUrl;
+      let url = ''
 
-      if (config.iframeSelector) {
-        // 获取iframe URL
-        const doc = await HttpUtils.getHtml(link);
-        const iframeUrl = this.selectAttribute(doc, config.iframeSelector, 'src');
-
-        // 获取iframe页面的HTML内容
-        const iframeHtml = await HttpUtils.getString(iframeUrl);
-
-        // 尝试从JavaScript代码中提取视频URL
-        const videoUrl = this.extractVideoUrlFromScript(iframeHtml, config.pattern);
-
-        if (videoUrl) {
-          return videoUrl;
-        }
-
-        return iframeUrl;
-      }
-
-      if (config.urlSelector && config.attribute) {
+      if (config.urlSelector) {
         // 使用选择器方式提取URL
         const doc = await HttpUtils.getHtml(link);
-        let url = this.selectAttribute(doc, config.urlSelector, config.attribute);
+        url = this.selectAttribute(doc, config.urlSelector);
         Logger.e('tips', `parseVideoUrl extracted attribute value url = ${url}`);
 
         if (url == '') {
@@ -225,8 +208,8 @@ export default class GenericDataSource implements DataSource {
         }
 
         Logger.e('tips', `parseVideoUrl final url = ${url}`);
-        return url;
-      } else if (config.urlExtractor === 'regex' && config.pattern) {
+      } else
+        if (config.urlExtractor === 'regex' && config.pattern) {
         // 使用正则表达式方式提取URL
         const htmlString = await HttpUtils.getString(link);
         const match = htmlString.match(new RegExp(config.pattern));
@@ -256,14 +239,21 @@ export default class GenericDataSource implements DataSource {
               url = url.replace(new RegExp(search, 'g'), replace);
             }
           }
-          return url;
         }
       }
 
-      throw new Error('无法解析视频URL');
+      // 如果存在内嵌提取配置（webview）
+      if (config.iframeSelector) {
+        console.log(`parseVideoUrl 存在内嵌视频解析配置`)
+        // 获取iframe页 视频URL (传递到UI层去解析)
+        const iframeUrl = `${url}_|_${config.iframeSelector}`
+        console.log(`parseVideoUrl 内嵌视频解析为link：${iframeUrl}`)
+        url = iframeUrl
+      }
+      return url;
     } catch (e) {
       Logger.e('fail', `解析视频URL`, e);
-      throw e;
+      throw new Error('无法解析视频URL, err: ' + e);
     }
   }
 
@@ -283,8 +273,7 @@ export default class GenericDataSource implements DataSource {
     for (const [key, selector] of Object.entries(selectors)) {
       if (selector.includes('@')) {
         // 处理带属性提取的选择器（如 "img@src"）
-        const [sel, attr] = selector.split('@');
-        const value = this.selectAttribute(element, sel, attr);
+        const value = this.selectAttribute(element, selector);
         info[key as keyof VideoInfo] = value as any;
       } else {
         // 处理纯文本选择器（如 "h1"）
@@ -339,8 +328,7 @@ export default class GenericDataSource implements DataSource {
       });
 
       // 解析更多链接
-      const [sel, attr] = categoriesConfig.moreUrl.split('@');
-      let rawMoreUrl = this.selectAttribute(title, sel, attr);
+      let rawMoreUrl = this.selectAttribute(title, categoriesConfig.moreUrl);
       if (rawMoreUrl.startsWith('http://')) {
         rawMoreUrl =  'https://' + rawMoreUrl.substring(7);
       }
@@ -375,8 +363,7 @@ export default class GenericDataSource implements DataSource {
 
         const items = select(container, config.itemSelector);
         const episodeInfos: EpisodeInfo[] = items.map(item => {
-          const [sel, attr] = config.itemSelectors.url.split('@')
-          const url = this.selectAttribute(item, sel, attr);
+          const url = this.selectAttribute(item, config.itemSelectors.url);
           const title = this.selectText(item, config.itemSelectors.title);
           console.log(`extractEpisodes 多路线 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
@@ -441,7 +428,10 @@ export default class GenericDataSource implements DataSource {
 
   // 选择属性
   private selectAttribute(context: AnyNode, selector: string, attribute?: string): string {
-    const element = selectFirst(context, selector);
-    return element ? element.attr(attribute) : '';
+    const [sel, attr] = selector.split('@');
+    console.log(`selectAttribute 属性值选择器 sel：${sel}，attribute：${attribute ?? attr}`)
+    const element = selectFirst(context, sel);
+    return element ? element.attr(attribute ?? attr) : '';
   }
+
 }

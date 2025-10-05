@@ -3,11 +3,10 @@
 export type SettingGroupType = boolean | string | number
 
 export interface Preference<T extends SettingGroupType> {
-  key: string,
   type: 'switch' | 'radio' | 'menu'
   defaultValue: T
   menu: MenuItem[]
-  onValueChange?: (key: string, value: T) => void
+  onValueChange?: (value: T) => void
 }
 
 export interface MenuItem {
@@ -17,6 +16,7 @@ export interface MenuItem {
 
 export interface SettingItem<T extends SettingGroupType> {
   title: string
+  settings_key: string,
   info?: string | Resource
   icon?: string | Resource
   iconBlendColor?: ResourceColor
@@ -27,6 +27,7 @@ export interface SettingItem<T extends SettingGroupType> {
 export interface SettingGroup<T extends SettingGroupType> {
   title?: string
   name?: string
+  key: string,
   introduce?: string
   image?: Resource
   settings: SettingItem<T>[]

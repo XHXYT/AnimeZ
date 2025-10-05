@@ -15,6 +15,7 @@ import EpisodeInfo from '../entity/EpisodeInfo';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
+import { StringUtils } from '../utils/StringUtils';
 
 @Observed
 export class VideoDetailViewModel {
@@ -36,7 +37,6 @@ export class VideoDetailViewModel {
   public state: number = 0;
   public errorMessage: string = '';
   public panelContentType: number = 0;
-  public showWebview: boolean = false;
   public isFirstPlay: boolean = true;
   public isFreeWindow: boolean = false;
 
@@ -45,7 +45,7 @@ export class VideoDetailViewModel {
   public collectID: number | null = 0;
   public sourceKey: string = '';
   public title: string = '';
-  public url: string = '';
+  public url: string = ''; // 剧集链接
 
   // 历史和收藏信息
   public historyInfo: VideoHistoryInfo = HistoryInfo;
@@ -183,11 +183,12 @@ export class VideoDetailViewModel {
     } else {
       try {
         console.log(`VideoDetailViewModel.playVideo 视频剧集链接，link：${episode.link}`)
-        const url = await dataSourceManager.parseVideoUrl(episode.link)
-        console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，link：${url}`)
-        this.showWebview = false;
-        episode.videoUrl = url;
-        this.historyInfo.videoUrl = url;
+        let url = await dataSourceManager.parseVideoUrl(episode.link)
+        console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，url：${url}`)
+        // 检查链接是否需要js
+        const finalUrl = await this.checkParesVideoLink(url)
+        episode.videoUrl = finalUrl
+        this.historyInfo.videoUrl = finalUrl
         this.saveHistoryInfo();
         this.checkVideoInfo();
         this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
@@ -196,6 +197,78 @@ export class VideoDetailViewModel {
         Logger.e('fail', `VideoDetailViewModel.playVideo 视频链接解析`, err);
       }
     }
+  }
+
+  /**
+   * 检查并解析视频链接
+   * @param url 输入的URL，格式可能为 'selector_|_attribute_|_actual_url' 或直接的URL
+   * @returns Promise<string> 返回解析后的视频链接
+   */
+  private async checkParesVideoLink(url: string): Promise<string> {
+    // 情况一：需要通过JS解析
+    if (url.includes('_|_')) {
+      // 解析输入的URL字符串
+      // 格式: 'rawLink_|_selector@attribute'
+      const rawLink = StringUtils.splitString(url, '_|_').first;
+      const js = StringUtils.splitString(url, '_|_').second;
+
+      if (!rawLink || !js) {
+        console.error('checkParesVideoLink: URL格式错误，无法解析。');
+        return Promise.reject(new Error('Invalid URL format for JS parsing.'));
+      }
+
+      // 准备并激活WebView
+      // *** 在开始轮询前，先清空上一次的结果，防止读到旧数据 ***
+      AppStorage.setOrCreate<string>('web_js_video_link', '');
+      AppStorage.setOrCreate<string>('webview_url', rawLink);
+      AppStorage.setOrCreate<string>('run_js', js);
+      AppStorage.setOrCreate<boolean>('showWebView', true)
+      console.info(`checkParesVideoLink: 已激活WebView，目标URL: ${url}, JS:${js}`);
+
+      // 开始轮询等待结果
+      const pollingIntervalMs = 500; // 轮询间隔500毫秒，避免过于频繁
+      const timeoutMs = 9000; // 超时时间5秒
+      const startTime = Date.now();
+
+      while (true) {
+        // 检查是否超时
+        if (Date.now() - startTime > timeoutMs) {
+          // 超时后，隐藏WebView并抛出错误
+          AppStorage.setOrCreate<boolean>('showWebView', false);
+          console.error('checkParesVideoLink: 轮询超时，未能获取JS结果。');
+          return Promise.reject(new Error('JS execution timed out.'));
+        }
+
+        // 从AppStorage获取JS执行结果
+        const jsLink = AppStorage.get<string>('web_js_video_link');
+
+        // 如果结果存在且不为空，说明JS已执行并返回了值
+        if (jsLink && jsLink !== '' && jsLink.includes('http')) {
+          console.info(`checkParesVideoLink: 成功获取JS链接: ${jsLink}`);
+          // 隐藏WebView
+          AppStorage.setOrCreate<boolean>('showWebView', false);
+          // 返回结果
+          return jsLink;
+        }
+
+        // 如果还没结果，等待一段时间后继续下一次轮询
+        console.debug(`checkParesVideoLink: 轮询中... 未获取到结果，${pollingIntervalMs}ms后重试。`);
+        await this.sleep(pollingIntervalMs);
+      }
+
+    } else {
+      // 情况二：直接返回输入的URL
+      console.info(`checkParesVideoLink: 直接返回URL: ${url}`);
+      return url;
+    }
+  }
+
+  /**
+   * 辅助函数：异步等待
+   * @param ms 等待的毫秒数
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // 保存历史记录

@@ -49,7 +49,7 @@ export default class HttpUtils {
         })
         // Logger.d('HttpUtils.getString', `响应Code = ${resp.responseCode}`)
         if (resp.result) {
-           Logger.d('HttpUtils.getString', 'resp.result = ' + JSON.stringify(resp.result, null, 2))
+           Logger.d('HttpUtils.getString', 'resp.result = ' + JSON.stringify(resp.result, null, 2).includes('art-video'))
            return resp.result as string
         } else {
             throw new Error(resp.responseCode.toString())

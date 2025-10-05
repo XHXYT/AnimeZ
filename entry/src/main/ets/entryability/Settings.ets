@@ -1,3 +1,4 @@
+import { bundleManager } from "@kit.AbilityKit"
 
 // @StorageLink('app_settings')
 export class AppConfigs {
@@ -51,6 +52,8 @@ export class AppSettings {
 
   // 初始化
   static async init() {
+    const packageInfo = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
+    AppSettings.versionName = packageInfo.versionName
     PersistentStorage.persistProp("AppSettings", new AppConfigs())
   }
 

@@ -1,11 +1,10 @@
-import promptAction from '@ohos.promptAction';
+
 import router from '@ohos.router';
 import VideoInfo from '../entity/VideoInfo';
 import { DramaList } from '../entity/HomepageData';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import StateView, { ViewState } from '../components/StateView';
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
-import { VideoList } from '../components/VideoList';
 import Logger from '../utils/Logger';
 import { BannerView } from '../components/home/BannerView';
 import { CategoryView } from '../components/home/CategoryView';

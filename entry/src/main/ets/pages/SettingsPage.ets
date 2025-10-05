@@ -94,7 +94,7 @@ struct SettingsPage {
                         })
                       }
                     },
-                    (setting: SettingItem<SettingGroupType>) => setting.preference?.key
+                    (setting: SettingItem<SettingGroupType>) => setting.settings_key
                   )
                 }
                 .backgroundColor($r('app.color.background_color'))
@@ -106,7 +106,7 @@ struct SettingsPage {
               },
               // 唯一键生成
               (group: SettingGroup<SettingGroupType>) => {
-                return group.title || String(group.settings.length)
+                return group.key || String(group.settings.length)
               }
             )
           }
@@ -137,10 +137,11 @@ struct SettingsPage {
     return [
       {
         title: '界面',
+        key: 'appearance',
         settings: [
           { title: '颜色主题', info: '自动',
+            settings_key: 'color_mode',
             preference: {
-              key: 'color_mode',
               type: 'menu',
               defaultValue: this.appSettings.color_mode.toString(),
               menu: [
@@ -157,7 +158,7 @@ struct SettingsPage {
                   value: '2'
                 }
               ],
-              onValueChange: (key, value) => {
+              onValueChange: (value) => {
                 this.appSettings.color_mode = Number(value)
                 ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
               }
@@ -167,14 +168,15 @@ struct SettingsPage {
       },
       {
         title: '数据',
+        key: 'source',
         settings: [
           { title: '首页数据源',
+            settings_key: 'homepage_source',
             preference: {
-              key: 'homepage_source',
               type: 'menu',
               defaultValue: dataSourceManager.getKey(),
               menu: this.getSourcesMenu(dataSourceManager.getTotalSourceTitle(), dataSourceManager.getTotalKey()),
-              onValueChange: (key: string, value: string | boolean | number) => {
+              onValueChange: (value) => {
                 if (typeof value === 'string') {
                   // 设置主页数据源
                   dataSourceManager.setDataSourceAsDefault(value).then(() => {
@@ -191,10 +193,11 @@ struct SettingsPage {
       },
       {
         title: '播放',
+        key: 'play',
         settings: [
           { title: '默认播放器', info: 'AVPlayer',
+            settings_key: 'default_player',
             preference: {
-              key: 'default_player',
               type: 'menu',
               defaultValue: this.appSettings.default_player,
               menu: [
@@ -215,7 +218,7 @@ struct SettingsPage {
                   value: 'ijk'
                 }
               ],
-              onValueChange: (key, value) => {
+              onValueChange: (value) => {
                 this.appSettings.default_player = value as string
               }
             }
@@ -223,8 +226,8 @@ struct SettingsPage {
           {
             title: '启用自动旋屏',
             info: '跟随传感器自动切换半屏/全屏播放',
+            settings_key: 'auto_sensor_rotate',
             preference: {
-              key: 'auto_sensor_rotate',
               type: 'switch',
               menu: [],
               defaultValue: this.appSettings.auto_sensor_rotate
@@ -233,8 +236,8 @@ struct SettingsPage {
           {
             title: '自动播放下一集',
             info: '视频结束后自动播放下一集',
+            settings_key: 'auto_play_next_episode',
             preference: {
-              key: 'auto_play_next_episode',
               type: 'switch',
               menu: [],
               defaultValue: this.appSettings.auto_play_next_episode
@@ -243,8 +246,8 @@ struct SettingsPage {
           {
             title: '非Wifi下自动播放',
             info: '非Wifi环境下不再提醒，自动播放视频',
+            settings_key: 'auto_play_on_no_wifi',
             preference: {
-              key: 'auto_play_on_no_wifi',
               type: 'switch',
               menu: [],
               defaultValue: this.appSettings.auto_play_on_no_wifi
@@ -291,10 +294,12 @@ struct SettingsPage {
        },*/
       {
         title: '更多',
+        key:'more',
         settings: [
           /* { TODO 检查更新
              title: '检查更新',
              info: '1.0.1',
+             settings_key: 'update',
              iconBlendColor: Color.Black,
              onClick: () => {
 
@@ -303,6 +308,7 @@ struct SettingsPage {
           {
             title: '应用信息',
             info: $r('app.string.module_desc'),
+            settings_key: 'app_info',
             onClick: () => {
               this.pageStack.pushPathByName("AppInfoPage", '')
             }
@@ -310,6 +316,7 @@ struct SettingsPage {
           {
             title: '关于作者',
             info: '这人很懒，什么都没有写！',
+            settings_key: 'author_info',
             onClick: () => {
               this.pageStack.pushPathByName("AboutMePage", '')
             }

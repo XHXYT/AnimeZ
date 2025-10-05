@@ -22,8 +22,9 @@ struct AboutMePage {
 
   private aboutMe: SettingGroup<boolean | string | number>[] = [
     {
-      title: '作者1',
+      title: '原作者',
       name: 'Z-P-J',
+      key: 'zpj',
       introduce: '开源鸿蒙应用开发爱好者，为开源鸿蒙应用生态作出微薄的贡献',
       image: $rawfile('zpj.png'),
       settings: [
@@ -31,6 +32,7 @@ struct AboutMePage {
           title: 'Github主页',
           info: 'https://github.com/Z-P-J',
           icon: $r('app.media.ic_github'),
+          settings_key: 'raw_author_github',
           onClick: (item, callback) => {
             this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
             callback?.()
@@ -39,6 +41,7 @@ struct AboutMePage {
         {
           title: 'Gitee主页',
           info: 'https://gitee.com/z-p-j',
+          settings_key: 'raw_author_gitee',
           icon: $r('app.media.ic_gitee'),
           onClick: (item, callback) => {
             this.pageStack.pushPathByName("WebPage", "https://gitee.com/z-p-j")
@@ -48,6 +51,7 @@ struct AboutMePage {
         {
           title: '赞助作者',
           info: '赞助作者一杯咖啡',
+          settings_key: 'support_raw_author',
           icon: $r('app.media.ic_java'),
           onClick: (item, callback) => {
             ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
@@ -57,13 +61,15 @@ struct AboutMePage {
       ]
     },
     {
-      title: '作者2',
+      title: '维护者',
       name: '小雅',
+      key: 'ya',
       introduce: '鸿蒙应用开发爱好者，一只代码小白',
       image: $rawfile('ya.png'),
       settings: [
         {
           title: 'Github主页',
+          settings_key: 'new_author_github',
           info: 'https://github.com/XHXYT',
           icon: $r('app.media.ic_github'),
           onClick: (item, callback) => {
@@ -73,6 +79,7 @@ struct AboutMePage {
         },
         {
           title: 'Gitee主页',
+          settings_key: 'new_author_gitee',
           info: 'https://gitee.com/DXHXYT',
           icon: $r('app.media.ic_gitee'),
           onClick: (item, callback) => {
@@ -83,6 +90,7 @@ struct AboutMePage {
         {
           title: '赞助作者',
           info: '赞助作者一杯咖啡',
+          settings_key: 'support_new_author',
           icon: $r('app.media.ic_java'),
           onClick: (item, callback) => {
             ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
@@ -114,7 +122,7 @@ struct AboutMePage {
                 .margin({top: 56})
                 .borderRadius(100)
                 .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
-              Text(group.name)
+              Text(group.title)
                 .fontSize(18)
                 .fontColor($r('app.color.color_text_major'))
                 .fontWeight(500)
@@ -163,7 +171,7 @@ struct AboutMePage {
                         }
                       }
                     })
-                  }, (setting: SettingItem<SettingGroupType>) => setting.title)
+                  }, (setting: SettingItem<SettingGroupType>) => setting.settings_key)
               }
               .backgroundColor($r('app.color.background_color'))
               .borderRadius(16)
@@ -174,7 +182,7 @@ struct AboutMePage {
             },
             // 唯一键生成
             (group: SettingGroup<SettingGroupType>) => {
-              return group.title || String(group.settings.length)
+              return group.key || String(group.settings.length)
             }
           )
         }
