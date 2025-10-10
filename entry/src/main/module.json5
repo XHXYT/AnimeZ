@@ -16,10 +16,11 @@
     "description": "$string:module_desc",
     "mainElement": "EntryAbility",
     "deviceTypes": [
-      "default",
+      "phone",
       "tablet",
       "2in1",
-      "car"
+      "car",
+      "tv"
     ],
     "metadata": [
       {

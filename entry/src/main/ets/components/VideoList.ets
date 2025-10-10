@@ -1,7 +1,7 @@
 
 import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { BaseDataSource } from './common/BaseDataSource';
+import { BaseDataSource } from '../viewmodel/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { VideoListColumnsTemplate } from '../utils/breakpoint/BreakPoint';
 import { CategoryDataSource } from '../entity/CategoryData';

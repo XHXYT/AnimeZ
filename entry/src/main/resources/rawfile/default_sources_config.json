@@ -7,13 +7,14 @@
       "baseUrl": "http://www.iyinghua.com/",
       "enabled": true,
       "priority": 1,
-      "defaultSource": false,
+      "defaultSource": true,
       "parserConfig": {
         "search": {
           "videos": {
             "urlTemplate": "/search/{keyword}/?page={page}",
             "listSelector": "div.fire > div > ul > li",
             "urlNeedBaseUrl": true,
+            "enabledHttps": false,
             "itemSelectors": {
               "url": "a@href",
               "imgUrl": "img@src",
@@ -26,6 +27,7 @@
           "banner": {
             "listSelector": "div.hero-wrap > ul.heros > li",
             "urlNeedBaseUrl": true,
+            "enabledHttps": false,
             "itemSelectors": {
               "url": "a@href",
               "imgUrl": "img@src",
@@ -42,6 +44,7 @@
             "videos": {
               "listSelector": "ul > li",
               "urlNeedBaseUrl": true,
+              "enabledHttps": false,
               "itemSelectors": {
                 "url": "a@href",
                 "imgUrl": "img@src",
@@ -67,6 +70,7 @@
           "recommends": {
             "listSelector": "div.sido > div.pics > ul > li",
             "urlNeedBaseUrl": true,
+            "enabledHttps": false,
             "itemSelectors": {
               "url": "a@href",
               "imgUrl": "img@src",
@@ -77,8 +81,7 @@
         },
         "videoUrl": {
           "urlExtractor": "javascript",
-          "urlSelector": "#playbox",
-          "attribute": "data-vid",
+          "urlSelector": "#playbox@data-vid",
           "postProcess": "replaceAll('\\$mp4$', '')"
         }
       }
@@ -89,7 +92,7 @@
       "baseUrl": "https://www.agedm.io/",
       "enabled": true,
       "priority": 2,
-      "defaultSource": true,
+      "defaultSource": false,
       "parserConfig": {
         "search": {
           "videos": {

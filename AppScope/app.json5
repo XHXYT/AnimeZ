@@ -1,11 +1,10 @@
 {
   "app": {
-    "bundleName": "org.ohos.anime",
-    "vendor": "example",
+    "bundleName": "org.z.anime",
+    "vendor": "Ya",
     "versionCode": 1000002,
     "versionName": "1.0.2",
     "icon": "$media:layered_image",
     "label": "$string:app_name",
-    "distributedNotificationEnabled": true
   }
 }

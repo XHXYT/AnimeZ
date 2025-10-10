@@ -7,11 +7,11 @@
         "material": {
           "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001A3CAA9BFF8E80410E518F69A5A1F97D7671A6CB7AD4B4FA5094CE3929B1C8E5EEDB93A61D469B",
+          "keyPassword": "0000001B980961EF70DF689FB36B5613B58AFA572137F7A3F97B93F97B6A24E83256D7AAD65CCC33055C83",
           "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12",
-          "storePassword": "0000001ACADB73D89D458DCE5610361ECFBC8CF3E4406A5333B2A6342056F9707965B38A5810FB7AB71B"
+          "storePassword": "0000001B1D7E96721691BA34F27B72D3F5BA352C8BC2F97800FE90A896E8AF7E2500628E52585FE5CD972A"
         }
       }
     ],
@@ -26,7 +26,22 @@
             "useNormalizedOHMUrl": true
           }
         },
-        "targetSdkVersion": "6.0.0(20)"
+        "targetSdkVersion": "5.0.5(17)"
+      }
+    ],
+    "capabilities": [
+      {
+        "bundleName": "org.z.anime",
+        "config": [
+          {
+            "name": "Device status detection",
+            "capability": "com.huawei.service.device_security.device_verify"
+          },
+          {
+            "name": "Safety Detect",
+            "capability": "com.huawei.service.device_security.safety_detect"
+          }
+        ]
       }
     ]
   },

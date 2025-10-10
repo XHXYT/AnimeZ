@@ -9,6 +9,7 @@ export interface VideoConfig {
   urlTemplate: string;
   listSelector: string;
   urlNeedBaseUrl: boolean;
+  enabledHttps: boolean;
   itemSelectors: SelectorConfig;
 }
 
@@ -36,6 +37,7 @@ export interface RecommendConfig {
   listSelector: string;
   itemSelectors: SelectorConfig;
   urlNeedBaseUrl: boolean;
+  enabledHttps: boolean;
 }
 
 /** 番剧详情配置接口 */

@@ -75,7 +75,7 @@ export default class GenericDataSource implements DataSource {
       const list = select(doc, config.videos.listSelector);
 
       list.forEach((li) => {
-        videos.push(this.extractVideoInfo(li, config.videos.itemSelectors, config.videos.urlNeedBaseUrl));
+        videos.push(this.extractVideoInfo(li, config.videos.itemSelectors, config.videos.urlNeedBaseUrl, config.videos.enabledHttps));
       });
 
       return videos;
@@ -127,7 +127,7 @@ export default class GenericDataSource implements DataSource {
     const videoList: VideoInfo[] = [];
     elements.forEach((li) => {
       Logger.e('tips', "parseHtml el=" + li);
-      videoList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl));
+      videoList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
     });
 
     return videoList;
@@ -167,7 +167,7 @@ export default class GenericDataSource implements DataSource {
   }
 
   async parseVideoUrl(link: string): Promise<string> {
-    Logger.e('tips', 'parseVideoUrl link=' + link);
+    Logger.d('tips', 'parseVideoUrl link= ' + link);
 
     try {
       const config = this.parserConfig.videoUrl;
@@ -260,7 +260,7 @@ export default class GenericDataSource implements DataSource {
   /**
    * 提取视频信息
    */
-  private extractVideoInfo(element: HtmlTag, selectors: SelectorConfig, urlNeedBaseUrl: boolean): VideoInfo {
+  private extractVideoInfo(element: HtmlTag, selectors: SelectorConfig, urlNeedBaseUrl: boolean, enabledHttps: boolean = true): VideoInfo {
     const info: VideoInfo = {
       sourceKey: this.key,
       url: '',
@@ -284,8 +284,9 @@ export default class GenericDataSource implements DataSource {
       if (key === 'url' && info[key] && !info[key]?.startsWith('http') && urlNeedBaseUrl) {
         info[key] = this.baseUrl + info[key];
       }
+      console.log(`extractVideoInfo 是否使用https ${enabledHttps}`)
       // 把http替换成https
-      if (info[key].startsWith('http://')) {
+      if (info[key].startsWith('http://') && enabledHttps) {
         info[key] =  'https://' + info[key].substring(7);
       }
       console.log(`extractVideoInfo 提取 ${key} 信息：${info[key]}`)
@@ -301,7 +302,7 @@ export default class GenericDataSource implements DataSource {
     const list = select(doc, config.listSelector);
     console.log(`解析到的BannerList数目：${list.length}`)
     list.forEach((li) => {
-      bannerList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl));
+      bannerList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
     });
 
     return bannerList;
@@ -324,7 +325,7 @@ export default class GenericDataSource implements DataSource {
       console.log(`解析到第${i}项CategoryList番剧数目：${lis.length}`)
       // 推送目录内的片源列表
       lis.forEach((li) => {
-        videos.push(this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors, categoriesConfig.videos.urlNeedBaseUrl));
+        videos.push(this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors, categoriesConfig.videos.urlNeedBaseUrl, categoriesConfig.videos.enabledHttps));
       });
 
       // 解析更多链接
@@ -401,7 +402,7 @@ export default class GenericDataSource implements DataSource {
 
   private extractRecommends(doc: AnyNode, config: RecommendConfig): VideoInfo[] {
     const items = select(doc, config.listSelector);
-    return items.map(item => this.extractVideoInfo(item, config.itemSelectors, config.urlNeedBaseUrl));
+    return items.map(item => this.extractVideoInfo(item, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
   }
 
   private async parseHtml(url: string): Promise<AnyNode> {
@@ -429,9 +430,9 @@ export default class GenericDataSource implements DataSource {
   // 选择属性
   private selectAttribute(context: AnyNode, selector: string, attribute?: string): string {
     const [sel, attr] = selector.split('@');
-    console.log(`selectAttribute 属性值选择器 sel：${sel}，attribute：${attribute ?? attr}`)
+    console.log(`selectAttribute 属性值选择器 sel：${sel}，attribute：${attribute || attr}`)
     const element = selectFirst(context, sel);
-    return element ? element.attr(attribute ?? attr) : '';
+    return element ? element.attr(attribute || attr) : '';
   }
 
 }

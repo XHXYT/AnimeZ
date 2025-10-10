@@ -1,5 +1,5 @@
 import VideoInfo from "../../entity/VideoInfo";
-import { BaseDataSource } from "../common/BaseDataSource";
+import { BaseDataSource } from "../../viewmodel/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
 import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";

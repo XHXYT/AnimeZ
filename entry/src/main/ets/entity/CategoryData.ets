@@ -1,4 +1,4 @@
-import { BaseDataSource } from '../components/common/BaseDataSource'
+import { BaseDataSource } from '../viewmodel/BaseDataSource'
 import { DramaList } from './HomepageData'
 import VideoInfo from './VideoInfo'
 
