@@ -1,5 +1,6 @@
 
 import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
+import { Header } from './common/Header';
 import { SettingRow } from './SettingsItem';
 
 @Preview
@@ -62,24 +63,11 @@ export struct More {
         this.moreItemData,
         (group: SettingGroup<SettingGroupType>, index) => {
           Column() {
+            // 标题
             if (group.title) {
-              Row() {
-                Row()
-                  .backgroundColor($r('app.color.primary_color'))
-                  .height(14)
-                  .width(6)
-                  .margin({ right: 2 })
-                  .borderRadius(4)
-                Text(group.title)
-                  .fontColor($r('app.color.color_text_major'))
-                  .fontSize(16)
-                  .fontWeight(FontWeight.Bold)
-                Blank()
-              }
-              .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-              .width('100%')
+              Header(group.title)
             }
-
+            // 列表
             ForEach(
               group.settings,
               (setting: SettingItem<SettingGroupType>) => {
@@ -92,14 +80,11 @@ export struct More {
                       setting.onClick(
                         setting,
                         () => { },
-
                       )
                     }
                   }
                 })
-              },
-              (setting: SettingItem<SettingGroupType>) => setting.title
-            )
+              }, (setting: SettingItem<SettingGroupType>) => setting.title)
           }
           .backgroundColor($r('app.color.background_color'))
           .borderRadius(16)

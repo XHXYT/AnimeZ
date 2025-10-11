@@ -16,6 +16,7 @@ import SystemBarUtils from '../utils/SystemBarUtils';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
+import { window } from '@kit.ArkUI';
 
 @Observed
 export class VideoDetailViewModel {
@@ -91,6 +92,30 @@ export class VideoDetailViewModel {
       onFullScreenChanged: (isFullScreen: boolean) => {
         this.isFullScreen = isFullScreen;
         this.onFullScreenChangedCallback?.(isFullScreen);
+        const windowClass = AppStorage.get<window.Window>('WindowClass')
+        if (windowClass) {
+          if (!isFullScreen) {
+            // 退出横屏小窗
+            const promise = windowClass.disableLandscapeMultiWindow().catch(() => {
+              console.error(`VideoDetailViewModel..onFullScreenChanged Failed to 获取 windowClass.disableLandscapeMultiWindow promise.`)});
+            promise.then(() => {
+              console.info('VideoDetailViewModel..onFullScreenChanged Succeeded in 退出 multi-window become landscape.');
+            }).catch((err: BusinessError) => {
+              console.error(`VideoDetailViewModel..onFullScreenChanged Failed to 退出 multi-window become landscape. Cause code: ${err.code}, message: ${err.message}`);
+            });
+          } else {
+            // 进入横屏小窗
+            const promise = windowClass.enableLandscapeMultiWindow().catch(() => {
+              console.error(`VideoDetailViewModel..onFullScreenChanged Failed to 获取 windowClass.enableLandscapeMultiWindow promise.`)});
+            promise.then(() => {
+              console.info('VideoDetailViewModel..onFullScreenChanged Succeeded in making multi-window become landscape.');
+            }).catch((err: BusinessError) => {
+              console.error(`VideoDetailViewModel..onFullScreenChanged Failed to make multi-window become landscape. Cause code: ${err.code}, message: ${err.message}`);
+            });
+          }
+        } else {
+          console.error(`VideoDetailViewModel..onFullScreenChanged 未获取WindowClass`)
+        }
       },
       onVideoFitChanged: (videoFit) => videoFit,
       onVideoSizeChange: () => {},

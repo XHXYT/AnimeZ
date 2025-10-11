@@ -15,6 +15,7 @@ export struct MultiVideoPlayer {
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @Link playerManager: IPlayerManager
+  @Link isFullScreen: boolean
 
   aboutToAppear() {
     if (!this.playerManager) {
@@ -38,6 +39,7 @@ export struct MultiVideoPlayer {
         IjkVideoPlayer({ playerManager: this.playerManager })
       }
     }
+    .height(this.isFullScreen ? '100%' : undefined)
     .width('100%')
   }
 }

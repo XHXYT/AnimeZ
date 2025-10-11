@@ -113,12 +113,12 @@ export const HomeBannerBannerMargin = BreakpointFunction<number>({
   ['sm']: 0, ['md']: 12, ['lg']: 64, ['xl']: 64
 })
 
-/**视频详情页初始栅格高度(视频 + 详情)*/
-export const VideoDetailGridColHeight = BreakpointFunction<Length>({
-  ['sm']: "",
-  ['md']: deviceInfo.deviceType === 'tablet' ? '' : '100%',
-  ['lg']: "100%",
-  ['xl']: "100%"
+/**视频详情页初始栅格高度*/
+export const VideoDetailGridColHeight = BreakpointFunction2D<string>({
+  ['sm']: {['hsm']: '', ['hmd']: '', ['hlg']: ''},
+  ['md']: {['hsm']: '100%', ['hmd']: '', ['hlg']: ''},
+  ['lg']: {['hsm']: '100%', ['hmd']: '100%', ['hlg']: '100%'},
+  ['xl']: {['hsm']: '100%', ['hmd']: '100%', ['hlg']: '100%'},
 })
 
 /**

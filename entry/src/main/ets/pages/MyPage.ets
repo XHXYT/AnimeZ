@@ -6,6 +6,7 @@ import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppConfigs } from '../entryability/Settings';
 import { ColorModeManager } from '../utils/ColorModeManager';
+import { Header } from '../components/common/Header';
 
 const TAG: string = 'MyPage'
 const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -212,30 +213,9 @@ export struct MyPage {
   @Builder
   HistoryList() {
     Column() {
-      Row() {
-        Row()
-          .height(14)
-          .width(6)
-          .margin({ right: 2 })
-          .borderRadius(4)
-          .backgroundColor($r('app.color.primary_color'))
-        Text('观看历史')
-          .fontColor($r('app.color.color_text_major'))
-          .fontSize(16)
-          .fontWeight(500)
-        Blank()
-        Image($r("app.media.ic_enter"))
-          .width(24)
-          .height(24)
-          .fillColor('#817977')
-          .objectFit(ImageFit.Contain)
-      }
-      .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-      .width('100%')
-      .onClick(() => {
+      Header('观看历史', () => {
         this.pageStack.pushPathByName("VideoHistoryPage", '')
       })
-
       if (this.items && this.items.length > 0) {
         List() {
           ForEach(this.items, (item: VideoHistoryInfo) => {
@@ -315,4 +295,5 @@ export struct MyPage {
   MoreBuilder() {
     More()
   }
+
 }

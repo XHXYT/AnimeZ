@@ -173,7 +173,39 @@ export default class GenericDataSource implements DataSource {
       const config = this.parserConfig.videoUrl;
       let url = ''
 
-      if (config.urlSelector) {
+      if (config.pattern === 'regex' && config.pattern) {
+        // 使用正则表达式方式提取URL
+        const htmlString = await HttpUtils.getString(link);
+        const match = htmlString.match(new RegExp(config.pattern));
+
+        if (match && match[1]) {
+          let url = match[1];
+
+          // 应用后处理
+          if (config.postProcess) {
+            if (config.postProcess.includes("substringBetween")) {
+              const [start, end] = config.postProcess
+                .replace("substringBetween('", "")
+                .replace("')", "")
+                .split("', '");
+
+              const startIndex = url.indexOf(start) + start.length;
+              const endIndex = url.indexOf(end, startIndex);
+              url = url.substring(startIndex, endIndex);
+            }
+
+            if (config.postProcess.includes("replaceAll")) {
+              const [search, replace] = config.postProcess
+                .replace("replaceAll('", "")
+                .replace("')", "")
+                .split("', '");
+
+              url = url.replace(new RegExp(search, 'g'), replace);
+            }
+          }
+        }
+      } else
+        if (config.urlSelector) {
         // 使用选择器方式提取URL
         const doc = await HttpUtils.getHtml(link);
         url = this.selectAttribute(doc, config.urlSelector);
@@ -208,38 +240,6 @@ export default class GenericDataSource implements DataSource {
         }
 
         Logger.e('tips', `parseVideoUrl final url = ${url}`);
-      } else
-        if (config.urlExtractor === 'regex' && config.pattern) {
-        // 使用正则表达式方式提取URL
-        const htmlString = await HttpUtils.getString(link);
-        const match = htmlString.match(new RegExp(config.pattern));
-
-        if (match && match[1]) {
-          let url = match[1];
-
-          // 应用后处理
-          if (config.postProcess) {
-            if (config.postProcess.includes("substringBetween")) {
-              const [start, end] = config.postProcess
-                .replace("substringBetween('", "")
-                .replace("')", "")
-                .split("', '");
-
-              const startIndex = url.indexOf(start) + start.length;
-              const endIndex = url.indexOf(end, startIndex);
-              url = url.substring(startIndex, endIndex);
-            }
-
-            if (config.postProcess.includes("replaceAll")) {
-              const [search, replace] = config.postProcess
-                .replace("replaceAll('", "")
-                .replace("')", "")
-                .split("', '");
-
-              url = url.replace(new RegExp(search, 'g'), replace);
-            }
-          }
-        }
       }
 
       // 如果存在内嵌提取配置（webview）

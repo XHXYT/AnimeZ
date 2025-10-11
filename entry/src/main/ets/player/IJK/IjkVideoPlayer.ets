@@ -159,34 +159,33 @@ export struct IjkVideoPlayer {
   }
 
   build() {
-    Column() {
-      Stack({ alignContent: Alignment.Center }) {
-        XComponent({
-          type: XComponentType.SURFACE,
-          controller: this.componentController,
-          id: '' + new Date().getTime(),
-          libraryname: 'ijkplayer_napi'
+    Stack({ alignContent: Alignment.Center }) {
+      XComponent({
+        type: XComponentType.SURFACE,
+        controller: this.componentController,
+        id: '' + new Date().getTime(),
+        libraryname: 'ijkplayer_napi'
+      })
+        .onLoad((context: IjkPlayerNapi) => {
+          Logger.e('tips', 'XComponent onLoad')
+
+          this.initIjk(context)
+          this.playerManager?.init(this.player)
         })
-          .onLoad((context: IjkPlayerNapi) => {
-            Logger.e('tips', 'XComponent onLoad')
+        .onDestroy(() => {
+          Logger.e('tips', 'XComponent onDestroy')
+        })
+        .width('100%')
+        .aspectRatio(this.videoAspRatio)
+        .height(this.isFullScreen ? '100%' : undefined)
 
-            this.initIjk(context)
-            this.playerManager?.init(this.player)
-          })
-          .onDestroy(() => {
-            Logger.e('tips', 'XComponent onDestroy')
-          })
-          .width('100%')
-          .aspectRatio(this.videoAspRatio)
-
-        VideoPlayerController({ playerManager: this.playerManager })
-          .width('100%')
-          .height('100%')
-      }
-      .backgroundColor(Color.Black)
-      .width('100%')
-      .aspectRatio(this.aspRatio)
+      VideoPlayerController({ playerManager: this.playerManager })
+        .width('100%')
+        .height('100%')
     }
+    .height(this.isFullScreen ? '100%' : undefined)
+    .backgroundColor(Color.Black)
+    .aspectRatio(this.aspRatio)
     .width('100%')
   }
 

@@ -39,6 +39,7 @@ enum PanelType {
  */
 @Component
 export struct VideoPlayerController {
+
   @State currentTime: string = "00:00";
   @State totalTime: string = "00:00";
   @State progress: number = 0;
@@ -60,6 +61,8 @@ export struct VideoPlayerController {
   @Link playerManager: IPlayerManager
   private showControllerTimer: number = -1;
   @Consume('pageStack') pageStack: NavPathStack
+  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
+  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
@@ -128,52 +131,6 @@ export struct VideoPlayerController {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (this.isLoading) {
-        Stack({ alignContent: Alignment.Center }) {
-          LoadingProgress()
-            .width(48)
-            .height(48)
-            .color(Color.White)
-        }
-        .backgroundColor('#80000000')
-        .borderRadius(16)
-        .padding({ left: 32, right: 32, top: 16, bottom: 16 })
-      }
-
-      // 播放错误
-      Column() {
-        Image($r('app.media.ic_refresh'))
-          .width(32)
-          .height(32)
-          .margin(8)
-          .fillColor(Color.White)
-          .objectFit(ImageFit.Contain)
-        Text('出错了...')
-          .fontColor(Color.White)
-          .fontSize(14)
-      }
-      .visibility(this.playerStatus === PlayerStatus.ERROR ? Visibility.Visible : Visibility.None)
-      .onClick(() => {
-        this.playerManager.start()
-      })
-
-      // 重新播放
-      Column() {
-        Image($r('app.media.ic_refresh'))
-          .width(32)
-          .height(32)
-          .margin(8)
-          .fillColor(Color.White)
-          .objectFit(ImageFit.Contain)
-        Text('重新播放')
-          .fontColor(Color.White)
-          .fontSize(14)
-      }
-      .visibility(this.playerStatus === PlayerStatus.DONE ? Visibility.Visible : Visibility.None)
-      .onClick(() => {
-        this.playerManager.stop()
-        this.playerManager.start()
-      })
 
       if (this.showController) {
         // 控制面板
@@ -190,137 +147,230 @@ export struct VideoPlayerController {
   }
 
   @Builder VideoController() {
-    Stack() {
-      Column() {
-        // 上控制栏
-        Row() {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(28)
-            .fontColor([Color.White])
-            .margin({ left: this.isFullScreen ? 20 : 14 })
+    // 使用 RelativeContainer 绘制控制面板
+    RelativeContainer() {
+      // 上控制栏区
+      Row() {
+        // 返回按钮
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(28)
+          .fontColor([Color.White])
+          .margin({ left: this.isFullScreen ? 20 : 14 })
+          .onClick(() => {
+            if (this.playerManager.isFullScreen()) {
+              this.playerManager.exitFullScreen()
+              return
+            }
+            this.pageStack.pop(true)
+          })
+        Text(this.title)
+          .fontColor(Color.White)
+          .fontSize(14)
+          .fontWeight(500)
+          .layoutWeight(1)
+          .margin({ left: 16 })
+          .align(Alignment.Start)
+        Blank()
+        // TODO 投屏
+        if (this.isFullScreen) {
+          Image($r("app.media.ic_airplay"))
+            .width(24)
+            .height(24)
+            .fillColor(Color.White)
+            .margin({ left: 24 })
+            .objectFit(ImageFit.Contain)
             .onClick(() => {
-              if (this.playerManager.isFullScreen()) {
-                this.playerManager.exitFullScreen()
-                return
-              }
-              this.pageStack.pop(true)
+              ToastUtil.showToast({ message: 'TODO 投屏' })
             })
-          Text(this.title)
+        }
+        // TODO 小窗播放
+        Image($r("app.media.ic_float_window"))
+          .width(24)
+          .height(24)
+          .fillColor(Color.White)
+          .margin({ left: this.isFullScreen ? 24 : 16 })
+          .objectFit(ImageFit.Contain)
+          .onClick(() => {
+            ToastUtil.showToast({ message: 'TODO 小窗播放' })
+          })
+        // 播放设置
+        Image($r("app.media.ic_setting"))
+          .width(25)
+          .height(25)
+          .fillColor(Color.White)
+          .margin({ left: this.isFullScreen ? 24 : 16, right: this.isFullScreen ? 24 : 16 })
+          .objectFit(ImageFit.Contain)
+          .onClick(() => {
+            this.showRightPanel(PanelType.PLAYER_SETTINGS)
+          })
+      }
+      .width('100%')
+      .padding({ top: this.isFullScreen ? 16 : 4 })
+      .visibility(this.isLocked ? Visibility.Hidden : Visibility.Visible)
+      .linearGradient({
+        angle: 180,
+        colors: [['#000000', 0.0], ['#80000000', 0.5], ['#00000000', 1.0]]
+      })
+      .id('topBar') // 上控制栏ID
+      .alignRules({
+        top: { anchor: '__container__', align: VerticalAlign.Top } // 顶部与父容器顶部对齐
+      })
+
+      // 中部左侧控制区域
+      if (this.isFullScreen) {
+        // 锁定控制按钮
+        Image(this.isLocked ? $r('app.media.ic_lock') : $r('app.media.ic_unlock'))
+          .width(44)
+          .height(44)
+          .padding(12)
+          .margin({ left: 16 })
+          .backgroundColor('#80000000')
+          .fillColor(Color.White)
+          .borderRadius(28)
+          .onClick(() => {
+            this.isLocked = !this.isLocked
+          })
+          .alignRules({
+            left: { anchor: '__container__', align: HorizontalAlign.Start },
+            center: { anchor: '__container__', align: VerticalAlign.Center}
+          })
+      }
+
+      // 中部指示区域
+      if (this.isLoading) {
+        // 加载圆圈
+        Column() {
+          LoadingProgress()
+            .width(48)
+            .height(48)
+            .color(Color.White)
+        }
+        .padding({ left: 32, right: 32, top: 16, bottom: 16 })
+        .alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor('#80000000')
+        .borderRadius(16)
+        .alignRules({
+          left: { anchor: '__container__', align: HorizontalAlign.Center },
+          center: { anchor: '__container__', align: VerticalAlign.Center}
+        })
+      }
+      if (this.playerStatus === PlayerStatus.ERROR || this.playerStatus === PlayerStatus.DONE) {
+        // 播放错误 & 重新播放
+        Column() {
+          Image($r('app.media.ic_refresh'))
+            .width(32)
+            .height(32)
+            .margin(8)
+            .fillColor(Color.White)
+            .objectFit(ImageFit.Contain)
+          Text(this.playerStatus === PlayerStatus.DONE ? '重新播放' : '出错了...')
             .fontColor(Color.White)
             .fontSize(14)
-            .fontWeight(500)
-            .layoutWeight(1)
-            .margin({ left: 16 })
-            .align(Alignment.Start)
-          Blank()
-
-
-          if (this.isFullScreen) {
-            Image($r("app.media.ic_airplay"))
-              .width(24)
-              .height(24)
-              .fillColor(Color.White)
-              .margin({ left: 24 })
-              .objectFit(ImageFit.Contain)
-              .onClick(() => {
-                ToastUtil.showToast({ message: 'TODO 投屏' })
-              })
-          }
-          Image($r("app.media.ic_float_window"))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
-            .margin({ left: this.isFullScreen ? 24 : 16 })
-            .objectFit(ImageFit.Contain)
-            .onClick(() => {
-              ToastUtil.showToast({ message: 'TODO 小窗播放' })
-            })
-          Image($r("app.media.ic_setting"))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
-            .margin({ left: this.isFullScreen ? 24 : 16, right: this.isFullScreen ? 24 : 16 })
-            .objectFit(ImageFit.Contain)
-            .onClick(() => {
-              this.showRightPanel(PanelType.PLAYER_SETTINGS)
-            })
         }
-        .width('100%')
-        .padding({ top: this.isFullScreen ? 16 : 4 })
-        .visibility(this.isLocked ? Visibility.Hidden : Visibility.Visible)
+        .alignRules({
+          left: { anchor: '__container__', align: HorizontalAlign.Center },
+          center: { anchor: '__container__', align: VerticalAlign.Center}
+        })
+        .onClick(() => {
+          this.playerManager.start()
+        })
+      }
+
+      // 中部右侧控制区域
+      if (this.widthBp > 2) {
+        // 退出全屏按钮（大于md时显示）
+        Column() {
+          SymbolGlyph(this.isFullScreen ? $r('sys.symbol.chevron_left') : $r('sys.symbol.chevron_right'))
+            .fontSize(28)
+            .fontColor([Color.White])
+        }
+        .width(39)
+        .height(129)
+        .borderRadius({
+          topLeft: 20,
+          bottomLeft: 20
+        })
         .linearGradient({
           angle: 180,
-          colors: [['#000000', 0.0], ['#80000000', 0.5], ['#00000000', 1.0]]
+          direction: GradientDirection.Right,
+          colors: [['#85000000', 0.0], ['#73000000', 0.5]]
         })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .alignRules({
+          right: { anchor: '__container__', align: HorizontalAlign.End },
+          center: { anchor: '__container__', align: VerticalAlign.Center}
+        })
+        .onClick(() => {
+          if (this.isFullScreen) {
+            this.playerManager.exitFullScreen()
+          } else {
+            this.playerManager.enterFullScreen()
+          }
+        })
+      }
 
-        if (this.isFullScreen) {
-          // 控制锁定
-          Image(this.isLocked ? $r('app.media.ic_lock') : $r('app.media.ic_unlock'))
-            .width(44)
-            .height(44)
-            .padding(12)
-            .margin({ left: 16 })
-            .backgroundColor('#80000000')
-            .fillColor(Color.White)
-            .borderRadius(28)
-            .alignSelf(ItemAlign.Start)
-            .onClick(() => {
-              this.isLocked = !this.isLocked
-            })
-        }
-
-        // 下控制栏
-        Row() {
-          Image(
-              (this.playerStatus == PlayerStatus.PLAY)
-              ? $r("app.media.ic_pause") : $r("app.media.ic_play")
-          )
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
-            .margin({ left: this.isFullScreen ? 16 : 12 })
-            .objectFit(ImageFit.Contain)
-            .onClick(() => {
-              if (this.playerStatus == PlayerStatus.PLAY) {
-                this.playerManager.pause()
-              } else {
-                this.playerManager.start()
-              }
-            })
-
-          Text(this.currentTime).fontSize(12).margin({ left: 12, right: 6 }).fontColor(Color.White)
-          Slider({
-            value: this.progress,
-            min: 0,
-            max: 100,
-            step: 1,
-            style: SliderStyle.OutSet
+      // 下控制栏区域
+      Row() {
+        Image((this.playerStatus == PlayerStatus.PLAY) ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
+          .width(24)
+          .height(24)
+          .fillColor(Color.White)
+          .margin({ left: this.isFullScreen ? 16 : 12 })
+          .objectFit(ImageFit.Contain)
+          .onClick(() => {
+            if (this.playerStatus == PlayerStatus.PLAY) {
+              this.playerManager.pause()
+            } else {
+              this.playerManager.start()
+            }
           })
-            .layoutWeight(1)
-            .blockColor($r('app.color.primary_color_accent'))
-            .trackColor(Color.White)
-            .trackThickness(2)
-            .selectedColor($r('app.color.primary_color'))
-              //                .showSteps(true)
-              //                .showTips(true)
-            .enabled(this.slideEnable)
-            .onChange((value: number, mode: SliderChangeMode) => {
-              Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value + ' typeof mode=' + (typeof mode)
+
+        Text(this.currentTime).fontSize(12).margin({ left: 12, right: 6 }).fontColor(Color.White)
+        Slider({
+          value: this.progress,
+          min: 0,
+          max: 100,
+          step: 1,
+          style: SliderStyle.OutSet
+        })
+          .layoutWeight(1)
+          .blockColor($r('app.color.primary_color_accent'))
+          .trackColor(Color.White)
+          .trackThickness(2)
+          .selectedColor($r('app.color.primary_color'))
+          .enabled(this.slideEnable)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value + ' typeof mode=' + (typeof mode)
               + ' result=' + (mode == SliderChangeMode.End || mode == SliderChangeMode.Click)
               + ' result2=' + (mode == SliderChangeMode.Click) + ' click=' + SliderChangeMode.Click + ' result3=' + (mode === SliderChangeMode.Click))
-              if (mode == SliderChangeMode.End || mode == 3) {
-                this.progress = value
-                let seekValue = value / 100 * (this.playerManager.getDuration() as number);
-                Logger.e('tips', 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
+            if (mode == SliderChangeMode.End || mode == 3) {
+              this.progress = value
+              let seekValue = value / 100 * (this.playerManager.getDuration() as number);
+              Logger.e('tips', 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
 
-                this.setProgress(this.playerManager.getDuration() as number, seekValue)
+              this.setProgress(this.playerManager.getDuration() as number, seekValue)
 
-                this.playerManager.seekTo(seekValue);
-              }
-            })
-          Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
+              this.playerManager.seekTo(seekValue);
+            }
+          })
+        Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
 
-          Text(`${this.currentSpeed}X`)
+        Text(`${this.currentSpeed}X`)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .borderWidth(1)
+          .borderColor(Color.White)
+          .borderRadius(4)
+          .margin({ right: 12 })
+          .fontSize(12)
+          .fontColor(Color.White)
+          .onClick(() => {
+            this.showRightPanel(PanelType.SPEED)
+          })
+
+        if (this.isFullScreen) {
+          Text('选集')
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
             .borderWidth(1)
             .borderColor(Color.White)
@@ -329,45 +379,36 @@ export struct VideoPlayerController {
             .fontSize(12)
             .fontColor(Color.White)
             .onClick(() => {
-              this.showRightPanel(PanelType.SPEED)
+              this.showRightPanel(PanelType.EPISODES)
             })
-
-          if (this.isFullScreen) {
-            Text('选集')
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .borderWidth(1)
-              .borderColor(Color.White)
-              .borderRadius(4)
-              .margin({ right: 12 })
-              .fontSize(12)
-              .fontColor(Color.White)
-              .onClick(() => {
-                this.showRightPanel(PanelType.EPISODES)
-              })
-          } else {
-            Image($r("app.media.ic_fullscreen_enter"))
-              .width(24)
-              .height(24)
-              .fillColor(Color.White)
-              .margin({ right: 12 })
-              .objectFit(ImageFit.Contain)
-              .onClick(() => {
-                // 全屏
-                this.playerManager.enterFullScreen()
-              })
-          }
         }
-        .padding({ top: this.isFullScreen ? 10 : 4, bottom: this.isFullScreen ? 10 : 4 })
-        .width('100%')
-        .visibility(this.isLocked ? Visibility.Hidden : Visibility.Visible)
-        .linearGradient({
-          angle: 180,
-          colors: [['#00000000', 0.0], ['#80000000', 0.5], ['#ff000000', 1.0]]
-        })
+        if (this.widthBp <= 2) {
+          // 全屏按钮（小于等于md时显示）
+          Image(!this.isFullScreen ? $r("app.media.ic_fullscreen_enter") : $r("app.media.not_fullscreen"))
+            .width(!this.isFullScreen ? 24 : 20)
+            .height(!this.isFullScreen ? 24 : 20)
+            .fillColor(Color.White)
+            .margin({ right: 12 })
+            .objectFit(ImageFit.Contain)
+            .onClick(() => {
+              if (this.isFullScreen) {
+                this.playerManager.exitFullScreen()
+              } else {
+                this.playerManager.enterFullScreen()
+              }
+            })
+        }
       }
-      .justifyContent(FlexAlign.SpaceBetween)
+      .padding({ top: this.isFullScreen ? 10 : 4, bottom: this.isFullScreen ? 10 : 4 })
       .width('100%')
-      .height('100%')
+      .visibility(this.isLocked ? Visibility.Hidden : Visibility.Visible)
+      .linearGradient({
+        angle: 180,
+        colors: [['#00000000', 0.0], ['#80000000', 0.5], ['#ff000000', 1.0]]
+      })
+      .alignRules({
+        bottom: { anchor: '__container__', align: VerticalAlign.Bottom } // 底部对齐父容器底部
+      })
     }
     .width('100%')
     .height('100%')
@@ -386,6 +427,7 @@ export struct VideoPlayerController {
         this.showControllerTimer = -1
       }
     })
+
   }
 
   @Builder RightPanel() {
@@ -598,7 +640,7 @@ export struct VideoPlayerController {
   }
 
   private hideRightPanel() {
-    animateTo(
+    ToastUtil.animateTo(
       {
         duration: 320, // 动画时长
         curve: Curve.Ease, // 动画曲线
@@ -637,4 +679,5 @@ export struct VideoPlayerController {
     || this.playerStatus == PlayerStatus.INITIALIZED
     || this.playerStatus == PlayerStatus.PREPARED
   }
+
 }

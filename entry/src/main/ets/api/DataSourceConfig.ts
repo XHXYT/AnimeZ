@@ -57,8 +57,7 @@ export interface DetailConfig {
 export interface VideoUrlConfig {
   urlSelector?: string;
   // attribute?: string; // 指定提取视频链接的URL属性名
-  urlExtractor?: 'regex' | 'javascript';
-  pattern?: string;
+  pattern?: 'regex' | 'javascript';
   postProcess?: string; // 后处理
   iframeSelector?: string
 }

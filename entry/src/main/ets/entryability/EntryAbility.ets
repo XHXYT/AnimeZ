@@ -70,6 +70,7 @@ export default class EntryAbility extends UIAbility {
                 const UIContext = data.getUIContext()
                 this.uiContext = UIContext
                 AppStorage.setOrCreate('UIContext', UIContext)
+                AppStorage.setOrCreate<window.Window>('WindowClass', data)
                 // 初始化通知
                 ToastUtil.initContext(UIContext)
                 // 设备宽度断点获取
@@ -160,7 +161,7 @@ export default class EntryAbility extends UIAbility {
                 const rect = properties.windowRect
                 let WindowHeight = this.uiContext?.px2vp(rect.height)
                 let WindowWidth = this.uiContext?.px2vp(rect.width)
-                hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d px 宽度：%{public}i px', rect.height, rect.width)
+                hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', rect.height, rect.width)
                 AppStorage.setOrCreate('windowHeight', WindowHeight)
                 AppStorage.setOrCreate('windowWidth', WindowWidth)
                 // 监听窗口大小变化
@@ -172,6 +173,7 @@ export default class EntryAbility extends UIAbility {
                         WindowHeight = this.uiContext?.px2vp(data.height)!
                         AppStorage.setOrCreate('windowWidth', WindowWidth)
                         AppStorage.setOrCreate('windowHeight', WindowHeight) // 980px 约等于 512vp
+                        hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', WindowHeight, WindowWidth)
                         // 动态监听高度断点
                         this.onHeightBpChange(WindowHeight, WindowWidth)
                     })

@@ -1,6 +1,6 @@
 // VideoDetailPage.ets
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { PlayerStatus } from '../entity/VideoPlayer/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
@@ -23,6 +23,7 @@ import SystemBarUtils from '../utils/SystemBarUtils';
 import EpisodeList from '../entity/EpisodeList';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
+import { Header } from '../components/common/Header';
 
 // 系统路由
 @Builder
@@ -36,6 +37,7 @@ struct VideoDetailPage {
 
   @State state: number = 0
   @State errorMessage: string = ''
+  @State isFullScreen: boolean = false
 
   @Consume('pageStack') pageStack: NavPathStack;
   @StorageLink('showWebView') showWebView: boolean = false
@@ -50,7 +52,7 @@ struct VideoDetailPage {
   @Consume @Watch('onPhoneLandscape') isPhoneLandscape: boolean;
   @StorageLink('currentColorMode') currentMode: number = ThemeColorMode.SYSTEM
 
-  @State @Watch('onViewModelCHange') viewModel: VideoDetailViewModel = new VideoDetailViewModel(
+  @State @Watch('onViewModelChange') viewModel: VideoDetailViewModel = new VideoDetailViewModel(
     new PlayerManagerImpl(),
     new AppConfigs()
   )
@@ -64,10 +66,14 @@ struct VideoDetailPage {
     this.viewModel = new VideoDetailViewModel(this.playerManager, this.appSettings)
     this.viewModel.setOnStatusChangedCallback((status: number) => {
       // 处理状态变化
+      if (status == PlayerStatus.ERROR) {
+        this.errorMessage = this.viewModel.errorMessage
+      }
     });
 
     this.viewModel.setOnFullScreenChangedCallback((isFullScreen: boolean) => {
       // 处理全屏变化
+      this.isFullScreen = isFullScreen
     });
 
     this.viewModel.setOnProgressChangeCallback((totalTime: number, currentTime: number) => {
@@ -83,9 +89,8 @@ struct VideoDetailPage {
     this.viewModel.onPhoneLandscape(this.isPhoneLandscape);
   }
 
-  onViewModelCHange() {
+  onViewModelChange() {
     this.state = this.viewModel.state
-    this.errorMessage = this.viewModel.errorMessage
     this.playerManager = this.viewModel.playerManager
   }
 
@@ -173,25 +178,25 @@ struct VideoDetailPage {
   }
 
   @Builder Content() {
-    GridRow() {
+    GridRow({ columns: 12 }) {
       // 播放器区
       GridCol({
-        span: this.viewModel.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
+        span: this.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
         order: 1
       }) {
         Stack() {
-          MultiVideoPlayer({ playerManager: this.playerManager })
+          MultiVideoPlayer({ playerManager: this.playerManager, isFullScreen: this.isFullScreen })
         }
         .width('100%')
         .backgroundColor(Color.Black)
         .alignContent(Alignment.Center)
-        .padding({ top: this.viewModel.isFullScreen ? 0 : this.topHeight - 10 })
-        .height(VideoDetailGridColHeight(this.widthBp))
+        .padding({ top: this.isFullScreen ? 0 : this.topHeight - 10 })
+        .height(this.isFullScreen ? '100%' : VideoDetailGridColHeight(this.widthBp, this.heightBp))
       }
 
       // 视频详情区
       GridCol({
-        span: this.viewModel.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
+        span: this.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
         order: 2
       }) {
         if (this.viewModel.videoDetailInfo) {
@@ -209,15 +214,19 @@ struct VideoDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
-          .padding({ top: this.viewModel.isFullScreen ? 0 : this.topHeight - 10 })
+          .padding({ top: this.isFullScreen ? 0 : this.topHeight - 10 })
         }
       }.layoutWeight(1)
+
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.background_color'))
   }
 
+  /**
+   * 视频详情整体框架
+   */
   @Builder RootContent() {
     Column() {
       Scroll() {
@@ -313,6 +322,9 @@ struct VideoDetailPage {
     .height('100%')
   }
 
+  /**
+   * 视频详情二级界面根
+   */
   @Builder SecondaryContent() {
     Column() {
       Row() {
@@ -349,6 +361,9 @@ struct VideoDetailPage {
     .height('100%')
   }
 
+  /**
+   * 视频详情二级界面
+   */
   @Builder VideoDetail() {
     Column() {
       Row() {
@@ -392,21 +407,21 @@ struct VideoDetailPage {
       .padding(16)
 
       if (this.viewModel.videoDetailInfo.desc) {
-        this.Header('简介')
+        Header('简介')
         Text(this.viewModel.videoDetailInfo.desc)
           .fontColor($r('app.color.color_text_normal'))
           .fontSize(12)
           .padding(16)
       }
       if (this.viewModel.videoDetailInfo.protagonist) {
-        this.Header('角色声优')
+        Header('角色声优')
         Text(this.viewModel.videoDetailInfo.protagonist)
           .fontColor($r('app.color.color_text_normal'))
           .fontSize(12)
           .padding(16)
       }
       if (this.viewModel.videoDetailInfo.director) {
-        this.Header('制作信息')
+        Header('制作信息')
         Text(this.viewModel.videoDetailInfo.director)
           .fontColor($r('app.color.color_text_normal'))
           .fontSize(12)
@@ -418,10 +433,13 @@ struct VideoDetailPage {
     .height('100%')
   }
 
+  /**
+   * 视频剧集列表
+   */
   @Builder EpisodeList() {
     ForEach(this.viewModel.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
       Column() {
-        this.Header(episodeList.title)
+        Header(episodeList.title)
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
           ForEach(episodeList.episodes, (item: EpisodeInfo, episodeIndex: number) => {
             Text(item.title)
@@ -443,7 +461,7 @@ struct VideoDetailPage {
               )
               .borderColor($r('app.color.background_color_accent'))
               .margin({ bottom: 8, right: '2%' })
-              .width(this.viewModel.isFullScreen ? '17%' : '18%')
+              .width(this.isFullScreen ? '17%' : '18%')
               .maxLines(1)
               .onClick(() => {
                 if (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex) {
@@ -465,9 +483,12 @@ struct VideoDetailPage {
     })
   }
 
+  /**
+   * 猜你喜欢
+   */
   @Builder GuessYouLike() {
     Column() {
-      this.Header('猜你喜欢')
+      Header('猜你喜欢')
       VideoList({
         videoList: this.viewModel.videoDetailInfo.recommends,
         scrollable: false
@@ -478,6 +499,9 @@ struct VideoDetailPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  /**
+   * 收藏、缓存、分享按钮
+   */
   @Builder ButtonGroup() {
     Row() {
       // 收藏
@@ -510,6 +534,9 @@ struct VideoDetailPage {
     .width('100%')
   }
 
+  /**
+   * 按钮构建-图标 + 文字 上下排列
+   */
   @Builder IconWithText(src: ResourceStr, text: ResourceStr, onClick?: (event?: ClickEvent) => void) {
     Column() {
       Image(src)
@@ -531,23 +558,6 @@ struct VideoDetailPage {
     .borderWidth(1.5)
     .borderColor($r('app.color.background_color_accent'))
     .onClick(onClick)
-  }
-
-  @Builder Header(title: string) {
-    Row() {
-      Row()
-        .height(14)
-        .width(6)
-        .margin({ right: 2 })
-        .borderRadius(4)
-        .backgroundColor($r('app.color.primary_color'))
-      Text(title)
-        .fontColor($r('app.color.color_text_major'))
-        .fontSize(16)
-        .fontWeight(500)
-    }
-    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-    .width('100%')
   }
 
 }

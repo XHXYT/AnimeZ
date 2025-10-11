@@ -175,13 +175,16 @@ class AVPlayerWrapper {
  */
 @Component
 export struct AVideoPlayer {
-  @State videoAspRatio: number = DEFAULT_ASPECT
-  @State aspRatio: number = DEFAULT_ASPECT
-  @State playerStatus: number = PlayerStatus.IDLE
-  @State isFullScreen: boolean = false
+
   @State videoUrl: string = ''
+  @State isFullScreen: boolean = false
+
+  @State aspRatio: number = DEFAULT_ASPECT
+  @State videoAspRatio: number = DEFAULT_ASPECT
+  @State playerStatus: number = PlayerStatus.IDLE
+  private originalVideoAspRatio: number = DEFAULT_ASPECT
   @State videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
-  private originalVideoAspRatio: number = DEFAULT_ASPECT;
+
   private readonly componentController: XComponentController = new XComponentController()
   @Link playerManager: IPlayerManager
   private timer: number = -1;
@@ -283,40 +286,39 @@ export struct AVideoPlayer {
   }
 
   build() {
-    Column() {
-      Stack({ alignContent: Alignment.Center }) {
-        XComponent({
-          type: XComponentType.SURFACE,
-          controller: this.componentController,
-          id: 'xcomponentId',
-          libraryname: ''
+    Stack({ alignContent: Alignment.Center }) {
+      XComponent({
+        type: XComponentType.SURFACE,
+        controller: this.componentController,
+        id: 'xcomponentId',
+        libraryname: ''
+      })
+        .onLoad((context) => {
+          const surfaceId = this.componentController.getXComponentSurfaceId()
+          Logger.e('tips', `'AVPlayer XComponent onLoad surfaceId = ${surfaceId}`)
+          media.createAVPlayer()
+            .then((player) => {
+              const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
+              avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
+            })
+            .catch(() => {
+              console.error(`AVPlayer XComponent 加载失败`)
+            })
         })
-          .onLoad((context) => {
-            const surfaceId = this.componentController.getXComponentSurfaceId()
-            Logger.e('tips', `'AVPlayer XComponent onLoad surfaceId = ${surfaceId}`)
-            media.createAVPlayer()
-              .then((player) => {
-                const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
-                avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
-              })
-              .catch(() => {
-                console.error(`AVPlayer XComponent 加载失败`)
-              })
-          })
-          .onDestroy(() => {
-            Logger.e('tips', 'AVPlayer XComponent onDestroy')
-          })
-          .width('100%')
-          .aspectRatio(this.videoAspRatio)
+        .onDestroy(() => {
+          Logger.e('tips', 'AVPlayer XComponent onDestroy')
+        })
+        .width('100%')
+        .aspectRatio(this.videoAspRatio)
+        .height(this.isFullScreen ? '100%' : undefined)
 
-        VideoPlayerController({ playerManager: this.playerManager })
-          .width('100%')
-          .height('100%')
-      }
-      .backgroundColor(Color.Black)
-      .width('100%')
-      .aspectRatio(this.aspRatio)
+      VideoPlayerController({ playerManager: this.playerManager })
+        .width('100%')
+        .height('100%')
     }
+    .height(this.isFullScreen ? '100%' : undefined)
+    .backgroundColor(Color.Black)
+    .aspectRatio(this.aspRatio)
     .width('100%')
   }
 }

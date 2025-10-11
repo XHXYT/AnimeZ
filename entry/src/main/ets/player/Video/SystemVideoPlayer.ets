@@ -178,70 +178,69 @@ export struct SystemVideoPlayer {
 
 
   build() {
-    Column() {
-      Stack({ alignContent: Alignment.Center }) {
-        // 视频组件
-        Video({ src: this.videoUrl, currentProgressRate: this.videoSpeed, controller: this.controller })
-          .width('100%')
-          .controls(false)
-          .autoPlay(true)
-          .objectFit(this.videoFit)
-          .aspectRatio(this.videoAspRatio)
-          .onStart(() => {
-            Logger.e('tips', 'onStart')
-            this.playerManager?.setStatus(PlayerStatus.PLAY)
-          })
-          .onError(() => {
-            Logger.e('tips', 'onError')
-            this.playerManager?.setStatus(PlayerStatus.ERROR)
-          })
-          .onPrepared((e) => {
-            Logger.e('tips', 'onPrepared')
-            this.playerManager?.setStatus(PlayerStatus.PREPARED)
-            this.playerManager?.notifyDuration(e.duration * 1000)
-          })
-          .onPause(() => {
-            let status = this.playerManager?.getStatus()
-            Logger.e('tips', 'onPause currentStatus=' + status)
-            if (status == PlayerStatus.ERROR || status == PlayerStatus.STOP) {
-              return
-            }
-            if (!this.playerManager?.isPrepared()) {
+    Stack({ alignContent: Alignment.Center }) {
+      // 视频组件
+      Video({ src: this.videoUrl, currentProgressRate: this.videoSpeed, controller: this.controller })
+        .width('100%')
+        .autoPlay(true)
+        .controls(false)
+        .objectFit(this.videoFit)
+        .aspectRatio(this.videoAspRatio)
+        .height(this.isFullScreen ? '100%' : undefined)
+        .onStart(() => {
+          Logger.e('tips', 'onStart')
+          this.playerManager?.setStatus(PlayerStatus.PLAY)
+        })
+        .onError(() => {
+          Logger.e('tips', 'onError')
+          this.playerManager?.setStatus(PlayerStatus.ERROR)
+        })
+        .onPrepared((e) => {
+          Logger.e('tips', 'onPrepared')
+          this.playerManager?.setStatus(PlayerStatus.PREPARED)
+          this.playerManager?.notifyDuration(e.duration * 1000)
+        })
+        .onPause(() => {
+          let status = this.playerManager?.getStatus()
+          Logger.e('tips', 'onPause currentStatus=' + status)
+          if (status == PlayerStatus.ERROR || status == PlayerStatus.STOP) {
+            return
+          }
+          if (!this.playerManager?.isPrepared()) {
 
-            } else {
-              if (status == PlayerStatus.PLAY) {
-                // 播放或缓冲时可以暂停视频
-                this.playerManager.setStatus(PlayerStatus.PAUSE)
-              }
+          } else {
+            if (status == PlayerStatus.PLAY) {
+              // 播放或缓冲时可以暂停视频
+              this.playerManager.setStatus(PlayerStatus.PAUSE)
             }
-          })
-          .onSeeking((e) => {
-            // TODO seek时没有回调该函数？
-            Logger.e('tips', 'onSeeking time=' + e.time)
-          })
-          .onSeeked((e) => {
-            // TODO seek时没有回调该函数？
-            Logger.e('tips', 'onSeeked time=' + e.time)
-          })
-          .onFinish(() => {
-            Logger.e('tips', 'onFinish')
-            this.playerManager?.setStatus(PlayerStatus.DONE)
-          })
-          .onUpdate((e) => {
-            Logger.e('tips', 'onUpdate time=' + e.time + ' status=' + this.playerManager?.getStatus())
-            this.checkPlayingStatus()
-            this.playerManager?.notifyCurrentTime(e.time * 1000)
-          })
-        if (this.playerManager) {
-          VideoPlayerController({ playerManager: this.playerManager })
-            .width('100%')
-            .height('100%')
-        }
+          }
+        })
+        .onSeeking((e) => {
+          // TODO seek时没有回调该函数？
+          Logger.e('tips', 'onSeeking time=' + e.time)
+        })
+        .onSeeked((e) => {
+          // TODO seek时没有回调该函数？
+          Logger.e('tips', 'onSeeked time=' + e.time)
+        })
+        .onFinish(() => {
+          Logger.e('tips', 'onFinish')
+          this.playerManager?.setStatus(PlayerStatus.DONE)
+        })
+        .onUpdate((e) => {
+          Logger.e('tips', 'onUpdate time=' + e.time + ' status=' + this.playerManager?.getStatus())
+          this.checkPlayingStatus()
+          this.playerManager?.notifyCurrentTime(e.time * 1000)
+        })
+      if (this.playerManager) {
+        VideoPlayerController({ playerManager: this.playerManager })
+          .width('100%')
+          .height('100%')
       }
-      .backgroundColor(Color.Black)
-      .width('100%')
-      .aspectRatio(this.aspRatio)
     }
+    .height(this.isFullScreen ? '100%' : undefined)
+    .backgroundColor(Color.Black)
+    .aspectRatio(this.aspRatio)
     .width('100%')
   }
 

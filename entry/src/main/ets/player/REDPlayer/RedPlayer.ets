@@ -242,36 +242,35 @@ export struct RedVideoPlayer {
   }
 
   build() {
-    Column() {
-      Stack({ alignContent: Alignment.Center }) {
-        // STEP-2: Add and config player render view
-        XComponent({
-          id: this.xComponentController.getSurfaceId(),
-          type: this.xComponentController.getSurfaceType(),
-          libraryname: this.xComponentController.getLibraryName(),
-          controller: this.xComponentController
+    Stack({ alignContent: Alignment.Center }) {
+      // STEP-2: Add and config player render view
+      XComponent({
+        id: this.xComponentController.getSurfaceId(),
+        type: this.xComponentController.getSurfaceType(),
+        libraryname: this.xComponentController.getLibraryName(),
+        controller: this.xComponentController
+      })
+        .onLoad(() => {
+          Logger.i('RedVideoPlayer', 'XComponent 加载中');
+          // setSurfaceId to player after XComponent onLoad
+          if (this.player) {
+            this.player.setSurfaceId(this.xComponentController.getSurfaceId());
+          }
         })
-          .onLoad(() => {
-            Logger.i('RedVideoPlayer', 'XComponent 加载中');
-            // setSurfaceId to player after XComponent onLoad
-            if (this.player) {
-              this.player.setSurfaceId(this.xComponentController.getSurfaceId());
-            }
-          })
-          .onDestroy(() => {
-            Logger.i('RedVideoPlayer', 'XComponent onDestroy');
-          })
-          .width('100%')
-          .aspectRatio(this.videoAspRatio)
+        .onDestroy(() => {
+          Logger.i('RedVideoPlayer', 'XComponent onDestroy');
+        })
+        .width('100%')
+        .aspectRatio(this.videoAspRatio)
+        .height(this.isFullScreen ? '100%' : undefined)
 
-        VideoPlayerController({ playerManager: this.playerManager })
-          .width('100%')
-          .height('100%')
-      }
-      .backgroundColor(Color.Black)
-      .width('100%')
-      .aspectRatio(this.aspRatio)
+      VideoPlayerController({ playerManager: this.playerManager })
+        .width('100%')
+        .height('100%')
     }
+    .height(this.isFullScreen ? '100%' : undefined)
+    .backgroundColor(Color.Black)
+    .aspectRatio(this.aspRatio)
     .width('100%')
   }
 

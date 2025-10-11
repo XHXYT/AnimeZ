@@ -3,7 +3,7 @@ import { IPlayer } from './IPlayer';
 import EpisodeInfo from '../EpisodeInfo';
 
 export enum PlayerStatus {
-  IDLE = 0,
+  IDLE = 0, // 加载中
   INITIALIZED = 1,
   PREPARED = 2,
   PLAY = 4,

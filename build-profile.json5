@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001B980961EF70DF689FB36B5613B58AFA572137F7A3F97B93F97B6A24E83256D7AAD65CCC33055C83",
-          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p7b",
+          "storeFile": "D:/HUAWEI/key/AnimeZ/animez.p12",
+          "storePassword": "0000001BBA477E69C3926188ABFA7B2871209535B9A55FDE770CA65FCE448B3774EA4618700E96CC36C420",
+          "keyAlias": "ya",
+          "keyPassword": "0000001B3CA1D757555648DB96F2D0CAD9AC9FBC293191424467E214D708C6D9D958D789BFD3E5DF310F4E",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_AnimeZ_Xz79OCx3kVZcE0divE9pIvvuYskM52G2KknzckEP6Zw=.p12",
-          "storePassword": "0000001B1D7E96721691BA34F27B72D3F5BA352C8BC2F97800FE90A896E8AF7E2500628E52585FE5CD972A"
+          "profile": "D:/HUAWEI/key/AnimeZ/animezDebug.p7b",
+          "certpath": "D:/HUAWEI/key/AnimeZ/ya-debug.cer"
         }
       }
     ],
@@ -29,21 +29,21 @@
         "targetSdkVersion": "5.0.5(17)"
       }
     ],
-    "capabilities": [
-      {
-        "bundleName": "org.z.anime",
-        "config": [
-          {
-            "name": "Device status detection",
-            "capability": "com.huawei.service.device_security.device_verify"
-          },
-          {
-            "name": "Safety Detect",
-            "capability": "com.huawei.service.device_security.safety_detect"
-          }
-        ]
-      }
-    ]
+    //    "capabilities": [
+    //      {
+    //        "bundleName": "org.z.anime",
+    //        "config": [
+    //          {
+    //            "name": "Device status detection",
+    //            "capability": "com.huawei.service.device_security.device_verify"
+    //          },
+    //          {
+    //            "name": "Safety Detect",
+    //            "capability": "com.huawei.service.device_security.safety_detect"
+    //          }
+    //        ]
+    //      }
+    //    ]
   },
   "modules": [
     {
