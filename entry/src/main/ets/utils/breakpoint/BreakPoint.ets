@@ -94,6 +94,12 @@ export const VideoListColumnsTemplate = BreakpointFunction<string>({
   ['lg']: "1fr 1fr 1fr 1fr 1fr",
   ['xl']: "1fr 1fr 1fr 1fr 1fr 1fr"
 })
+export const VideoListColumnsTemplate2 = BreakpointFunction<string>({
+  ['sm']: "1fr 1fr 1fr",
+  ['md']: "1fr 1fr 1fr",
+  ['lg']: "1fr 1fr 1fr",
+  ['xl']: "1fr 1fr 1fr 1fr"
+})
 
 /**视频目录列表Grid列数*/
 export const VideoCategoryColumnsTemplate = BreakpointFunction<string>({

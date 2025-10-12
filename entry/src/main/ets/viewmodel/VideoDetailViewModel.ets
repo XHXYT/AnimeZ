@@ -168,7 +168,7 @@ export class VideoDetailViewModel {
     try {
       // 获取视频详情
       console.log(`VideoDetailViewModel.playVideo 等待获取视频详情的链接，url：${this.url}`)
-      const info = await dataSourceManager.getVideoDetailInfo(this.url)
+      const info = await dataSourceManager.getVideoDetailInfo(this.url, this.appSettings.episodes_order)
       this.videoDetailInfo = info;
       console.log(`VideoDetailViewModel.playVideo 获取视频详情成功，info：${JSON.stringify(this.videoDetailInfo, null, 2)}`)
       // 更新视频信息

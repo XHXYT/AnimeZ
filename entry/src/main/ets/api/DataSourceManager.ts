@@ -238,7 +238,7 @@ class DataSourceManager {
   /**
    * 获取视频详情
    */
-  async getVideoDetailInfo(url: string): Promise<VideoDetailInfo> {
+  async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
     const source = this.identifyDataSourceByUrl(url);
 
     if (!source) {
@@ -250,7 +250,7 @@ class DataSourceManager {
     }
 
     try {
-      return await source.getVideoDetailInfo(url);
+      return await source.getVideoDetailInfo(url, order);
     } catch (error) {
       Logger.e('tips', `DataSourceManager.getVideoDetailInfo Failed to get video detail from ${source.getKey()}: ${error.message}`);
       throw error;

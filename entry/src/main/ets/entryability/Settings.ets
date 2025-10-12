@@ -38,6 +38,10 @@ export class AppConfigs {
    * 视频目录页列表类型
    */
   category_UI_type: number = 0
+  /**
+   * 视频剧集排列顺序
+   */
+  episodes_order: 'asc' | 'desc' = 'asc'
 
   constructor() {
   }
@@ -52,8 +56,13 @@ export class AppSettings {
 
   // 初始化
   static async init() {
-    const packageInfo = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
-    AppSettings.versionName = packageInfo.versionName
+    if (canIUse("SystemCapability.BundleManager.BundleFramework.Core")) {
+      const packageInfo =
+        await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
+      AppSettings.versionName = packageInfo.versionName
+    } else {
+      console.error(`当前设备不支持包名查询 SystemCapability.BundleManager.BundleFramework.Core`)
+    }
     PersistentStorage.persistProp("AppSettings", new AppConfigs())
   }
 

@@ -19,6 +19,7 @@ import { AnyNode, HtmlTag } from '../thirdpart/htmlsoup/parse';
 import {
   CategoryConfig, EpisodeConfig, ParserConfig, RecommendConfig,
   SelectorConfig, VideoConfig } from './DataSourceConfig';
+import { sortEpisodesByNumber } from '../utils/SortUtils';
 
 
 export default class GenericDataSource implements DataSource {
@@ -133,7 +134,7 @@ export default class GenericDataSource implements DataSource {
     return videoList;
   }
 
-  async getVideoDetailInfo(url: string): Promise<VideoDetailInfo> {
+  async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
     try {
       console.log(`GenericDataSource.getVideoDetailInfo 等待加载的链接：${url}`)
       const doc = await this.parseHtml(url);
@@ -143,7 +144,12 @@ export default class GenericDataSource implements DataSource {
       Logger.e('tips', 'getVideoDetailInfo title=' + title);
 
       const recommends = this.extractRecommends(doc, config.recommends);
-      const episodes = this.extractEpisodes(doc, config.episodes);
+      const episodesList = this.extractEpisodes(doc, config.episodes).map(episodes => {
+        return {
+          title: episodes.title,
+          episodes: sortEpisodesByNumber(episodes.episodes, order)
+        }
+      });
       const [sel, attr] = config.coverSelector.split('@')
       const info: VideoDetailInfo = {
         sourceKey: this.key,
@@ -155,7 +161,7 @@ export default class GenericDataSource implements DataSource {
         director: config.directorSelector ? this.selectText(doc, config.directorSelector) : '',
         updateTime: config.updateTimeSelector ? this.selectText(doc, config.updateTimeSelector) : '',
         protagonist: config.protagonistSelector ? this.selectText(doc, config.protagonistSelector) : '',
-        episodes: episodes,
+        episodes: episodesList,
         recommends: recommends
       };
 

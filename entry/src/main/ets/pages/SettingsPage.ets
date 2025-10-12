@@ -223,6 +223,26 @@ struct SettingsPage {
               }
             }
           },
+          { title: '剧集列表排序', info: '正序',
+            settings_key: 'episodes_order',
+            preference: {
+              type: 'menu',
+              defaultValue: this.appSettings.episodes_order as string,
+              menu: [
+                {
+                  view: '正序',
+                  value: 'asc'
+                },
+                {
+                  view: '倒序',
+                  value: 'desc'
+                }
+              ],
+              onValueChange: (value) => {
+                this.appSettings.episodes_order = value as "asc" | "desc"
+              }
+            }
+          },
           {
             title: '启用自动旋屏',
             info: '跟随传感器自动切换半屏/全屏播放',

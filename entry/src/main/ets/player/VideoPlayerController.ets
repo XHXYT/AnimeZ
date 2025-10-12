@@ -5,6 +5,8 @@ import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
 import promptAction from '@ohos.promptAction';
 import { ToastUtil } from '../utils/ToastUtils';
+import { sortEpisodesByNumber } from '../utils/SortUtils';
+import { AppConfigs } from '../entryability/Settings';
 
 interface KeyValue {
   name: string,
@@ -63,6 +65,8 @@ export struct VideoPlayerController {
   @Consume('pageStack') pageStack: NavPathStack
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
+  // 应用设置
+  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
@@ -185,8 +189,8 @@ export struct VideoPlayerController {
         }
         // TODO 小窗播放
         Image($r("app.media.ic_float_window"))
-          .width(24)
-          .height(24)
+          .width(28)
+          .height(28)
           .fillColor(Color.White)
           .margin({ left: this.isFullScreen ? 24 : 16 })
           .objectFit(ImageFit.Contain)
@@ -195,8 +199,8 @@ export struct VideoPlayerController {
           })
         // 播放设置
         Image($r("app.media.ic_setting"))
-          .width(25)
-          .height(25)
+          .width(24)
+          .height(24)
           .fillColor(Color.White)
           .margin({ left: this.isFullScreen ? 24 : 16, right: this.isFullScreen ? 24 : 16 })
           .objectFit(ImageFit.Contain)
@@ -491,23 +495,25 @@ export struct VideoPlayerController {
   @Builder EpisodeList() {
     Scroll() {
       Column({ space: this.isFullScreen ? 16 : 8 }) {
-
         Row() {
-
           Text('选集')
             .fontSize(this.isFullScreen ? 16 : 14)
             .fontColor(Color.White)
-
-          Text('正序')
+          Text(this.appSettings.episodes_order === 'desc' ? '倒序' : '正序')
             .margin({ left: 24 })
             .fontSize(this.isFullScreen ? 12 : 10)
             .fontColor(Color.White)
-
+            .onClick(() => {
+              if (this.appSettings.episodes_order === 'desc') {
+                this.appSettings.episodes_order = 'asc'
+              } else {
+                this.appSettings.episodes_order = 'desc'
+              }
+            })
         }
         .width('100%')
-
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(this.episodeList, (episode: EpisodeInfo, index: number) => {
+          ForEach(sortEpisodesByNumber(this.episodeList, this.appSettings.episodes_order), (episode: EpisodeInfo, index: number) => {
             Text(episode.title)
               .padding(8)
               .fontSize(this.isFullScreen ? 14 : 12)
@@ -524,7 +530,7 @@ export struct VideoPlayerController {
                 if (this.episodeIndex == index) {
                   return
                 }
-                this.playerManager.playEpisodeList(this.episodeList, index)
+                this.playerManager.playEpisodeList(sortEpisodesByNumber(this.episodeList, this.appSettings.episodes_order), index)
                 this.hideRightPanel()
               })
           })

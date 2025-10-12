@@ -24,6 +24,7 @@ import EpisodeList from '../entity/EpisodeList';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import { Header } from '../components/common/Header';
+import { sortEpisodesByNumber } from '../utils/SortUtils';
 
 // 系统路由
 @Builder
@@ -441,7 +442,7 @@ struct VideoDetailPage {
       Column() {
         Header(episodeList.title)
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(episodeList.episodes, (item: EpisodeInfo, episodeIndex: number) => {
+          ForEach(sortEpisodesByNumber(episodeList.episodes, this.appSettings.episodes_order), (item: EpisodeInfo, episodeIndex: number) => {
             Text(item.title)
               .textAlign(TextAlign.Center)
               .backgroundColor(
@@ -491,7 +492,8 @@ struct VideoDetailPage {
       Header('猜你喜欢')
       VideoList({
         videoList: this.viewModel.videoDetailInfo.recommends,
-        scrollable: false
+        scrollable: false,
+        isFullList: false
       })
         .padding({ left: 16, right: 16 })
         .margin({ top: 8 })

@@ -3,7 +3,7 @@ import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { BaseDataSource } from '../viewmodel/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
-import { VideoListColumnsTemplate } from '../utils/breakpoint/BreakPoint';
+import { VideoListColumnsTemplate, VideoListColumnsTemplate2 } from '../utils/breakpoint/BreakPoint';
 import { CategoryDataSource } from '../entity/CategoryData';
 
 /**
@@ -12,8 +12,10 @@ import { CategoryDataSource } from '../entity/CategoryData';
 @Component
 export struct VideoList {
 
-  @State videoList?: VideoInfo[] = undefined
   @State scrollable: boolean = true
+  // 列表是否占满窗口
+  @State isFullList: boolean = true
+  @State videoList?: VideoInfo[] = undefined
   @Consume('pageStack') pageStack: NavPathStack
   // 宽度断点
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
@@ -37,7 +39,7 @@ export struct VideoList {
         }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
       }
       .hitTestBehavior(this.scrollable ? HitTestMode.Default : HitTestMode.None)
-      .columnsTemplate(VideoListColumnsTemplate(this.widthBp))
+      .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(this.widthBp) : VideoListColumnsTemplate2(this.widthBp))
       .width('100%')
       .columnsGap(8)
       .rowsGap(8)
