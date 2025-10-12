@@ -59,6 +59,7 @@ export class VideoDetailViewModel {
   public appSettings: AppConfigs;
 
   // 私有变量
+  private saveCount: number = 0
   private pausedOnHide = false;
   private onStatusChangedCallback?: (status: number) => void;
   private onFullScreenChangedCallback?: (isFullScreen: boolean) => void;
@@ -202,7 +203,7 @@ export class VideoDetailViewModel {
     this.historyInfo.videoUrl = episode.videoUrl as string;
 
     if (episode.videoUrl) {
-      this.saveHistoryInfo();
+      this.saveHistoryInfo(true);
       this.checkVideoInfo();
       this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex);
     } else {
@@ -214,7 +215,7 @@ export class VideoDetailViewModel {
         const finalUrl = await this.checkParesVideoLink(url)
         episode.videoUrl = finalUrl
         this.historyInfo.videoUrl = finalUrl
-        this.saveHistoryInfo();
+        this.saveHistoryInfo(true);
         this.checkVideoInfo();
         this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
       } catch (err) {
@@ -297,34 +298,41 @@ export class VideoDetailViewModel {
   }
 
   // 保存历史记录
-  private async saveHistoryInfo() {
-    if (!this.historyInfo) return;
-
-    if (this.videoID !== null) {
-      this.historyInfo.id = this.videoID;
-      this.historyInfo.accessTime = new Date().getTime();
-      await videoHistoryInfoDB.update(this.historyInfo, this.videoID)
-        .then((updateId) => {
-          Logger.e('tips', `更新历史记录成功，ID: ${updateId}`);
-        })
-        .catch((error: BusinessError) => {
-          Logger.e('tips', `更新历史记录失败: ${error}`);
-        });
-    } else {
-      await videoHistoryInfoDB.insert(this.historyInfo)
-        .then((insertId) => {
-          Logger.e('tips', `插入历史记录成功，ID: ${insertId}`);
+  private async saveHistoryInfo(needSave: boolean = false) {
+    console.log(`当前执行保存历史记录次数：${this.saveCount}`)
+    if (this.saveCount > 520 || needSave) {
+      if (!this.historyInfo) return;
+      if (this.videoID !== null) {
+        this.historyInfo.id = this.videoID;
+        this.historyInfo.accessTime = new Date().getTime();
+        try {
+          const updateId = await videoHistoryInfoDB.update(this.historyInfo, this.videoID)
+          Logger.e('tips', `saveHistoryInfo 更新历史记录成功，ID: ${updateId}`);
+        } catch (error) {
+          Logger.e('fail', `saveHistoryInfo 更新历史记录`, error);
+        }
+      } else {
+        try {
+          const insertId = await videoHistoryInfoDB.insert(this.historyInfo)
+          Logger.w('tips', `插入历史记录成功，ID: ${insertId}`);
           this.videoID = insertId;
-        })
-        .catch((error: Error) => {
-          Logger.e('tips', `插入历史记录失败: ${error}`);
-        });
+        } catch (error) {
+          Logger.e('fail', `saveHistoryInfo 新增历史记录`, error);
+        }
+      }
+      this.saveCount = 0
+    } else {
+      this.saveCount++
     }
   }
 
   // 检查视频历史信息
   private async checkVideoInfo() {
     const HistoryList = await videoHistoryInfoDB.query(this.title);
+    if (!HistoryList) {
+      console.warn(`没有查询到历史记录，暂无历史记录`)
+      return
+    }
     if (HistoryList.length !== 0) {
       const HistoryDetail = HistoryList[0];
       if (HistoryDetail) {
@@ -400,8 +408,8 @@ export class VideoDetailViewModel {
   }
 
   // 处理页面隐藏
-  public onPageHide() {
-    this.saveHistoryInfo();
+  public async onPageHide() {
+    await this.saveHistoryInfo(true);
     ToastUtil.showToast({ message: '历史记录已保存' });
     // 触发历史记录更新事件
     HISTORY_CHANGED_EVENT.emit();

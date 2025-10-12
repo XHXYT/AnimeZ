@@ -255,7 +255,7 @@ export struct VideoPlayerController {
         .backgroundColor('#80000000')
         .borderRadius(16)
         .alignRules({
-          left: { anchor: '__container__', align: HorizontalAlign.Center },
+          middle: { anchor: '__container__', align: HorizontalAlign.Center },
           center: { anchor: '__container__', align: VerticalAlign.Center}
         })
       }
@@ -272,6 +272,8 @@ export struct VideoPlayerController {
             .fontColor(Color.White)
             .fontSize(14)
         }
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
         .alignRules({
           left: { anchor: '__container__', align: HorizontalAlign.Center },
           center: { anchor: '__container__', align: VerticalAlign.Center}

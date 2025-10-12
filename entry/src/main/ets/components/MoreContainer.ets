@@ -99,7 +99,7 @@ export struct More {
         }
       )
     }
-    .margin({ left: 16, right: 16 })
+
   }
 }
 

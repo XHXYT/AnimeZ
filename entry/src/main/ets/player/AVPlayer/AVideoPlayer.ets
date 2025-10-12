@@ -6,6 +6,8 @@ import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { ToastUtil } from '../../utils/ToastUtils';
 
 const DEFAULT_ASPECT = 1.9
 
@@ -28,12 +30,40 @@ class AVPlayerWrapper {
 
   private getPlayer(): IPlayer {
     const thePlayer: IPlayer = {
-      setDataSource: async (url: string) => {
-        if (this.avPlayer.url == url) {
-          return
+      setDataSource: async (urlOrFd: string | media.AVFileDescriptor) => {
+        try {
+          // 处理本地文件描述符
+          if (typeof urlOrFd !== 'string') {
+            const fdUrl = `fd://${urlOrFd.fd}?offset=${urlOrFd.offset}&size=${urlOrFd.length}`;
+            this.avPlayer.url = fdUrl;
+            Logger.e('tips', 'setDataSource from FD: ' + fdUrl);
+            return;
+          }
+          // 网络视频，统一使用 avPlayer.url
+          if (urlOrFd.toLowerCase().includes('.m3u8')) {
+            // M3U8，使用 MediaSource，
+            Logger.e('tips', 'Detected M3U8 stream, using MediaSource.');
+            const mediaSource = media.createMediaSourceWithUrl(urlOrFd);
+            mediaSource.setMimeType(media.AVMimeTypes.APPLICATION_M3U8);
+            await this.avPlayer.setMediaSource(mediaSource);
+            // 设置播放策略
+            await this.avPlayer.setPlaybackStrategy({
+              preferredBufferDurationForPlaying: 0.3,
+              preferredBufferDuration: 20,
+              showFirstFrameOnPrepare: true
+            });
+            console.log('PlaybackStrategy set successfully BEFORE prepare.');
+            Logger.e('tips', 'M3U8 MediaSource set successfully.');
+          } else {
+            // 其他网络视频（MP4, 无后缀等）
+            Logger.d('setDataSource from URL (Official Way): ' + urlOrFd);
+            this.avPlayer.url = urlOrFd;
+          }
+        } catch (error) {
+          Logger.e('fail', 'set data source with MediaSource ', error);
+          // 抛出 MediaSource 的错误
+          throw error as Error;
         }
-        Logger.e('tips', 'setDataSource url=' + url)
-        this.avPlayer.url = url
       },
       start: async () => {
         Logger.e('tips', 'setDataSource start')
@@ -44,9 +74,13 @@ class AVPlayerWrapper {
       prepare: async () => {
         // this.controller.prepareAsync()
         Logger.e('tips', 'setDataSource prepare')
-        return this.avPlayer.prepare().catch(() => {
-          console.log(`AVPlayer 视频准备失败`)
-        })
+        try {
+          // 调用 prepare
+          await this.avPlayer.prepare();
+          Logger.w('tips', 'AVPlayer prepare succeeded.');
+        } catch (err) {
+          Logger.e('fail', `AVPlayer 视频准备失败: ${err.message}`)
+        }
       },
       pause: async () => {
         Logger.e('tips', 'setDataSource pause')
@@ -107,8 +141,8 @@ class AVPlayerWrapper {
   }
 
   private bindState(avPlayer: media.AVPlayer, manager: IPlayerManager) {
-    avPlayer.on('stateChange', (state: media.AVPlayerState) => {
-      Logger.e('tips', 'AVPlayer stateChange state=' + state)
+    avPlayer.on('stateChange', async (state: media.AVPlayerState) => {
+      Logger.e('tips', 'AVPlayer stateChange state = ' + state)
       switch (state) {
         case 'idle':
           break;
@@ -145,18 +179,18 @@ class AVPlayerWrapper {
       }
     });
     avPlayer.on('timeUpdate', (time: number) => {
-      Logger.e('tips', 'AVPlayer timeUpdate time=' + time)
+      Logger.e('tips', 'AVPlayer timeUpdate time = ' + time)
       manager.notifyCurrentTime(time)
     });
     avPlayer.on('durationUpdate', (time: number) => {
-      Logger.e('tips', 'AVPlayer durationUpdate time=' + time)
+      Logger.e('tips', 'AVPlayer durationUpdate time = ' + time)
       manager.notifyDuration(time)
     });
     avPlayer.on('seekDone', (value: number) => {
-      Logger.e('tips', 'v seekDone value=' + value)
+      Logger.e('tips', 'v seekDone value = ' + value)
     })
     avPlayer.on('videoSizeChange', (w: number, h: number) => {
-      Logger.e('tips', 'AVPlayer videoSizeChange w=' + w + ' h=' + h)
+      Logger.e('tips', 'AVPlayer videoSizeChange w = ' + w + ' h=' + h)
       manager.onVideoSizeChanged(w, h)
     })
     avPlayer.on('error', (error) => {
@@ -164,10 +198,11 @@ class AVPlayerWrapper {
       manager.setStatus(PlayerStatus.ERROR)
     })
     avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
-      Logger.e('tips', 'AVPlayer bufferingUpdate infoType=' + infoType + ' value=' + value)
+      Logger.e('tips', 'AVPlayer bufferingUpdate infoType = ' + infoType + ' value = ' + value)
       manager.notifyBuffering(infoType, value)
     })
   }
+
 }
 
 /**
@@ -181,7 +216,6 @@ export struct AVideoPlayer {
 
   @State aspRatio: number = DEFAULT_ASPECT
   @State videoAspRatio: number = DEFAULT_ASPECT
-  @State playerStatus: number = PlayerStatus.IDLE
   private originalVideoAspRatio: number = DEFAULT_ASPECT
   @State videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
 
@@ -194,7 +228,7 @@ export struct AVideoPlayer {
    */
   private readonly playerListenerAV: PlayerListener = {
     onStatusChanged: (status: number) => {
-      this.playerStatus = status
+
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
       this.videoUrl = episodeList[episodeIndex].videoUrl as string
@@ -230,7 +264,7 @@ export struct AVideoPlayer {
     onFullScreenChanged: (isFullScreen: boolean) => {
       console.log('AVideoPlayer #onFullScreenChanged isFullScreen：', isFullScreen)
       this.isFullScreen = isFullScreen;
-      animateTo({
+      ToastUtil.animateTo({
         duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
@@ -246,7 +280,7 @@ export struct AVideoPlayer {
     onVideoSizeChange: (w: number, h: number) => {
       Logger.e('tips', `onVideoSizeChange w=${w} h=${h}`);
       this.originalVideoAspRatio = w / h;
-      animateTo({
+      ToastUtil.animateTo({
         duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
         iterations: 1,
@@ -290,10 +324,14 @@ export struct AVideoPlayer {
       XComponent({
         type: XComponentType.SURFACE,
         controller: this.componentController,
-        id: 'xcomponentId',
+        id: 'xComponentID',
         libraryname: ''
       })
         .onLoad((context) => {
+          if (!this.playerManager) {
+            Logger.e('fail', 'XComponent onLoad failed: playerManager is null.');
+            return;
+          }
           const surfaceId = this.componentController.getXComponentSurfaceId()
           Logger.e('tips', `'AVPlayer XComponent onLoad surfaceId = ${surfaceId}`)
           media.createAVPlayer()

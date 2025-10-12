@@ -97,7 +97,6 @@ export struct MyPage {
           .padding(8)
           .backgroundColor($r('app.color.background_color'))
           .borderRadius(16)
-          .margin({ left: 16, right: 16 })
           .onAreaChange((_, newArea) => {
 
           })
@@ -115,6 +114,7 @@ export struct MyPage {
             .margin({ bottom: 16 })
 
         }
+        .padding({ left: 16, right: 16 })
         .width('100%')
         .constraintSize({
           minHeight: '100%'
@@ -216,37 +216,41 @@ export struct MyPage {
       Header('观看历史', () => {
         this.pageStack.pushPathByName("VideoHistoryPage", '')
       })
-      if (this.items && this.items.length > 0) {
-        List() {
-          ForEach(this.items, (item: VideoHistoryInfo) => {
-            ListItem() {
-              this.HistoryItem(item)
-            }
-            .height('100%')
-            .aspectRatio(1)
-          })
+      Column() {
+        if (this.items && this.items.length > 0) {
+          List() {
+            ForEach(this.items, (item: VideoHistoryInfo) => {
+              ListItem() {
+                this.HistoryItem(item)
+              }
+              .constraintSize({ maxHeight: 137 })
+              .height('100%')
+              .aspectRatio(1)
+            })
+          }
+          .constraintSize({ maxHeight: 139 })
+          .listDirection(Axis.Horizontal)
+          .width('100%')
+        } else {
+          Column() {
+            Image($r('app.media.ic_empty'))
+              .objectFit(ImageFit.Contain)
+              .height(56)
+              .width(56)
+            Text('暂无记录').fontSize(14)
+              .margin({ top: 8 })
+              .fontColor($r('app.color.color_text_normal'))
+          }
+          .padding({ top: 16, bottom: 32 })
+          .width('100%')
         }
-        .listDirection(Axis.Horizontal)
-        .margin({ left: 16, right: 16 })
-        .width('100%')
-        .aspectRatio(2.2)
-      } else {
-        Column() {
-          Image($r('app.media.ic_empty'))
-            .objectFit(ImageFit.Contain)
-            .height(56)
-            .width(56)
-          Text('暂无记录').fontSize(14)
-            .margin({ top: 8 })
-            .fontColor($r('app.color.color_text_normal'))
-        }
-        .padding({ top: 16, bottom: 32 })
-        .width('100%')
-      }
+      }.width('100%')
+      .padding({ left: 16, right: 16 })
     }
     .backgroundColor($r('app.color.background_color'))
+    .alignItems(HorizontalAlign.Start)
     .borderRadius(16)
-    .margin({ left: 16, right: 16 })
+    .clip(true)
   }
 
   /**

@@ -7,6 +7,7 @@ import { dataSourceManager } from '../api/DataSourceManager';
 import { AppSettings } from './Settings';
 import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
+import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 
 
 export default class EntryAbility extends UIAbility {
@@ -21,8 +22,9 @@ export default class EntryAbility extends UIAbility {
 
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
-        // 初始化源管理器上下文
+        // 初始化 源管理器、数据库 上下文
         await dataSourceManager.init(this.context)
+        await videoHistoryInfoDB.init(this.context)
         // 检查设备形式
         AppStorage.setOrCreate<string>('DeviceProductModel', deviceInfo.productModel)
         // 构建RedPlayer

@@ -4,7 +4,6 @@ import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionMana
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
@@ -284,6 +283,7 @@ struct VideoHistoryPage {
  */
 @Component
 struct HistoryItem {
+
   @State selectionMode: boolean = false
   @State isSelected: boolean = false
   @State selectionManager: SelectionManager<VideoHistoryInfo> | undefined = undefined
@@ -295,7 +295,7 @@ struct HistoryItem {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       if (isSelectionMode) {
         this.selectionMode = true
-        animateTo({
+        ToastUtil.animateTo({
           duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
@@ -305,7 +305,7 @@ struct HistoryItem {
           this.selectionIconMargin = 16
         })
       } else {
-        animateTo({
+        ToastUtil.animateTo({
           duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,

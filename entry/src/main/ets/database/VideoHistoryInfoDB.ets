@@ -1,4 +1,5 @@
 import { relationalStore, ValuesBucket } from '@kit.ArkData'
+import { BusinessError } from '@kit.BasicServicesKit'
 
 // 视频历史记录的类型
 // ValuesBucket 数据库类型约束
@@ -45,6 +46,7 @@ class VideoHistoryInfoDB {
   // private       私有的(外部不可访问)
   // constructor() 构造器(new 时候自动运行)
 
+  private context: Context | null = null
   // 操作数据库的实例(数据库文件)
   private store: relationalStore.RdbStore | null = null
   // 数据库表名
@@ -73,30 +75,58 @@ class VideoHistoryInfoDB {
       return this.store
     }
     // 创建/打开数据库文件
-    this.store = await relationalStore.getRdbStore(getContext(), {
-      name: 'anime.db', // 数据库文件名
-      securityLevel: relationalStore.SecurityLevel.S1 // 安全等级(跨设备共享等级)
-    })
-    // return 操作数据库的实例
-    return this.store
+    try {
+      this.store = await relationalStore.getRdbStore(this.context!, {
+        name: 'anime.db', // 数据库文件名
+        securityLevel: relationalStore.SecurityLevel.S1 // 安全等级(跨设备共享等级)
+      })
+      // return 操作数据库的实例
+      return this.store
+    } catch (error) {
+      console.error(`数据库创建失败，message：${error.message}`)
+      return null
+    }
   }
 
   // 类的构造器，new 的时候会自动触发
   constructor() {
+  }
+
+  // init by entryability
+  async init(context: Context) {
+    this.context = context
     // 创建/打开数据库文件
-    this.getStoreInstance()
-      .then(store => {
-        // 执行 sql 语句，用于创建数据库的表
-        store.executeSql(this.sqlCreate)
-      })
+    const store = await this.getStoreInstance()
+    if (!store) {
+      console.error(`初始化失败，store不存在`)
+      return
+    }
+    // 执行 sql 语句，用于创建数据库的表
+    store.executeSql(this.sqlCreate).catch((err: BusinessError) => {
+      console.error(`数据表创建失败，message：${err.message}`)
+    })
   }
 
   // 新增数据
   async insert(value: VideoHistoryInfo) {
     // 创建/打开数据库文件
     const store = await this.getStoreInstance()
-    // 新增数据(表名, 数据)
-    return store.insert(this.tableName, value)
+    if (!store) {
+      console.error(`插入数据失败，store不存在`)
+      return 0
+    }
+    try {
+      // 新增数据(表名, 数据)
+      const id = await store.insert(this.tableName, value).catch(() => {
+        console.error(`新增数据插入失败`)
+      })
+      console.log(`新增数据插入成功，id：${id}`)
+      return typeof id === 'number' ? id : -1
+    } catch (err) {
+      console.error(`新增数据失败，message：${err.message}`)
+      return -2
+    }
+
   }
 
   // 查询数据
@@ -111,21 +141,30 @@ class VideoHistoryInfoDB {
     } else {
       predicates.orderByDesc('accessTime') // 时间倒序：由大到小
     }
-    // 根据谓词排序
-    const resultSet = await store.query(predicates)
-    // 准备对象数组
-    const list: VideoHistoryInfo[] = []
-    // 指针移动到下一行
-    while (resultSet.goToNextRow()) {
-      // 获取当前行的数据
-      const item = resultSet.getRow() as VideoHistoryInfo
-      // 数据追加
-      list.push(item)
+    if (!store) {
+      console.error(`查询数据失败，store不存在`)
+      return undefined
     }
-    // 释放结果集，释放资源（性能优化）
-    resultSet.close()
-    // 循环结束后，返回数组
-    return list
+    try {
+      // 根据谓词排序
+      const resultSet = await store.query(predicates)
+      // 准备对象数组
+      const list: VideoHistoryInfo[] = []
+      // 指针移动到下一行
+      while (resultSet.goToNextRow()) {
+        // 获取当前行的数据
+        const item = resultSet.getRow() as VideoHistoryInfo
+        // 数据追加
+        list.push(item)
+      }
+      // 释放结果集，释放资源（性能优化）
+      resultSet.close()
+      // 循环结束后，返回数组
+      return list
+    } catch (err) {
+      console.error(`查询数据失败，message：${err.message}`)
+      return undefined
+    }
   }
 
 
@@ -133,12 +172,18 @@ class VideoHistoryInfoDB {
   async delete(id: number) {
     // 创建/打开数据库文件
     const store = await this.getStoreInstance()
+    if (!store) {
+      console.error(`删除数据失败，store不存在`)
+      return
+    }
     // 谓词条件
     const predicates = new relationalStore.RdbPredicates(this.tableName)
     // 匹配 id 用于删除
     predicates.equalTo('id', id)
     // 删除
-    return store.delete(predicates)
+    return store.delete(predicates).catch((err: BusinessError) => {
+      console.error(`删除数据失败，message：${err.message}`)
+    })
   }
 
   // 修改
@@ -148,12 +193,18 @@ class VideoHistoryInfoDB {
     }
     // 创建/打开数据库文件
     const store = await this.getStoreInstance()
+    if (!store) {
+      console.error(`更新数据失败，store不存在`)
+      return
+    }
     // 谓词条件
     const predicates = new relationalStore.RdbPredicates(this.tableName)
     // 匹配 id 用于更新
     predicates.equalTo('id', id)
     // 更新
-    return store.update(value, predicates)
+    return store.update(value, predicates).catch(() => {
+      console.error(`更新数据失败，store不存在`)
+    })
   }
 
 }

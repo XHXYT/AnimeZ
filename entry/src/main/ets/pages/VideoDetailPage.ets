@@ -130,8 +130,8 @@ struct VideoDetailPage {
     .onShown(() => {
       this.viewModel.onPageShow();
     })
-    .onHidden(() => {
-      this.viewModel.onPageHide();
+    .onHidden(async () => {
+      await this.viewModel.onPageHide();
     })
     .onBackPressed(() => {
       if (this.viewModel.handleBackPressed(this.panelController)) {
