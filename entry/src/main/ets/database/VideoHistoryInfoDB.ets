@@ -117,8 +117,9 @@ class VideoHistoryInfoDB {
     }
     try {
       // 新增数据(表名, 数据)
-      const id = await store.insert(this.tableName, value).catch(() => {
-        console.error(`新增数据插入失败`)
+      const id = await store.insert(this.tableName, value).catch((err: BusinessError) => {
+        console.error(`新增数据插入失败, message: ${err.message}`)
+        return
       })
       console.log(`新增数据插入成功，id：${id}`)
       return typeof id === 'number' ? id : -1

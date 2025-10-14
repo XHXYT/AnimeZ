@@ -1,6 +1,6 @@
 // VideoDetailPage.ets
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager, { PlayerStatus } from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { PlayerStatus } from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';

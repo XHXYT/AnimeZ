@@ -1,5 +1,5 @@
 // VideoDetailViewModel.ets
-import IPlayerManager, { PlayerListener, PlayerStatus } from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
@@ -300,7 +300,7 @@ export class VideoDetailViewModel {
   // 保存历史记录
   private async saveHistoryInfo(needSave: boolean = false) {
     console.log(`当前执行保存历史记录次数：${this.saveCount}`)
-    if (this.saveCount > 520 || needSave) {
+    if (this.saveCount > 210 || needSave) {
       if (!this.historyInfo) return;
       if (this.videoID !== null) {
         this.historyInfo.id = this.videoID;
@@ -314,6 +314,10 @@ export class VideoDetailViewModel {
       } else {
         try {
           const insertId = await videoHistoryInfoDB.insert(this.historyInfo)
+          if (insertId <= 0) {
+            console.error(`历史数据插入失败`)
+            return
+          }
           Logger.w('tips', `插入历史记录成功，ID: ${insertId}`);
           this.videoID = insertId;
         } catch (error) {

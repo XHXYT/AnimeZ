@@ -1,5 +1,5 @@
 import media from '@ohos.multimedia.media';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './model/IPlayerManager';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
@@ -71,6 +71,10 @@ export struct VideoPlayerController {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
       this.initLoading()
+      if (status === PlayerStatus.PLAY) {
+        // 播放视频后关闭控制面板
+        this.closeController()
+      }
       Logger.e('tips', 'PlayerController status=' + status + " playerStatus=" + this.playerStatus)
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
@@ -136,7 +140,7 @@ export struct VideoPlayerController {
   build() {
     Stack({ alignContent: Alignment.Center }) {
 
-      if (this.showController) {
+      if (this.showController || this.isLoading) {
         // 控制面板
         this.VideoController()
       }
@@ -261,11 +265,10 @@ export struct VideoPlayerController {
       }
       if (this.playerStatus === PlayerStatus.ERROR || this.playerStatus === PlayerStatus.DONE) {
         // 播放错误 & 重新播放
-        Column() {
+        Column({space: 8}) {
           Image($r('app.media.ic_refresh'))
             .width(32)
             .height(32)
-            .margin(8)
             .fillColor(Color.White)
             .objectFit(ImageFit.Contain)
           Text(this.playerStatus === PlayerStatus.DONE ? '重新播放' : '出错了...')
@@ -313,6 +316,8 @@ export struct VideoPlayerController {
             this.playerManager.exitFullScreen()
           } else {
             this.playerManager.enterFullScreen()
+            //  全屏后关闭控制面板
+            this.closeController()
           }
         })
       }
@@ -419,13 +424,6 @@ export struct VideoPlayerController {
     .width('100%')
     .height('100%')
     .onAppear(() => {
-      if (this.showController) {
-        this.showControllerTimer = setTimeout(() => {
-          // 5s后隐藏
-          this.showController = false
-          this.showControllerTimer = -1
-        }, 6000)
-      }
     })
     .onDisAppear(() => {
       if (this.showControllerTimer >= 0) {
@@ -624,6 +622,15 @@ export struct VideoPlayerController {
     .backgroundColor('#80000000')
   }
 
+  private closeController() {
+    console.log(`视频已经播放，控制面板即将关闭`)
+    this.showControllerTimer = setTimeout(() => {
+      // 5s后隐藏
+      this.showController = false
+      this.showControllerTimer = -1
+    }, 6000)
+  }
+
   private showRightPanel(type: number) {
     this.rightPanelType = type
     this.rightPanelScale = 0
@@ -632,7 +639,7 @@ export struct VideoPlayerController {
     if (this.showControllerTimer >= 0) {
       clearTimeout(this.showControllerTimer)
     }
-    animateTo(
+    ToastUtil.animateTo(
       {
         duration: 320, // 动画时长
         curve: Curve.Ease,

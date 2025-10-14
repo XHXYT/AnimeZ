@@ -1,5 +1,5 @@
-import { IPlayer } from '../../entity/VideoPlayer/IPlayer';
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../../entity/VideoPlayer/IPlayerManager';
+
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../model/IPlayerManager';
 import media from '@ohos.multimedia.media';
 import { VideoPlayerController } from '../VideoPlayerController';
 import EpisodeInfo from '../../entity/EpisodeInfo';
@@ -8,202 +8,11 @@ import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ToastUtil } from '../../utils/ToastUtils';
+import { AVPlayerWrapper } from './AVPlayerWrapper';
 
 const DEFAULT_ASPECT = 1.9
 
-/**
- * 封装media.AVPlayer
- */
-class AVPlayerWrapper {
-  private readonly avPlayer: media.AVPlayer
-  private surfaceId: string = ''
 
-  constructor(avPlayer: media.AVPlayer) {
-    this.avPlayer = avPlayer
-  }
-
-  async init(manager: IPlayerManager, surfaceId: string): Promise<void> {
-    this.surfaceId = surfaceId
-    this.bindState(this.avPlayer, manager)
-    manager.init(this.getPlayer())
-  }
-
-  private getPlayer(): IPlayer {
-    const thePlayer: IPlayer = {
-      setDataSource: async (urlOrFd: string | media.AVFileDescriptor) => {
-        try {
-          // 处理本地文件描述符
-          if (typeof urlOrFd !== 'string') {
-            const fdUrl = `fd://${urlOrFd.fd}?offset=${urlOrFd.offset}&size=${urlOrFd.length}`;
-            this.avPlayer.url = fdUrl;
-            Logger.e('tips', 'setDataSource from FD: ' + fdUrl);
-            return;
-          }
-          // 网络视频，统一使用 avPlayer.url
-          if (urlOrFd.toLowerCase().includes('.m3u8')) {
-            // M3U8，使用 MediaSource，
-            Logger.e('tips', 'Detected M3U8 stream, using MediaSource.');
-            const mediaSource = media.createMediaSourceWithUrl(urlOrFd);
-            mediaSource.setMimeType(media.AVMimeTypes.APPLICATION_M3U8);
-            await this.avPlayer.setMediaSource(mediaSource);
-            // 设置播放策略
-            await this.avPlayer.setPlaybackStrategy({
-              preferredBufferDurationForPlaying: 0.3,
-              preferredBufferDuration: 20,
-              showFirstFrameOnPrepare: true
-            });
-            console.log('PlaybackStrategy set successfully BEFORE prepare.');
-            Logger.e('tips', 'M3U8 MediaSource set successfully.');
-          } else {
-            // 其他网络视频（MP4, 无后缀等）
-            Logger.d('setDataSource from URL (Official Way): ' + urlOrFd);
-            this.avPlayer.url = urlOrFd;
-          }
-        } catch (error) {
-          Logger.e('fail', 'set data source with MediaSource ', error);
-          // 抛出 MediaSource 的错误
-          throw error as Error;
-        }
-      },
-      start: async () => {
-        Logger.e('tips', 'setDataSource start')
-        return this.avPlayer.play().catch(() => {
-          console.log(`AVPlayer 视频播放失败`)
-        })
-      },
-      prepare: async () => {
-        // this.controller.prepareAsync()
-        Logger.e('tips', 'setDataSource prepare')
-        try {
-          // 调用 prepare
-          await this.avPlayer.prepare();
-          Logger.w('tips', 'AVPlayer prepare succeeded.');
-        } catch (err) {
-          Logger.e('fail', `AVPlayer 视频准备失败: ${err.message}`)
-        }
-      },
-      pause: async () => {
-        Logger.e('tips', 'setDataSource pause')
-        return this.avPlayer.pause().catch(() => {
-          console.log(`AVPlayer 视频暂停失败`)
-        })
-      },
-      stop: async () => {
-        Logger.e('tips', 'setDataSource stop')
-        return this.avPlayer.stop().catch(() => {
-          console.log(`AVPlayer 视频停止失败`)
-        })
-      },
-      reset: async () => {
-        Logger.e('tips', 'setDataSource reset')
-        return this.avPlayer.reset().catch(() => {
-          console.log(`AVPlayer 视频重置失败`)
-        })
-      },
-      release: async () => {
-        Logger.e('tips', 'setDataSource release')
-        return this.avPlayer.release().catch(() => {
-          console.log(`AVPlayer 资源释放失败`)
-        })
-      },
-      seekTo: async (value: number) => {
-        Logger.e('tips', 'setDataSource seekTo value=' + value)
-        return this.avPlayer.seek(value as number)
-      },
-      setSpeed: (speed: media.PlaybackSpeed): Promise<void> => {
-        return this.setSpeed(speed);
-      }
-    }
-    return thePlayer
-  }
-
-  async setSpeed(speed: media.PlaybackSpeed) {
-    let avSpeed: media.PlaybackSpeed
-    switch (speed) {
-      case media.PlaybackSpeed.SPEED_FORWARD_0_75_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_0_75_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_25_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_25_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_75_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_75_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_2_00_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_2_00_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_00_X:
-      default:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
-        break
-    }
-    return this.avPlayer.setSpeed(avSpeed)
-  }
-
-  private bindState(avPlayer: media.AVPlayer, manager: IPlayerManager) {
-    avPlayer.on('stateChange', async (state: media.AVPlayerState) => {
-      Logger.e('tips', 'AVPlayer stateChange state = ' + state)
-      switch (state) {
-        case 'idle':
-          break;
-        case 'initialized':
-          if (!avPlayer.surfaceId) {
-            avPlayer.surfaceId = this.surfaceId;
-          }
-          manager.setStatus(PlayerStatus.INITIALIZED)
-          break;
-        case 'prepared':
-          avPlayer.videoScaleType = media.VideoScaleType.VIDEO_SCALE_TYPE_FIT;
-          manager.setStatus(PlayerStatus.PREPARED)
-          break;
-        case 'playing':
-          manager.setStatus(PlayerStatus.PLAY)
-          break;
-        case 'paused':
-          manager.setStatus(PlayerStatus.PAUSE)
-          break;
-        case 'completed':
-          manager.setStatus(PlayerStatus.DONE)
-          break;
-        case 'stopped':
-          manager.setStatus(PlayerStatus.STOP)
-          break;
-        case 'released':
-          manager.setStatus(PlayerStatus.IDLE)
-          break;
-        case 'error':
-          manager.setStatus(PlayerStatus.ERROR)
-          break;
-        default:
-          break;
-      }
-    });
-    avPlayer.on('timeUpdate', (time: number) => {
-      Logger.e('tips', 'AVPlayer timeUpdate time = ' + time)
-      manager.notifyCurrentTime(time)
-    });
-    avPlayer.on('durationUpdate', (time: number) => {
-      Logger.e('tips', 'AVPlayer durationUpdate time = ' + time)
-      manager.notifyDuration(time)
-    });
-    avPlayer.on('seekDone', (value: number) => {
-      Logger.e('tips', 'v seekDone value = ' + value)
-    })
-    avPlayer.on('videoSizeChange', (w: number, h: number) => {
-      Logger.e('tips', 'AVPlayer videoSizeChange w = ' + w + ' h=' + h)
-      manager.onVideoSizeChanged(w, h)
-    })
-    avPlayer.on('error', (error) => {
-      Logger.e('fail', 'AVPlayer onError err = ', error)
-      manager.setStatus(PlayerStatus.ERROR)
-    })
-    avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
-      Logger.e('tips', 'AVPlayer bufferingUpdate infoType = ' + infoType + ' value = ' + value)
-      manager.notifyBuffering(infoType, value)
-    })
-  }
-
-}
 
 /**
  * 封装AVPlayer实现播放器控件
@@ -324,8 +133,7 @@ export struct AVideoPlayer {
       XComponent({
         type: XComponentType.SURFACE,
         controller: this.componentController,
-        id: 'xComponentID',
-        libraryname: ''
+        id: 'xComponent',
       })
         .onLoad((context) => {
           if (!this.playerManager) {

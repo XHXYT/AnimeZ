@@ -1,6 +1,6 @@
-import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../model/IPlayerManager';
 import media from '@ohos.multimedia.media';
-import { IPlayer } from '../../entity/VideoPlayer/IPlayer';
+import { IPlayer } from '../model/IPlayer';
 import { VideoPlayerController } from '../VideoPlayerController';
 import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';

@@ -1,4 +1,4 @@
-import IPlayerManager, { VideoFit } from '../entity/VideoPlayer/IPlayerManager';
+import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import { IjkVideoPlayer } from '../player/IJK/IjkVideoPlayer';
