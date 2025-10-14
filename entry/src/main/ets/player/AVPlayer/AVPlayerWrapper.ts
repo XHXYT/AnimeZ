@@ -146,6 +146,7 @@ export class AVPlayerWrapper {
               preferredBufferDuration: 20,
             });
             console.log('提示：', 'Minimal PlaybackStrategy set successfully in stateChange.');
+            this.avPlayer.prepare()
           } catch (error) {
             Logger.e('fail', 'Failed to set PlaybackStrategy in stateChange: ', error);
             // 不抛出错误，让播放器尝试不带策略继续

@@ -163,7 +163,7 @@ struct VideoDetailPage {
               this.webviewController.runJavaScript(this.runJavaScript)
                 .then((result) => {
                   console.info(`URL ${e.url} 执行 result: ${result}`)
-                  this.videJsLink = result
+                  this.videJsLink = JSON.parse(result)
                   this.showWebView = false
                   console.info(`URL ${e.url} 显示状态: ${this.showWebView} 解析后链接：${this.videJsLink}`)
                 })
