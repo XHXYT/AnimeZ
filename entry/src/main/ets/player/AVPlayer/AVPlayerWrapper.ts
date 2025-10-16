@@ -197,6 +197,7 @@ export class AVPlayerWrapper {
     avPlayer.on('error', (error) => {
       Logger.e('fail', 'AVPlayer onError err = ', error)
       manager.setStatus(PlayerStatus.ERROR)
+      this.avPlayer.reset();
     })
     avPlayer.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
       switch (infoType) {
@@ -212,6 +213,11 @@ export class AVPlayerWrapper {
       }
       manager.notifyBuffering(infoType, value)
     })
+    avPlayer.on('availableBitrates', (bitrates: Array<number>)=> {
+      // 返回当前视频流的可选码率列表 -> 通过 avPlayer.setBitrate() 设置列表中的对应码率
+      Logger.i('tips', 'availableBitrates: ', JSON.stringify(bitrates));
+    })
+
   }
 
 }
