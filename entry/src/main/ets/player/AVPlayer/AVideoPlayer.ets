@@ -189,9 +189,6 @@ export struct AVideoPlayer {
       VideoPlayerController({ playerManager: this.playerManager })
         .width('100%')
         .height('100%')
-
-      Text(this.windowHeight.toString())
-        .fontColor(Color.White)
     }
     .height(this.isFullScreen ? '100%' : undefined)
     .backgroundColor(Color.Black)
