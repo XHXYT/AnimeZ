@@ -7,6 +7,7 @@ import promptAction from '@ohos.promptAction';
 import { ToastUtil } from '../utils/ToastUtils';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { AppConfigs } from '../entryability/Settings';
+import { AVVolumePanel } from '@kit.AudioKit';
 
 interface KeyValue {
   name: string,
@@ -67,6 +68,20 @@ export struct VideoPlayerController {
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
+  @StorageProp('windowHeight') windowHeight: number = 0
+  @StorageProp('windowWidth') windowWidth: number = 0
+  /** @description 默认系统音量 */
+  @State volume: number = 5
+  /** @description 音量面板是否可见 */
+  @State volumeVisible: boolean = false
+  /** @description 音量面板高度 */
+  @State VolumePanelHeight: number = 0
+  /** @description 是否在屏幕左侧触发手势 */
+  private isLeftSideGesture: boolean = false
+  /** @description 上一次手势的Y坐标 */
+  private lastGestureY: number = 0
+  private volumeTimer: number = -1;
+
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
@@ -139,6 +154,19 @@ export struct VideoPlayerController {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      // 系统音量面板
+      AVVolumePanel({
+        volumeLevel: this.volume,
+        volumeParameter: {
+          position: {
+            x: 50,
+            y: (this.windowHeight + this.VolumePanelHeight) / 2, // TODO 手机端横屏的音量面板高度 异常
+          }
+        }
+      })
+        .onAreaChange((oldValue: Area, newValue: Area) => {
+          this.VolumePanelHeight = newValue.height as number
+        })
 
       if (this.showController || this.isLoading) {
         // 控制面板
@@ -152,6 +180,52 @@ export struct VideoPlayerController {
     .onClick(() => {
       this.showController = !this.showController;
     })
+    .gesture(
+      PanGesture({ direction: PanDirection.Vertical })
+        .onActionStart((event: GestureEvent) => {
+          // 判断手势是否在屏幕左侧（左半部分）
+          const gestureX = event.fingerList[0]?.localX ?? 0;
+          this.isLeftSideGesture = gestureX < this.windowWidth / 2;
+
+          if (this.isLeftSideGesture) {
+            this.lastGestureY = event.fingerList[0]?.localY ?? 0;
+            this.volumeVisible = true;
+          }
+        })
+        .onActionUpdate((event: GestureEvent) => {
+          // 只在左侧才处理音量调节
+          if (!this.isLeftSideGesture) {
+            return;
+          }
+
+          this.volumeVisible = true;
+
+          // 获取当前手指的Y坐标
+          const currentY = event.fingerList[0]?.localY ?? 0;
+          // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
+          const deltaY = currentY - this.lastGestureY;
+
+          // 根据滑动距离调节音量，每滑动30px改变1级音量
+          // 向上滑动增加音量，向下滑动降低音量
+          const volumeChange = -deltaY / 30;
+          let curVolume = this.volume + volumeChange;
+
+          // 限制音量范围在 0-15 之间
+          curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
+          curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
+          this.volume = curVolume;
+
+          // 更新上一次的Y坐标
+          this.lastGestureY = currentY;
+        })
+        .onActionEnd(() => {
+          // 只在左侧手势时设置定时器隐藏音量面板
+          if (this.isLeftSideGesture) {
+            this.setVolumeTimer();
+          }
+          this.isLeftSideGesture = false;
+        })
+    )
   }
 
   @Builder VideoController() {
@@ -693,6 +767,20 @@ export struct VideoPlayerController {
     this.isLoading = this.playerStatus == PlayerStatus.IDLE
     || this.playerStatus == PlayerStatus.INITIALIZED
     || this.playerStatus == PlayerStatus.PREPARED
+  }
+
+  /**
+   * @description 设置定时器隐藏音量面板
+   */
+  setVolumeTimer(): void {
+    // 清除之前的定时器
+    if (this.volumeTimer >= 0) {
+      clearTimeout(this.volumeTimer);
+    }
+    // 5秒后隐藏音量面板
+    this.volumeTimer = setTimeout(() => {
+      this.volumeVisible = false;
+    }, 5000);
   }
 
 }
