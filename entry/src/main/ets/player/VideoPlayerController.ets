@@ -8,10 +8,22 @@ import { ToastUtil } from '../utils/ToastUtils';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { AppConfigs } from '../entryability/Settings';
 import { AVVolumePanel } from '@kit.AudioKit';
+import { window } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit'
 
 interface KeyValue {
   name: string,
   value: number
+}
+
+interface IArea {
+  width: number,
+  height: number
+}
+
+interface IGlobalPosition {
+  x: number,
+  y: number
 }
 
 const VIDEO_SPEED_LIST: KeyValue[] = [
@@ -72,8 +84,6 @@ export struct VideoPlayerController {
   @StorageProp('windowWidth') windowWidth: number = 0
   /** @description 默认系统音量 */
   @State volume: number = 5
-  /** @description 音量面板是否可见 */
-  @State volumeVisible: boolean = false
   /** @description 音量面板高度 */
   @State VolumePanelHeight: number = 0
   /** @description 是否在屏幕左侧触发手势 */
@@ -81,6 +91,17 @@ export struct VideoPlayerController {
   /** @description 上一次手势的Y坐标 */
   private lastGestureY: number = 0
   private volumeTimer: number = -1;
+  private brightnessTimer: number = -1;
+  /** @description 屏幕亮度 */
+  @State screenBrightness: number = 0
+  /** @description 亮度面板是否可见 */
+  @State brightnessVisible: boolean = false
+  /** @description 亮度面板的高度和宽度 */
+  @State brightnessPanelArea: IArea = { width: 0, height: 0 }
+  /** @description 播放器控制器的高度和宽度 */
+  @State playerControllerArea: IArea = { width: 0, height: 0 }
+  /** @description 播放器控制器相对于屏幕的全局位置 */
+  @State playerControllerGlobalPos: IGlobalPosition = { x: 0, y: 0 }
 
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
@@ -154,19 +175,8 @@ export struct VideoPlayerController {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      // 系统音量面板
-      AVVolumePanel({
-        volumeLevel: this.volume,
-        volumeParameter: {
-          position: {
-            x: 50,
-            y: (this.windowHeight + this.VolumePanelHeight) / 2, // TODO 手机端横屏的音量面板高度 异常
-          }
-        }
-      })
-        .onAreaChange((oldValue: Area, newValue: Area) => {
-          this.VolumePanelHeight = newValue.height as number
-        })
+      // 音量和亮度面板
+      this.VolumeAndBrightnessBuilder()
 
       if (this.showController || this.isLoading) {
         // 控制面板
@@ -180,52 +190,137 @@ export struct VideoPlayerController {
     .onClick(() => {
       this.showController = !this.showController;
     })
+    .onAreaChange((oldValue: Area, newValue: Area) => {
+      // 记录播放器控制器的大小
+      this.playerControllerArea = {
+        width: newValue.width as number,
+        height: newValue.height as number
+      }
+      // 记录播放器控制器相对于屏幕的全局位置
+      this.playerControllerGlobalPos = {
+        x: newValue.globalPosition.x as number,
+        y: newValue.globalPosition.y as number
+      }
+    })
     .gesture(
       PanGesture({ direction: PanDirection.Vertical })
         .onActionStart((event: GestureEvent) => {
           // 判断手势是否在屏幕左侧（左半部分）
           const gestureX = event.fingerList[0]?.localX ?? 0;
-          this.isLeftSideGesture = gestureX < this.windowWidth / 2;
+          this.isLeftSideGesture = gestureX < this.playerControllerArea.width / 2;
 
+          // 记录初始Y坐标，左右两侧都需要
+          this.lastGestureY = event.fingerList[0]?.localY ?? 0;
+
+          // 左侧 -> 隐藏 亮度面板
           if (this.isLeftSideGesture) {
-            this.lastGestureY = event.fingerList[0]?.localY ?? 0;
-            this.volumeVisible = true;
+            this.brightnessVisible = false;
           }
         })
         .onActionUpdate((event: GestureEvent) => {
-          // 只在左侧才处理音量调节
-          if (!this.isLeftSideGesture) {
-            return;
+          // 左侧 -> 音量调节
+          if (this.isLeftSideGesture) {
+            // 获取当前手指的Y坐标
+            const currentY = event.fingerList[0]?.localY ?? 0;
+            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
+            const deltaY = currentY - this.lastGestureY;
+
+            // 根据滑动距离调节音量，每滑动30px改变1级音量
+            // 向上滑动增加音量，向下滑动降低音量
+            const volumeChange = -deltaY / 30;
+            let curVolume = this.volume + volumeChange;
+
+            // 限制音量范围在 0-15 之间
+            curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
+            curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
+            this.volume = curVolume;
+
+            // 更新上一次的Y坐标
+            this.lastGestureY = currentY;
+          } else {
+            // 右侧 -> 亮度调节
+            this.brightnessVisible = true;
+            
+            // 获取当前手指的Y坐标
+            const currentY = event.fingerList[0]?.localY ?? 0;
+            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
+            const deltaY = currentY - this.lastGestureY;
+            
+            // 根据滑动距离调节亮度，每滑动100px改变0.1的亮度（亮度范围0-1）
+            // 向上滑动增加亮度，向下滑动降低亮度
+            const brightnessChange = -deltaY / 100;
+            let curBrightness = this.screenBrightness + brightnessChange;
+            
+            // 限制亮度范围在 0-1 之间
+            curBrightness = this.getValidValue(curBrightness, 0.0, 1.0);
+            
+            // 设置屏幕亮度
+            this.screenBrightness = curBrightness;
+            this.setScreenBrightness(this.screenBrightness);
+            
+            // 更新上一次的Y坐标
+            this.lastGestureY = currentY;
           }
-
-          this.volumeVisible = true;
-
-          // 获取当前手指的Y坐标
-          const currentY = event.fingerList[0]?.localY ?? 0;
-          // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
-          const deltaY = currentY - this.lastGestureY;
-
-          // 根据滑动距离调节音量，每滑动30px改变1级音量
-          // 向上滑动增加音量，向下滑动降低音量
-          const volumeChange = -deltaY / 30;
-          let curVolume = this.volume + volumeChange;
-
-          // 限制音量范围在 0-15 之间
-          curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
-          curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
-          this.volume = curVolume;
-
-          // 更新上一次的Y坐标
-          this.lastGestureY = currentY;
         })
         .onActionEnd(() => {
-          // 只在左侧手势时设置定时器隐藏音量面板
-          if (this.isLeftSideGesture) {
-            this.setVolumeTimer();
+          // 右侧 -> 隐藏亮度面板
+          if (!this.isLeftSideGesture) {
+            this.setBrightnessTimer();
           }
+          // 左侧 -> 自动隐藏音量面板
           this.isLeftSideGesture = false;
         })
     )
+  }
+
+  @Builder
+  VolumeAndBrightnessBuilder() {
+    // 系统音量面板（左侧，基于屏幕全局定位）
+    AVVolumePanel({
+      volumeLevel: this.volume,
+      volumeParameter: {
+        position: {
+          x: this.playerControllerGlobalPos.x + 50,
+          y: this.playerControllerGlobalPos.y + (this.playerControllerArea.height + this.VolumePanelHeight) / 2 // TODO 音量面板 没和 音量面板高度对齐
+        }
+      }
+    })
+      .onAreaChange((oldValue: Area, newValue: Area) => {
+        this.VolumePanelHeight = newValue.height as number;
+      })
+
+    // 屏幕亮度面板（右侧，基于父容器相对定位）
+    Stack() {
+      Slider({
+        value: this.screenBrightness,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        style: SliderStyle.NONE,
+        direction: Axis.Vertical,
+        reverse: true
+      })
+        .height(160)
+        .selectedColor('#FFF')
+        .trackColor($r('sys.color.mask_secondary'))
+        .trackThickness(40);
+
+      Image($r('app.media.ic_sun_max_fill'))
+        .margin({ top: 120 })
+        .width(20)
+        .height(20);
+    }
+    .visibility(this.brightnessVisible ? Visibility.Visible : Visibility.Hidden)
+    .onAreaChange((oldValue: Area, newValue: Area) => {
+      this.brightnessPanelArea = {
+        width: newValue.width as number,
+        height: newValue.height as number
+      }
+    })
+    .position({
+      x: this.playerControllerArea.width - 50 - this.brightnessPanelArea.width,
+      y: (this.playerControllerArea.height - this.brightnessPanelArea.height) / 2
+    });
   }
 
   @Builder VideoController() {
@@ -769,18 +864,46 @@ export struct VideoPlayerController {
     || this.playerStatus == PlayerStatus.PREPARED
   }
 
-  /**
-   * @description 设置定时器隐藏音量面板
-   */
-  setVolumeTimer(): void {
+  /** @description 设置定时器隐藏亮度面板 */
+  private setBrightnessTimer(): void {
     // 清除之前的定时器
-    if (this.volumeTimer >= 0) {
-      clearTimeout(this.volumeTimer);
+    if (this.brightnessTimer >= 0) {
+      clearTimeout(this.brightnessTimer);
     }
-    // 5秒后隐藏音量面板
-    this.volumeTimer = setTimeout(() => {
-      this.volumeVisible = false;
-    }, 5000);
+    // 3秒后隐藏亮度面板
+    this.brightnessTimer = setTimeout(() => {
+      this.brightnessVisible = false;
+    }, 3000);
   }
 
+  /**
+   * @description 获取有效的值
+   * @param inputValue 输入值
+   * @param minValue 最小值
+   * @param maxValue 最大值
+   * @returns 有效值
+   */
+  private getValidValue(inputValue: number, minValue: number, maxValue: number): number {
+    inputValue = inputValue >= maxValue ? maxValue : inputValue;
+    inputValue = inputValue <= minValue ? minValue : inputValue;
+    return inputValue;
+  }
+
+  /**
+   * @description 设置屏幕亮度
+   * @param brightness 亮度值
+   */
+  private setScreenBrightness(brightness: number) {
+    try {
+      let mainWin: window.Window = AppStorage.get<window.Window>('WindowClass') as window.Window;
+      mainWin.setWindowBrightness(brightness, (err: BusinessError) => {
+        if (err.code) {
+          Logger.e('fail', 'set the brightness', err);
+          return;
+        }
+      });
+    } catch (exception) {
+      Logger.e('fail', 'getMainWindowSync', exception);
+    }
+  }
 }
