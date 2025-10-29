@@ -43,21 +43,27 @@ export default class EntryAbility extends UIAbility {
         // Init RedPlayer preload component
         // RedPlayerPreload.globalInit('your preload cache path', 20, 4, 0)
 
-        this.getContinueData(want);
+        this.getContinueData(want, launchParam);
     }
 
     onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-        this.getContinueData(want);
+        this.getContinueData(want, launchParam);
     }
 
-    private getContinueData(want: Want) {
+    private getContinueData(want: Want, launchParam: AbilityConstant.LaunchParam) {
+        if (launchParam.launchReason !== AbilityConstant.LaunchReason.CONTINUATION) {
+            return;
+        }
+
         if (want.parameters != undefined) {
             const data: IAppContinue = want.parameters.data as IAppContinue
-            hilog.info(0x0000, 'AppContinue', '%{public}s', JSON.stringify(data))
+            hilog.info(0x0000, 'AppContinue', 'EntryAbility - %{public}s', JSON.stringify(data))
             if (data.currentPage !== '' && typeof data.currentPageParams === 'object') {
                 // 保存页面恢复所需的数据
                 appContinue.jumpVideoDetail(data.currentPage, data.currentPageParams)
-                this.context.restoreWindowStage(this.storage);
+                if (launchParam) {
+                    this.context.restoreWindowStage(this.storage);
+                }
             }
         }
     }
@@ -156,6 +162,8 @@ export default class EntryAbility extends UIAbility {
             wantParam["data"] = continueInput;
             // 取消 页面栈 自动迁移
             wantParam[wantConstant.Params.SUPPORT_CONTINUE_PAGE_STACK_KEY] = false;
+            // 按需退出
+            // wantParam[wantConstant.Params.SUPPORT_CONTINUE_SOURCE_EXIT_KEY] = false;
         }
 
         return AbilityConstant.OnContinueResult.AGREE;

@@ -8,6 +8,7 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
 import { appContinue } from '../utils/AppContinue';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 @Entry
 @Component
@@ -56,11 +57,17 @@ struct Index {
         console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)
       })
     }
+  }
+
+  onDidBuild(): void {
     // 应用接续 -> 恢复页面
-    const appContinueData = appContinue.getCurrentVideoPageDetail()
-    if (appContinueData.currentPage !== '' && typeof appContinueData.currentPageParams === 'object') {
-      this.pageStack.pushPathByName(appContinueData.currentPage, appContinueData.currentPageParams)
-    }
+    setTimeout(() => {
+      const appContinueData = appContinue.getCurrentVideoPageDetail()
+      hilog.info(0x0000, 'AppContinue', 'Index - %{public}s', JSON.stringify(appContinueData))
+      if (appContinueData.currentPage !== '' && typeof appContinueData.currentPageParams === 'object') {
+        this.pageStack.pushPathByName(appContinueData.currentPage, appContinueData.currentPageParams)
+      }
+    })
   }
 
   aboutToDisappear(): void {
