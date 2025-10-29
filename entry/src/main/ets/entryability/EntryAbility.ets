@@ -1,17 +1,19 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import hilog from '@ohos.hilog';
 import window from '@ohos.window';
-import { AbilityConstant, Configuration, Want } from '@kit.AbilityKit';
+import { AbilityConstant, bundleManager, Configuration, Want, wantConstant } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { AppSettings } from './Settings';
 import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
 import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
+import { permissionManage } from '../utils/PermissionManage';
+import { appContinue, IAppContinue } from '../utils/AppContinue';
 
 
 export default class EntryAbility extends UIAbility {
-
+    private storage: LocalStorage = new LocalStorage();
     private uiContext?: UIContext;
     // 设备断点获取
     private onWindowSizeChange: (windowSize: window.Size) => void = (windowSize: window.Size) => {
@@ -21,6 +23,11 @@ export default class EntryAbility extends UIAbility {
     };
 
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
+        // 关闭应用接续 -> 在特定的页面才打开
+        this.context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
+            console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+        })
+
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
         // 初始化 源管理器、数据库 上下文
         await dataSourceManager.init(this.context)
@@ -35,6 +42,24 @@ export default class EntryAbility extends UIAbility {
         RedPlayerInitManager.initPlayer(redPlayerConfigBuilder)
         // Init RedPlayer preload component
         // RedPlayerPreload.globalInit('your preload cache path', 20, 4, 0)
+
+        this.getContinueData(want);
+    }
+
+    onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+        this.getContinueData(want);
+    }
+
+    private getContinueData(want: Want) {
+        if (want.parameters != undefined) {
+            const data: IAppContinue = want.parameters.data as IAppContinue
+            hilog.info(0x0000, 'AppContinue', '%{public}s', JSON.stringify(data))
+            if (data.currentPage !== '' && typeof data.currentPageParams === 'object') {
+                // 保存页面恢复所需的数据
+                appContinue.jumpVideoDetail(data.currentPage, data.currentPageParams)
+                this.context.restoreWindowStage(this.storage);
+            }
+        }
     }
 
     onDestroy() {
@@ -48,45 +73,53 @@ export default class EntryAbility extends UIAbility {
         // Main window is created, set main page for this ability
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
+        this.stageLoadPage(windowStage);
+    }
+
+    private stageLoadPage(windowStage: window.WindowStage) {
         windowStage.loadContent('pages/Index', async (err, data) => {
             if (err.code) {
-                hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
+                hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s',
+                    JSON.stringify(err) ?? '');
                 return;
             }
             // 初始化应用设置
-            await AppSettings.init()
-            hilog.info(0x0000, 'testTag', 'Succeeded in loading the content. Data: %{public}s', JSON.stringify(data) ?? '');
+            await AppSettings.init();
+            hilog.info(0x0000, 'testTag', 'Succeeded in loading the content. Data: %{public}s',
+                JSON.stringify(data) ?? '');
         });
 
         windowStage.getMainWindow(async (err, data) => {
             // 全屏
             data.setWindowLayoutFullScreen(true)
                 .then(() => {
-                    console.info('已成功将窗口布局设置为全屏模式')
+                    console.info('已成功将窗口布局设置为全屏模式');
                 })
                 .catch((err: BusinessError) => {
-                    console.error('无法将窗口布局设置为全屏模式 Cause:' + JSON.stringify(err))
-                })
+                    console.error('无法将窗口布局设置为全屏模式 Cause:' + JSON.stringify(err));
+                });
 
             try {
-                const UIContext = data.getUIContext()
-                this.uiContext = UIContext
-                AppStorage.setOrCreate('UIContext', UIContext)
-                AppStorage.setOrCreate<window.Window>('WindowClass', data)
+                const UIContext = data.getUIContext();
+                this.uiContext = UIContext;
+                AppStorage.setOrCreate('UIContext', UIContext);
+                AppStorage.setOrCreate<window.Window>('WindowClass', data);
                 // 初始化通知
-                ToastUtil.initContext(UIContext)
+                ToastUtil.initContext(UIContext);
                 // 设备宽度断点获取
-                const widthBp: WidthBreakpoint = UIContext.getWindowWidthBreakpoint()
-                AppStorage.setOrCreate('currentWidthBreakpoint', widthBp)
-                data.on('windowSizeChange', this.onWindowSizeChange)
+                const widthBp: WidthBreakpoint = UIContext.getWindowWidthBreakpoint();
+                AppStorage.setOrCreate('currentWidthBreakpoint', widthBp);
+                data.on('windowSizeChange', this.onWindowSizeChange);
                 // 初始化窗口
-                this.intRectWindow(windowStage)
+                this.intRectWindow(windowStage);
+
+                // 初始化权限
+                permissionManage.requestPermission(this.uiContext.getHostContext() as Context);
             } catch (error) {
-                console.error(`UI上下文获取失败，code: ${error.code} message: ${error.messsage}`)
+                console.error(`UI上下文获取失败，code: ${error.code} message: ${error.messsage}`);
             }
 
-        })
-
+        });
     }
 
     onWindowStageDestroy() {
@@ -103,6 +136,35 @@ export default class EntryAbility extends UIAbility {
     onBackground() {
         // Ability has back to background
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
+    }
+
+    /** @description 应用接续迁移准备过程的生命周期 -> 保存数据 */
+    onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult | Promise<AbilityConstant.OnContinueResult> {
+        let versionDst = wantParam.version; // 获取迁移对端应用的版本号
+
+        const bundleInfo = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION)
+        let versionSrc: number = bundleInfo?.versionCode ?? 0; // 获取迁移源端即本端应用的版本号
+
+        if (versionDst > versionSrc) { // 兼容性校验
+            // 兼容性校验不满足
+            return AbilityConstant.OnContinueResult.MISMATCH; //版本不匹配，拒绝迁移
+        }
+
+        let continueInput = appContinue.getCurrentVideoPageDetail();
+        if (typeof continueInput === "object") {
+            // 将要迁移的数据保存在wantParam的自定义字段（如：data）中;
+            wantParam["data"] = continueInput;
+            // 取消 页面栈 自动迁移
+            wantParam[wantConstant.Params.SUPPORT_CONTINUE_PAGE_STACK_KEY] = false;
+        }
+
+        return AbilityConstant.OnContinueResult.AGREE;
+    }
+
+    /** @description 应用接续恢复窗口的生命周期 -> 恢复数据 */
+    onWindowStageRestore(windowStage: window.WindowStage) {
+        // 恢复页面 -> 使用 navigation 路由需通过 want 参数自行恢复
+        this.stageLoadPage(windowStage);
     }
 
     private intRectWindow(windowStage: window.WindowStage) {

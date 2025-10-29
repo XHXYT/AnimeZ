@@ -9,6 +9,16 @@
           ],
           "when": "always"
         }
+      },
+      {
+        "name": "ohos.permission.DISTRIBUTED_DATASYNC",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "always"
+        },
+        "reason": "$string:datasync_desc"
       }
     ],
     "name": "entry",
@@ -54,7 +64,8 @@
               "action.system.home"
             ]
           }
-        ]
+        ],
+        "continuable": true // 此 UIAbility 可被迁移
       }
     ]
   }

@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "AnimeZ"
+    },
+    {
+      "name": "datasync_desc",
+      "value": "视频进度接续"
     }
   ]
 }

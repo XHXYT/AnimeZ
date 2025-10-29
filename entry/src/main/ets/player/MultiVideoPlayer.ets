@@ -4,6 +4,7 @@ import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
 import { AppConfigs } from '../entryability/Settings';
 import { RedVideoPlayer } from './REDPlayer/RedPlayer';
+import { AbilityConstant, common } from '@kit.AbilityKit';
 
 
 /**
@@ -21,6 +22,20 @@ export struct MultiVideoPlayer {
     if (!this.playerManager) {
       throw new Error('You must set playerManager firstly!')
     }
+
+    // 开启应用接续 -> 在播放的页面才打开
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    context.setMissionContinueState(AbilityConstant.ContinueState.ACTIVE, (result) => {
+      console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+    })
+  }
+
+  aboutToDisappear(): void {
+    // 关闭应用接续
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
+      console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+    })
   }
 
   build() {
