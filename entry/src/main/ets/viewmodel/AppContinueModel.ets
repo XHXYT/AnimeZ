@@ -1,6 +1,6 @@
 /**
  * @projectName:    AnimeZ 
- * @fileName:      AppContinue
+ * @fileName:      appContinueModel
  * @author:     SummerKaze
  * @description:  应用接续类
  * @date:    2025/10/29 14:26
@@ -13,9 +13,13 @@ export interface IAppContinue {
   currentPageParams: VideoNavigateInfo;
 }
 
-class AppContinue {
+/** @description 应用接续数据模型 */
+class AppContinueModel {
+  /** @description 当前路由信息 */
   private currentPage: string = '';
+  /** @description 当前页面参数 */
   private currentPageParams: VideoNavigateInfo = {} as VideoNavigateInfo;
+  
 
   /**
    * 跳转页面的时候保存一份当前页面信息 -> 接续时需要手动恢复
@@ -39,4 +43,4 @@ class AppContinue {
   }
 }
 
-export const appContinue = new AppContinue();
+export const appContinueModel = new AppContinueModel();

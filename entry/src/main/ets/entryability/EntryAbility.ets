@@ -9,7 +9,7 @@ import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
 import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { permissionManage } from '../utils/PermissionManage';
-import { appContinue, IAppContinue } from '../utils/AppContinue';
+import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 
 
 export default class EntryAbility extends UIAbility {
@@ -60,7 +60,7 @@ export default class EntryAbility extends UIAbility {
             hilog.info(0x0000, 'AppContinue', 'EntryAbility - %{public}s', JSON.stringify(data))
             if (data.currentPage !== '' && typeof data.currentPageParams === 'object') {
                 // 保存页面恢复所需的数据
-                appContinue.jumpVideoDetail(data.currentPage, data.currentPageParams)
+                appContinueModel.jumpVideoDetail(data.currentPage, data.currentPageParams)
                 if (launchParam) {
                     this.context.restoreWindowStage(this.storage);
                 }
@@ -156,7 +156,7 @@ export default class EntryAbility extends UIAbility {
             return AbilityConstant.OnContinueResult.MISMATCH; //版本不匹配，拒绝迁移
         }
 
-        let continueInput = appContinue.getCurrentVideoPageDetail();
+        let continueInput = appContinueModel.getCurrentVideoPageDetail();
         if (typeof continueInput === "object") {
             // 将要迁移的数据保存在wantParam的自定义字段（如：data）中;
             wantParam["data"] = continueInput;

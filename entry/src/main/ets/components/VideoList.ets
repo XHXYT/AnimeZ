@@ -5,7 +5,7 @@ import { BaseDataSource } from '../viewmodel/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { VideoListColumnsTemplate, VideoListColumnsTemplate2 } from '../utils/breakpoint/BreakPoint';
 import { CategoryDataSource } from '../entity/CategoryData';
-import { appContinue } from '../utils/AppContinue';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
 
 /**
  * 视频列表
@@ -110,7 +110,7 @@ export struct VideoList {
       }
       console.log('VideoTest 视频列表传递的params：', JSON.stringify(params))
       this.pageStack.pushPathByName("VideoDetailPage", params)
-      appContinue.jumpVideoDetail("VideoDetailPage", params)
+      appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }
 }

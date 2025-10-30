@@ -7,7 +7,7 @@ import { BreakpointSystem } from '../utils/BreakPointManager';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
-import { appContinue } from '../utils/AppContinue';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 @Entry
@@ -62,7 +62,7 @@ struct Index {
   onDidBuild(): void {
     // 应用接续 -> 恢复页面
     setTimeout(() => {
-      const appContinueData = appContinue.getCurrentVideoPageDetail()
+      const appContinueData = appContinueModel.getCurrentVideoPageDetail()
       hilog.info(0x0000, 'AppContinue', 'Index - %{public}s', JSON.stringify(appContinueData))
       if (appContinueData.currentPage !== '' && typeof appContinueData.currentPageParams === 'object') {
         this.pageStack.pushPathByName(appContinueData.currentPage, appContinueData.currentPageParams)
