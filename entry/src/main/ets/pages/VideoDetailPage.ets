@@ -160,6 +160,7 @@ struct VideoDetailPage {
           if (e) {
             Logger.e('tips', `URL ${e.url} 开始加载JavaScript`)
             setTimeout(() => {
+              // TODO 待修复 webviewController 未绑定上或者绑定了多个 Web 组件
               this.webviewController.runJavaScript(this.runJavaScript)
                 .then((result) => {
                   console.info(`URL ${e.url} 执行 result: ${result}`)

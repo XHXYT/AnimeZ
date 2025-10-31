@@ -49,3 +49,8 @@ export const SOURCE_CHANGED_EVENT: Event = new EventImpl(1)
  * 历史记录改变
  */
 export const HISTORY_CHANGED_EVENT: Event = new EventImpl(2)
+
+/**
+ * 应用接续恢复进度
+ */
+export const APP_RESUME_PROGRESS_EVENT: Event = new EventImpl(3)

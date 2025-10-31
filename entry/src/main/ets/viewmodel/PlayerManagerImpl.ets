@@ -5,6 +5,8 @@ import window from '@ohos.window';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import SystemBarUtils from '../utils/SystemBarUtils';
+import { appContinueModel } from './AppContinueModel';
+import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
 
 /**
  * 播放器管理（总）
@@ -257,6 +259,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   notifyDuration(duration: number) {
+    if (!appContinueModel.isContinue) {
+      APP_RESUME_PROGRESS_EVENT.emit()
+
+      appContinueModel.isContinue = true
+    }
+    
     this.totalTime = duration
     this.listeners.forEach((l) => {
       l.onProgressChange(this.totalTime, this.currentTime)
@@ -265,6 +273,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   notifyCurrentTime(currentTime: number) {
     this.currentTime = currentTime
+    // 有进度才保存进度
+    if (currentTime > 0) {
+      appContinueModel.setCurrentVideoDuration(currentTime)
+    }
     this.listeners.forEach((l) => {
       l.onProgressChange(this.totalTime, this.currentTime)
     })

@@ -60,7 +60,7 @@ export default class EntryAbility extends UIAbility {
             hilog.info(0x0000, 'AppContinue', 'EntryAbility - %{public}s', JSON.stringify(data))
             if (data.currentPage !== '' && typeof data.currentPageParams === 'object') {
                 // 保存页面恢复所需的数据
-                appContinueModel.jumpVideoDetail(data.currentPage, data.currentPageParams)
+                appContinueModel.RecoverData(data)
                 if (launchParam) {
                     this.context.restoreWindowStage(this.storage);
                 }
