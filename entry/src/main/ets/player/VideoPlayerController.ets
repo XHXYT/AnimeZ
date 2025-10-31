@@ -3,7 +3,6 @@ import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from './model/
 import EpisodeInfo from '../entity/EpisodeInfo';
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
-import promptAction from '@ohos.promptAction';
 import { ToastUtil } from '../utils/ToastUtils';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { AppConfigs } from '../entryability/Settings';
@@ -11,6 +10,9 @@ import { AVVolumePanel } from '@kit.AudioKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit'
 import { VolumeAndBrightnessProgress } from '../components/VolumeAndBrightnessProgress';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
+import { audio } from '@kit.AudioKit';
+import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
 
 interface KeyValue {
   name: string,
@@ -84,7 +86,7 @@ export struct VideoPlayerController {
   @StorageProp('windowHeight') windowHeight: number = 0
   @StorageProp('windowWidth') windowWidth: number = 0
   /** @description 默认系统音量 */
-  @State volume: number = 5
+  @State @Watch('showVolume') volume: number = 5
   /** @description 是否在屏幕左侧触发手势 */
   private isLeftSideGesture: boolean = false
   /** @description 上一次手势的Y坐标 */
@@ -96,6 +98,7 @@ export struct VideoPlayerController {
   @State isVolumeAndBrightnessVisible: boolean = false
   /** @description 播放器控制器的高度和宽度 */
   @State playerControllerArea: IArea = { width: 0, height: 0 }
+  private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager();
 
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
@@ -157,6 +160,13 @@ export struct VideoPlayerController {
     } else {
       throw new Error('You must set playerManager firstly!')
     }
+
+    // TODO API20 监听系统音频变化
+    this.audioVolumeManager.on('streamVolumeChange', audio.StreamUsage.STREAM_USAGE_MUSIC, (streamVolumeEvent: audio.StreamVolumeEvent) => {
+      console.info(`audioVolumeManager - StreamUsage of stream: ${streamVolumeEvent.streamUsage} `);
+      console.info(`audioVolumeManager - Volume level: ${streamVolumeEvent.volume} `);
+      console.info(`audioVolumeManager - Whether to updateUI: ${streamVolumeEvent.updateUi} `);
+    });
   }
 
   aboutToDisappear() {
@@ -165,6 +175,20 @@ export struct VideoPlayerController {
       clearTimeout(this.showControllerTimer)
       this.showControllerTimer = -1;
     }
+
+    this.audioVolumeManager.off('streamVolumeChange')
+  }
+
+  onDidBuild(): void {
+    // 应用接续 -> 恢复播放
+    APP_RESUME_PROGRESS_EVENT.on(() => {
+      setTimeout(() => {
+        const currentTime = appContinueModel.getCurrentVideoDuration()
+        if (currentTime > 0) {
+          this.setProgress(this.playerManager.getDuration() as number, currentTime)
+        }
+      })
+    })
   }
 
   build() {
@@ -267,10 +291,10 @@ export struct VideoPlayerController {
     AVVolumePanel({
       volumeLevel: this.volume,
       volumeParameter: {
-        position: {
-          x: -100,
-          y: -200
-        }
+        // position: {
+        //   x: -100,
+        //   y: -200
+        // }
       }
     })
   }
@@ -857,5 +881,13 @@ export struct VideoPlayerController {
     } catch (exception) {
       Logger.e('fail', 'getMainWindowSync', exception);
     }
+  }
+
+  /**
+   * @description 监听显示音量面板
+   */
+  private showVolume() {
+    this.isVolumeAndBrightnessVisible = true;
+    this.setHidePanelTimer()
   }
 }
