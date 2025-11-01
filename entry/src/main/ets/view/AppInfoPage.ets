@@ -6,7 +6,7 @@ import { SettingRow } from '../components/SettingsItem';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppSettings } from '../entryability/Settings';
 
-// 系统路由
+// 系统路由 - 应用信息
 @Builder
 export function AppInfoPageBuilder(name: string, param: Object) {
   AppInfoPage()
@@ -27,7 +27,7 @@ struct AppInfoPage {
     { title: '应用版本', settings_key: 'version', info: AppSettings.versionName, icon: $r('app.media.ic_version') },
     { title: '应用原始开发者', settings_key: 'raw_author', info: 'Z-P-J', icon: $rawfile('zpj.png'),
       onClick: () => {
-        this.pageStack.pushPathByName("AboutMePage", '')
+        this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
       }
     },
     { title: '开源仓库', settings_key: 'raw_repo', info: 'https://github.com/Z-P-J/AnimeZ', icon: $r('app.media.ic_github'),
@@ -38,6 +38,11 @@ struct AppInfoPage {
     { title: '应用维护者', settings_key: 'new_author', info: '小雅', icon: $rawfile('ya.png'),
       onClick: () => {
         this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/")
+      }
+    },
+    { title: '应用维护者', settings_key: 'new_author', info: 'SummerKaze', icon: $rawfile('summer_kaze.jfif'),
+      onClick: () => {
+        this.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze/")
       }
     },
     { title: '新开源仓库', settings_key: 'new_repo', info: 'https://github.com/XHXYT/AnimeZ', icon: $r('app.media.ic_github'),

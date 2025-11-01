@@ -1,11 +1,11 @@
-import promptAction from '@ohos.promptAction'
+
 import TitleBar from '../components/TitleBar'
 import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingRow } from '../components/SettingsItem';
 import { ToastUtil } from '../utils/ToastUtils';
 
-// 系统路由
+// 系统路由 - 关于作者
 @Builder
 export function AboutMePageBuilder(name: string, param: string) {
   AboutMePage()
@@ -13,12 +13,13 @@ export function AboutMePageBuilder(name: string, param: string) {
 
 @Component
 struct AboutMePage {
+
+  @Consume DarkModeImage: boolean
   @Consume('pageStack') pageStack: NavPathStack
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   private aboutMe: SettingGroup<boolean | string | number>[] = [
     {
@@ -98,6 +99,45 @@ struct AboutMePage {
           }
         },
       ]
+    },
+    {
+      title: '维护者',
+      name: 'SummerKaze',
+      key: 'summer',
+      introduce: '鸿蒙应用开发爱好者',
+      image: $rawfile('summer_kaze.jfif'),
+      settings: [
+        {
+          title: 'Github主页',
+          settings_key: 'new_author_github',
+          info: 'https://github.com/SummerKaze',
+          icon: $r('app.media.ic_github'),
+          onClick: (item, callback) => {
+            this.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze")
+            callback?.()
+          }
+        },
+        {
+          title: 'Gitee主页',
+          settings_key: 'new_author_gitee',
+          info: 'https://gitee.com/SummerKaze',
+          icon: $r('app.media.ic_gitee'),
+          onClick: (item, callback) => {
+            this.pageStack.pushPathByName("WebPage", "https://gitee.com/SummerKaze")
+            callback?.()
+          }
+        },
+        {
+          title: '赞助作者',
+          info: '赞助作者一杯咖啡',
+          settings_key: 'support_new_author',
+          icon: $r('app.media.ic_java'),
+          onClick: (item, callback) => {
+            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
+            callback?.()
+          }
+        },
+      ]
     }
   ]
 
@@ -121,7 +161,7 @@ struct AboutMePage {
                 .width(64)
                 .margin({top: 56})
                 .borderRadius(100)
-                .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+                .shadow({ radius: 12, color: this.DarkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
               Text(group.title)
                 .fontSize(18)
                 .fontColor($r('app.color.color_text_major'))

@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "D:/HUAWEI/key/AnimeZ/animez.p12",
-          "storePassword": "0000001BBA477E69C3926188ABFA7B2871209535B9A55FDE770CA65FCE448B3774EA4618700E96CC36C420",
-          "keyAlias": "ya",
-          "keyPassword": "0000001B3CA1D757555648DB96F2D0CAD9AC9FBC293191424467E214D708C6D9D958D789BFD3E5DF310F4E",
-          "signAlg": "SHA256withECDSA",
-          "profile": "D:/HUAWEI/key/AnimeZ/animezDebug.p7b",
-          "certpath": "D:/HUAWEI/key/AnimeZ/ya-debug.cer"
+          "storeFile": "",
+          "storePassword": "",
+          "keyAlias": "",
+          "keyPassword": "",
+          "signAlg": "",
+          "profile": "",
+          "certpath": ""
         }
       }
     ],

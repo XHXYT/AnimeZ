@@ -3,7 +3,6 @@ import { HomePage } from './Homepage';
 import mediaQuery from '@ohos.mediaquery'
 import { common } from '@kit.AbilityKit';
 import { AppConfigs } from '../entryability/Settings';
-import { BreakpointSystem } from '../utils/BreakPointManager';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
@@ -36,11 +35,10 @@ struct Index {
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
 
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
-  /**系统为深色模式时为true，否则为false*/
-  DarkModeListener: mediaQuery.MediaQueryListener = mediaQuery.matchMediaSync('(dark-mode: true)')
+  /** 系统为深色模式时为true，否则为false */
+  DarkModeListener: mediaQuery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(dark-mode: true)')
   /**手机横屏监听*/
-  PhoneLandscapeListener: mediaQuery.MediaQueryListener =
-    this.getUIContext().getMediaQuery().matchMediaSync('(320vp< height <= 500vp) and (640vp< width <= 1000vp)')
+  PhoneLandscapeListener: mediaQuery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(320vp< height <= 500vp) and (640vp< width <= 1000vp)')
 
   aboutToAppear() {
     // 初始化颜色模式
@@ -72,7 +70,6 @@ struct Index {
 
   aboutToDisappear(): void {
     // 停止各种监听事件
-    BreakpointSystem.getInstance().stop()
     this.DarkModeListener.off('change')
     this.PhoneLandscapeListener.off('change')
   }

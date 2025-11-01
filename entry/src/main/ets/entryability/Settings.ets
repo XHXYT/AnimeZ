@@ -1,4 +1,5 @@
 import { bundleManager } from "@kit.AbilityKit"
+import { SortType } from "../viewmodel/VideoSourcesViewModel"
 
 // @StorageLink('app_settings')
 export class AppConfigs {
@@ -42,6 +43,18 @@ export class AppConfigs {
    * 视频剧集排列顺序
    */
   episodes_order: 'asc' | 'desc' = 'asc'
+  /**
+   * 视频源排序
+   */
+  video_sources_order: SortType = SortType.CUSTOM
+  /**
+   * 视频源分组筛选
+   */
+  video_sources_group_filter: string = 'not_filter'
+  /**
+   * 视频源分组管理
+   */
+  video_sources_group_filter_manager: string = ''
 
   constructor() {
   }

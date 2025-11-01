@@ -72,8 +72,7 @@ struct VideoHistoryPage {
         }
       })
 
-      StateView(
-        {
+      StateView({
           state: this.state,
           errorMessage: $errorMessage,
           content: () => {
@@ -84,8 +83,7 @@ struct VideoHistoryPage {
             this.loadHistoryList()
             return true;
           }
-        }
-      )
+        })
         .width('100%')
         .layoutWeight(1)
       // 编辑列表
@@ -119,7 +117,7 @@ struct VideoHistoryPage {
               if (this.selectCount == 0) {
                 return
               }
-              this.UIContext.showAlertDialog(
+              ToastUtil.showAlertDialog(
                 {
                   title: '移除历史记录',
                   message: `确认移除选中的${this.selectCount}项历史记录？`,
@@ -131,12 +129,22 @@ struct VideoHistoryPage {
                   secondaryButton: {
                     value: '确定',
                     fontColor: Color.Red,
-                    action: () => {
+                    action: async () => {
                       const data = Array.from(this.selectionManager.getSelections())
-                      data.forEach((item: VideoHistoryInfo) => {
-                        this.deleteHistoryList(item.id)
-                      })
-                      ToastUtil.showToast({ message: "删除成功" })
+                      const total = data.filter(item => item.id).length;
+                      let completed = 0;
+                      await Promise.all(
+                        data.map(async (item) => {
+                          if (item.id) {
+                            await this.deleteHistoryList(item.id);
+                            completed++;
+                            ToastUtil.showToast({
+                              message: `删除进度: ${completed}/${total}`
+                            });
+                          }
+                        })
+                      );
+                      ToastUtil.showToast({ message: "全部删除成功" });
                       this.selectionManager.toggleSelectionMode()
                       // 触发历史记录更新事件
                       HISTORY_CHANGED_EVENT.emit()

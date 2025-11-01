@@ -11,7 +11,7 @@ import { AppConfigs } from "../entryability/Settings"
 import { CategoryDataSource } from "../entity/CategoryData"
 
 
-// 系统路由
+// 系统路由 - 视频目录页
 @Builder
 export function CategoryPageBuilder(name: string, param: Object) {
   CategoryPage()

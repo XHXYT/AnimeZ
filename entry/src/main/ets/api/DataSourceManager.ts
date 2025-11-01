@@ -92,18 +92,18 @@ class DataSourceManager {
   }
 
   /**
-   * 获取当前数据源配置
-   */
-  getCurrentDataSourceConfig(): DataSourceConfig | undefined {
-    return this.dataSourceConfigs.get(this.currentDataSourceKey);
-  }
-
-  /**
    * 设置搜索策略
    */
   setSearchStrategy(strategy: SearchStrategy): void {
     this.searchStrategy = strategy;
     Logger.i(this, `DataSourceManager.setSearchStrategy Search strategy set to: ${strategy}`);
+  }
+
+  /**
+   * 获取当前数据源配置
+   */
+  getCurrentDataSourceConfig(): DataSourceConfig | undefined {
+    return this.dataSourceConfigs.get(this.currentDataSourceKey);
   }
 
   /**
@@ -168,10 +168,9 @@ class DataSourceManager {
     if (!keyword.trim()) {
       return [];
     }
-
     try {
       switch (this.searchStrategy) {
-        case SearchStrategy.ALL_SOURCES:  // 搜索全部
+        case SearchStrategy.ALL_SOURCES:  // 搜索全部已启用
           return await this.searchAllSources(keyword, page);
 
         case SearchStrategy.PRIORITIZED:  // 按优先级搜索
@@ -184,7 +183,7 @@ class DataSourceManager {
           return await this.searchPrioritized(keyword, page);
       }
     } catch (error) {
-      Logger.e('tips', `DataSourceManager.search Failed to search: ${error.message}`);
+      Logger.e('fail', `DataSourceManager.search`, error);
       return [];
     }
   }
@@ -240,15 +239,12 @@ class DataSourceManager {
    */
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
     const source = this.identifyDataSourceByUrl(url);
-
     if (!source) {
       throw new Error(`DataSourceManager.getVideoDetailInfo Cannot identify data source for URL: ${url}`);
     }
-
     if (!source.isEnabled()) {
       throw new Error(`DataSourceManager.getVideoDetailInfo Data source is disabled: ${source.getKey()}`);
     }
-
     try {
       return await source.getVideoDetailInfo(url, order);
     } catch (error) {
@@ -262,15 +258,12 @@ class DataSourceManager {
    */
   async parseVideoUrl(link: string): Promise<string> {
     const source = this.identifyDataSourceByUrl(link);
-
     if (!source) {
       throw new Error(`DataSourceManager.parseVideoUrl Cannot identify data source for URL: ${link}`);
     }
-
     if (!source.isEnabled()) {
       throw new Error(`DataSourceManager.parseVideoUrl Data source is disabled: ${source.getKey()}`);
     }
-
     try {
       const videoLink = await source.parseVideoUrl(link)
       if (videoLink) {
@@ -288,7 +281,6 @@ class DataSourceManager {
     try {
       // 首先尝试从沙箱目录读取配置文件
       const sandboxConfig = await this.readSandboxConfig();
-
       if (sandboxConfig) {
         // 如果沙箱中有配置文件，使用它
         await this.loadConfigData(sandboxConfig)
@@ -340,21 +332,17 @@ class DataSourceManager {
     if (this.dataSources.has(config.key)) {
       throw new Error(`DataSourceManager.addDataSource Data source with key '${config.key}' already exists`);
     }
-
     // 如果新添加的数据源是默认的，清除其他数据源的默认标记
     if (config.defaultSource) {
       for (const existingConfig of this.dataSourceConfigs.values()) {
         existingConfig.defaultSource = false;
       }
     }
-
     const dataSource = new GenericDataSource(config);
     this.dataSources.set(config.key, dataSource);
     this.dataSourceConfigs.set(config.key, config);
-
     // 保存到沙箱配置文件
     await this.saveCurrentConfig();
-
     Logger.i(this, `DataSourceManager.addDataSource Added data source: ${config.name}`);
   }
 
@@ -363,7 +351,6 @@ class DataSourceManager {
     if (!this.dataSources.has(key)) {
       throw new Error(`DataSourceManager Data source with key '${key}' does not exist`);
     }
-
     // 如果新配置是默认的，清除其他数据源的默认标记
     if (config.defaultSource) {
       for (const existingConfig of this.dataSourceConfigs.values()) {
@@ -372,20 +359,16 @@ class DataSourceManager {
         }
       }
     }
-
     // 如果key发生变化，需要先删除旧的
     if (key !== config.key) {
       this.dataSources.delete(key);
       this.dataSourceConfigs.delete(key);
     }
-
     const dataSource = new GenericDataSource(config);
     this.dataSources.set(config.key, dataSource);
     this.dataSourceConfigs.set(config.key, config);
-
     // 保存到沙箱配置文件
     await this.saveCurrentConfig();
-
     Logger.i(this, `DataSourceManager.updateDataSource Updated data source: ${config.name}`);
   }
 
@@ -446,9 +429,7 @@ class DataSourceManager {
   // 从沙箱目录读取配置文件
   private async readSandboxConfig(): Promise<DataSourceConfigFile | null> {
     try {
-
       const sandboxPath = this.context.filesDir + '/' + this.configFileName;
-
       // 检查文件是否存在
       try {
         await fileIo.access(sandboxPath);
@@ -457,7 +438,6 @@ class DataSourceManager {
         Logger.e('tips', `DataSourceManager.readSandboxConfig Failed to read sandbox config: 文件不存在`);
         return null;
       }
-
       // 读取文件内容
       const content = await fileIo.readText(sandboxPath);
       return JSON.parse(content) as DataSourceConfigFile;
@@ -507,7 +487,6 @@ class DataSourceManager {
   // 保存配置到沙箱目录
   private async saveConfigToSandbox(config: DataSourceConfigFile): Promise<void> {
     try {
-
       const sandboxPath = this.context.filesDir + '/' + this.configFileName;
       Logger.i(this, `DataSourceManager.saveConfigToSandbox sandbox 配置地址：${sandboxPath}`);
       // 转换为JSON字符串
@@ -521,7 +500,6 @@ class DataSourceManager {
       //   console.error(`DataSourceManager.saveConfigToSandbox 文件的缓存数据同步到存储失败：`, error)
       // })
       fileIo.close(fileModify);
-
       Logger.i(this, 'DataSourceManager.saveConfigToSandbox Configuration saved to sandbox');
     } catch (error) {
       Logger.e('tips', `DataSourceManager.saveConfigToSandbox Failed to save configuration to sandbox: ${error.message}`);
@@ -540,7 +518,7 @@ class DataSourceManager {
   }
 
   /**
-   * 搜索所有数据源
+   * 搜索所有已启用数据源
    */
   private async searchAllSources(keyword: string, page: number): Promise<VideoInfo[]> {
     const enabledSources = this.getPrioritizedDataSources().filter(ds => ds.isEnabled());
@@ -570,7 +548,6 @@ class DataSourceManager {
    */
   private async searchPrioritized(keyword: string, page: number): Promise<VideoInfo[]> {
     const enabledSources = this.getPrioritizedDataSources().filter(ds => ds.isEnabled());
-
     for (const source of enabledSources) {
       try {
         const results = await source.search(keyword, page);
@@ -582,7 +559,6 @@ class DataSourceManager {
         Logger.e('tips', `DataSourceManager.searchPrioritized Failed to search ${source.getKey()}: ${error.message}`);
       }
     }
-
     Logger.i(this, 'DataSourceManager.searchPrioritized No results found from any source');
     return [];
   }
@@ -593,17 +569,14 @@ class DataSourceManager {
   private async searchSpecificSource(keyword: string, page: number): Promise<VideoInfo[]> {
     const sourceKey = this.currentDataSourceKey|| this.getKey();
     const source = this.dataSources.get(sourceKey);
-
     if (!source) {
       Logger.e('tips', `DataSourceManager.searchSpecificSource Current data source not found: ${sourceKey}`);
       return [];
     }
-
     if (!source.isEnabled()) {
       Logger.e('tips', `DataSourceManager.searchSpecificSource Data source is disabled: ${sourceKey}`);
       return [];
     }
-
     try {
       return await source.search(keyword, page);
     } catch (error) {
@@ -642,7 +615,6 @@ class DataSourceManager {
     // 查找标记为默认的数据源
     const defaultSources = Array.from(this.dataSourceConfigs.values())
       .filter(config => config.defaultSource && config.enabled !== false);
-
     if (defaultSources.length > 0) {
       // 有多个默认数据源，选择优先级最高的
       const highestPriorityDefault = defaultSources.reduce((prev, current) =>
@@ -652,7 +624,6 @@ class DataSourceManager {
       Logger.i(this, `DataSourceManager.setDefaultDataSource Set 默认数据源 from config: ${this.currentDataSourceKey}`);
       return;
     }
-
     // 没有标记为默认的数据源，选择优先级最高的启用数据源
     const prioritized = this.getPrioritizedDataSources();
     if (prioritized.length > 0) {
@@ -660,7 +631,6 @@ class DataSourceManager {
       Logger.i(this, `DataSourceManager.setDefaultDataSource Set highest priority data source: ${this.currentDataSourceKey}`);
       return;
     }
-
     // 没有可用的数据源
     this.currentDataSourceKey = '';
     Logger.e('tips', 'DataSourceManager.setDefaultDataSource No available data source found');

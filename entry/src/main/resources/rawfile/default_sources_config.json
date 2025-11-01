@@ -4,10 +4,11 @@
     {
       "key": "key_yinghuavideo",
       "name": "樱花动漫",
+      "group": "动漫",
       "baseUrl": "http://www.iyinghua.com/",
       "enabled": true,
       "priority": 1,
-      "defaultSource": true,
+      "defaultSource": false,
       "parserConfig": {
         "search": {
           "videos": {
@@ -89,10 +90,11 @@
     {
       "key": "key_agedmvideo",
       "name": "AGE动漫",
+      "group": "动漫",
       "baseUrl": "https://www.agedm.io/",
       "enabled": true,
       "priority": 2,
-      "defaultSource": false,
+      "defaultSource": true,
       "parserConfig": {
         "search": {
           "videos": {

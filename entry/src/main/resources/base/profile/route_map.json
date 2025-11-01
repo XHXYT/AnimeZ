@@ -7,52 +7,62 @@
     },
     {
       "name": "SearchPage",
-      "pageSourceFile": "src/main/ets/pages/SearchPage.ets",
+      "pageSourceFile": "src/main/ets/view/SearchPage.ets",
       "buildFunction": "SearchPageBuilder"
     },
     {
       "name": "VideoHistoryPage",
-      "pageSourceFile": "src/main/ets/pages/VideoHistoryPage.ets",
+      "pageSourceFile": "src/main/ets/view/VideoHistoryPage.ets",
       "buildFunction": "VideoHistoryPageBuilder"
     },
     {
+      "name": "VideoSources",
+      "pageSourceFile": "src/main/ets/view/VideoSources.ets",
+      "buildFunction": "VideoSourcesBuilder"
+    },
+    {
+      "name": "VideoSourceDetail",
+      "pageSourceFile": "src/main/ets/view/VideoSourceDetail.ets",
+      "buildFunction": "VideoSourceDetailBuilder"
+    },
+    {
       "name": "AboutMePage",
-      "pageSourceFile": "src/main/ets/pages/AboutMePage.ets",
+      "pageSourceFile": "src/main/ets/view/AboutMePage.ets",
       "buildFunction": "AboutMePageBuilder"
     },
     {
       "name": "AppInfoPage",
-      "pageSourceFile": "src/main/ets/pages/AppInfoPage.ets",
+      "pageSourceFile": "src/main/ets/view/AppInfoPage.ets",
       "buildFunction": "AppInfoPageBuilder"
     },
     {
       "name": "LocalVideoPlayerPage",
-      "pageSourceFile": "src/main/ets/pages/LocalVideoPlayerPage.ets",
+      "pageSourceFile": "src/main/ets/view/LocalVideoPlayerPage.ets",
       "buildFunction": "LocalVideoPlayerPageBuilder"
     },
     {
       "name": "SettingsPage",
-      "pageSourceFile": "src/main/ets/pages/SettingsPage.ets",
+      "pageSourceFile": "src/main/ets/view/SettingsPage.ets",
       "buildFunction": "SettingsPageBuilder"
     },
     {
       "name": "VideoCollectionPage",
-      "pageSourceFile": "src/main/ets/pages/VideoCollectionPage.ets",
+      "pageSourceFile": "src/main/ets/view/VideoCollectionPage.ets",
       "buildFunction": "VideoCollectionPageBuilder"
     },
     {
       "name": "VideoDetailPage",
-      "pageSourceFile": "src/main/ets/pages/VideoDetailPage.ets",
+      "pageSourceFile": "src/main/ets/view/VideoDetailPage.ets",
       "buildFunction": "VideoDetailPageBuilder"
     },
     {
       "name": "WebPage",
-      "pageSourceFile": "src/main/ets/pages/WebPage.ets",
+      "pageSourceFile": "src/main/ets/view/WebPage.ets",
       "buildFunction": "WebPageBuilder"
     },
     {
       "name": "CategoryPage",
-      "pageSourceFile": "src/main/ets/pages/CategoryPage.ets",
+      "pageSourceFile": "src/main/ets/view/CategoryPage.ets",
       "buildFunction": "CategoryPageBuilder"
     }
   ]

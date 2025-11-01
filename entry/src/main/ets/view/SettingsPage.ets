@@ -170,7 +170,15 @@ struct SettingsPage {
         title: '数据',
         key: 'source',
         settings: [
-          { title: '首页数据源',
+          {
+            title: '视频源',
+            settings_key: 'video_sources',
+            onClick: () => {
+              this.pageStack.pushPathByName("VideoSources", '', true)
+            }
+          },
+          {
+            title: '首页数据源',
             settings_key: 'homepage_source',
             preference: {
               type: 'menu',

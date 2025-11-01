@@ -79,6 +79,7 @@ export interface ParserConfig {
 export interface DataSourceConfig {
   key: string;
   name: string;
+  group: string,
   baseUrl: string;
   enabled: boolean;
   priority: number;

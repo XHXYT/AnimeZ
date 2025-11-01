@@ -1,4 +1,4 @@
-// GenericDataSource.ts
+// 数据源
 import { DramaList } from '../entity/HomepageData';
 import HomepageData from '../entity/HomepageData';
 import Logger from '../utils/Logger';

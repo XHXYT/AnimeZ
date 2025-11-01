@@ -10,7 +10,7 @@ export enum ViewState {
 
 @Component
 export default struct StateView {
-  // @Consume('StateView') state: number
+
   @Link state: number
   @Link errorMessage: string
   @BuilderParam content: () => void;

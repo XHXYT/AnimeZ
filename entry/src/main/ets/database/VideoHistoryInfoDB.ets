@@ -109,6 +109,7 @@ class VideoHistoryInfoDB {
 
   // 新增数据
   async insert(value: VideoHistoryInfo) {
+    console.warn(`即将插入的数据：${JSON.stringify(value)}`)
     // 创建/打开数据库文件
     const store = await this.getStoreInstance()
     if (!store) {
@@ -117,10 +118,7 @@ class VideoHistoryInfoDB {
     }
     try {
       // 新增数据(表名, 数据)
-      const id = await store.insert(this.tableName, value).catch((err: BusinessError) => {
-        console.error(`新增数据插入失败, message: ${err.message}`)
-        return
-      })
+      const id = await store.insert(this.tableName, value)
       console.log(`新增数据插入成功，id：${id}`)
       return typeof id === 'number' ? id : -1
     } catch (err) {

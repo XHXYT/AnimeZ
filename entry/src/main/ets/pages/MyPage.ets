@@ -9,7 +9,6 @@ import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
 
 const TAG: string = 'MyPage'
-const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
 /**
  * 我的页面 （Stack布局 背景 + 功能）
@@ -61,7 +60,6 @@ export struct MyPage {
       console.log(`${TAG} VideoTest #loadHistoryList 历史记录项：${JSON.stringify( this.items)}`)
     }
   }
-
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
