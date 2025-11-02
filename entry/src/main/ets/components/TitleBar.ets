@@ -4,6 +4,7 @@ import { LengthMetrics } from "@kit.ArkUI"
 export default struct TitleBar {
   @State title: ResourceStr = ''
   @State subtitle: ResourceStr = ''
+  @State showBack: boolean = true
   @Consume('pageStack') pageStack: NavPathStack
   @BuilderParam button: () => void
 
@@ -14,12 +15,14 @@ export default struct TitleBar {
     })
     {
       Row({ space: 16 }) {
-        SymbolGlyph($r('sys.symbol.arrow_left'))
-          .fontSize(27)
-          .fontColor([$r('app.color.color_text_major')])
-          .onClick(() => {
-            this.pageStack.pop(true)
-          })
+        if (this.showBack) {
+          SymbolGlyph($r('sys.symbol.arrow_left'))
+            .fontSize(27)
+            .fontColor([$r('app.color.color_text_major')])
+            .onClick(() => {
+              this.pageStack.pop(true)
+            })
+        }
         Column() {
           Text(this.title)
             .fontColor($r('app.color.color_text_major'))

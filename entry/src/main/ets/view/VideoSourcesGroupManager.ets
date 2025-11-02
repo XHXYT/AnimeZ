@@ -1,20 +1,21 @@
 import TitleBar from '../components/TitleBar'
-import { GroupConfig, VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
+import { VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
 import { CustomContentDialog } from '@kit.ArkUI'
 
 @Component
 export struct GroupManager {
 
-  @ObjectLink viewModel: VideoSourcesViewModel
+  @Link viewModel: VideoSourcesViewModel
   @State groupName: string = ''
   @State isNewGroup: boolean = false
-  @State editingGroup: GroupConfig | null = null
+  @State editingGroupName: string = ''
+  @State customGroups: string[] = []
 
   private  dialogController: CustomDialogController = new CustomDialogController({
     builder: CustomContentDialog({
       primaryTitle: '添加新分组',
       contentBuilder: () => {
-        this.AddButton()
+        this.InputBuilder()
       },
       buttons: [
         {
@@ -31,11 +32,13 @@ export struct GroupManager {
           action: () => {
             if (this.isNewGroup) {
               this.viewModel.addCustomGroup(this.groupName)
+              // 本地Push一下
+              this.pushGroup(this.groupName)
             } else {
-              this.viewModel.editCustomGroup(this.editingGroup!.value, this.groupName)
+              this.viewModel.editCustomGroup(this.editingGroupName, this.groupName)
             }
             this.isNewGroup = false
-            this.editingGroup = null
+            this.editingGroupName = ''
             this.groupName = ''
           }
         }
@@ -43,10 +46,15 @@ export struct GroupManager {
     }),
   });
 
+  aboutToAppear(): void {
+    this.customGroups = this.viewModel.customGroups
+  }
+
   build() {
     Column() {
       // 标题栏
       TitleBar({
+        showBack: false,
         title: '分组管理',
         button: () => {
           this.AddButton()
@@ -54,35 +62,38 @@ export struct GroupManager {
       })
 
       // 分组列表
-      List() {
-        ForEach(this.viewModel.customGroups, (group: GroupConfig) => {
+      List({ space: 12 }) {
+        ForEach(this.customGroups, (group: string) => {
           ListItem() {
             Row() {
-              Text(group.name)
+              Text(group)
                 .fontSize(16)
                 .layoutWeight(1)
               Blank()
-              Button('编辑')
-                .fontSize(14)
-                .fontColor(Color.Red)
-                .backgroundColor(Color.Transparent)
-                .onClick(() => {
-                  this.groupName = group.name
-                  this.editingGroup = group
-                  this.dialogController.open()
-                })
+              Row() {
+                Text('编辑')
+                  .fontSize(14)
+              }
+              .width(56)
+              .justifyContent(FlexAlign.End)
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => {
+                this.groupName = group
+                this.editingGroupName = group
+                this.dialogController.open()
+              })
             }
+            .height(52)
             .width('100%')
-            .padding({
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: 12
-            })
+            .borderRadius(16)
+            .alignItems(VerticalAlign.Center)
+            .backgroundColor($r('app.color.background_color'))
+            .padding({ left: 12, right: 12})
           }
           .swipeAction({ end: this.DeleteButton(group) })
-        })
+        }, (key: string) => key)
       }
+      .padding({ left: 16, right: 16 })
       .layoutWeight(1)
       .width('100%')
     }
@@ -92,15 +103,13 @@ export struct GroupManager {
 
   @Builder
   AddButton() {
-    Button() {
+    Button({ type: ButtonType.Circle }) {
       SymbolGlyph($r('sys.symbol.plus'))
         .fontSize(24)
-        .fontColor([Color.Red])
     }
-    .width(80)
-    .height('100%')
-    .margin({ right: 86})
-    .backgroundColor(Color.Red)
+    .width(40).height(40)
+    .margin({ top: 16, right: 56 })
+    .backgroundColor($r('app.color.background_color_accent'))
     .onClick(() => {
       this.isNewGroup = true
       this.groupName = ''
@@ -118,19 +127,27 @@ export struct GroupManager {
   }
 
   @Builder
-  DeleteButton(group: GroupConfig) {
-    Button() {
-      Image($r('app.media.ic_delete'))
-        .width(20)
-        .height(20)
-        .fillColor(Color.White)
+  DeleteButton(group: string) {
+    Row() {
+      SymbolGlyph($r('sys.symbol.trash'))
+        .fontSize(24)
+        .fontColor([Color.Red])
     }
-    .width(80)
-    .height('100%')
-    .backgroundColor(Color.Red)
+    .padding(12)
     .onClick(() => {
       this.viewModel.removeCustomGroup(group)
     })
+  }
+
+  pushGroup(groupName: string) {
+    if (groupName && groupName.trim() !== '') {
+      const trimmedName = groupName.trim()
+      // 检查是否已存在
+      const exists = this.customGroups.some(group => group === trimmedName)
+      if (!exists) {
+        this.customGroups = [...this.customGroups, trimmedName]
+      }
+    }
   }
 
 }

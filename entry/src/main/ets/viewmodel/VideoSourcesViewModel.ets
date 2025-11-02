@@ -20,12 +20,6 @@ export enum ViewState {
   EMPTY = 3
 }
 
-export interface GroupConfig {
-  name: string
-  value: string,
-  action?: () => void
-}
-
 @Observed
 export class VideoSourcesViewModel {
   // 视图状态
@@ -43,8 +37,8 @@ export class VideoSourcesViewModel {
 
   // 分组管理相关状态
   public groupManagerVisible: boolean = false
-  public groupType: string = 'not_filter'
-  public customGroups: GroupConfig[] = []
+  public groupType: string = '不分组'
+  public customGroups: string[] = []
   public newGroupName: string = ''
 
   // 数据源列表
@@ -116,35 +110,103 @@ export class VideoSourcesViewModel {
   // 加载自定义分组
   public loadCustomGroups() {
     try {
-      const savedGroups = this.appSettings.video_sources_group_filter_manager
-      if (savedGroups) {
-        this.customGroups = JSON.parse(savedGroups) as GroupConfig[]
-      } else {
-        // 如果没有保存的自定义分组，从现有源配置中提取
-        this.extractGroupsFromSources()
+      let savedGroups: string[] = []
+      const savedGroupsData = this.appSettings.video_sources_group_filter_manager
+      if (savedGroupsData) {
+        savedGroups = JSON.parse(savedGroupsData) as string[]
       }
+      // 从数据源中提取当前分组
+      this.extractGroupsFromSources()
+      const sourceGroups = this.customGroups
+      // 合并持久化分组和数据源分组
+      const mergedGroups = this.mergeGroups(savedGroups, sourceGroups)
+      // 保存合并后的分组（不自动清理）
+      this.customGroups = mergedGroups
+      this.saveCustomGroups()
     } catch (error) {
       console.error('加载自定义分组失败:', error)
       this.customGroups = []
     }
   }
 
+  // 合并分组列表
+  private mergeGroups(savedGroups: string[], sourceGroups: string[]): string[] {
+    const mergedSet = new Set<string>()
+    // 添加持久化分组
+    savedGroups.forEach(group => mergedSet.add(group))
+    // 添加数据源分组
+    sourceGroups.forEach(group => mergedSet.add(group))
+    return Array.from(mergedSet).sort()
+  }
+
+  /**
+   * 获取无效分组列表 => 供用户选择是否清理
+   */
+  private getUnusedGroups(): string[] {
+    const allSources = dataSourceManager.getAllDataSourceConfigs()
+    const usedGroups = new Set<string>()
+    // 收集所有被使用的分组
+    allSources.forEach(source => {
+      if (source.group && source.group.trim() !== '') {
+        usedGroups.add(source.group.trim())
+      }
+    })
+    // 返回未被使用的自定义分组（排除默认分组）
+    return this.customGroups.filter(group =>
+    !['不分组', '已启用', '已禁用'].includes(group) && !usedGroups.has(group)
+    )
+  }
+
+  // 用户主动清理无效分组
+  public cleanupUnusedGroups() {
+    const unusedGroups = this.getUnusedGroups()
+    if (unusedGroups.length === 0) {
+      ToastUtil.showToast({ message: "没有需要清理的分组" })
+      return
+    }
+    // 显示确认对话框
+    ToastUtil.showAlertDialog({
+      title: '清理无效分组',
+      message: `发现 ${unusedGroups.length} 个未被使用的分组：\n${unusedGroups.join(', ')}\n\n确认要删除这些分组吗？`,
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '确认删除',
+        fontColor: Color.Red,
+        action: () => {
+          // 执行清理
+          const allSources = dataSourceManager.getAllDataSourceConfigs()
+          const usedGroups = new Set<string>()
+          allSources.forEach(source => {
+            if (source.group && source.group.trim() !== '') {
+              usedGroups.add(source.group.trim())
+            }
+          })
+          // 保留被使用的分组和默认分组
+          this.customGroups = this.customGroups.filter(group =>
+          ['不分组', '已启用', '已禁用'].includes(group) || usedGroups.has(group)
+          )
+          this.saveCustomGroups()
+          ToastUtil.showToast({ message: `已清理 ${unusedGroups.length} 个无效分组` })
+        }
+      }
+    })
+  }
+
   // 从现有源配置中提取分组
   private extractGroupsFromSources() {
     const allSources = dataSourceManager.getAllDataSourceConfigs()
-    const groups = new Map<string, GroupConfig>()
+    const groups = new Map<string, string>()
     allSources.forEach(source => {
       if (source.group && source.group.trim() !== '') {
         const groupName = source.group.trim()
         if (!groups.has(groupName)) {
-          groups.set(groupName, {
-            name: groupName,
-            value: 'group_' + groupName.replace(/\s+/g, '_').toLowerCase()
-          })
+          groups.set(groupName, groupName)
         }
       }
     })
-
     this.customGroups = Array.from(groups.values())
     this.saveCustomGroups()
   }
@@ -154,14 +216,10 @@ export class VideoSourcesViewModel {
     if (groupName && groupName.trim() !== '') {
       const trimmedName = groupName.trim()
       // 检查是否已存在
-      const exists = this.customGroups.some(group => group.name === trimmedName)
-
+      const exists = this.customGroups.some(group => group === trimmedName)
       if (!exists) {
-        const newGroup: GroupConfig = {
-          name: trimmedName,
-          value: 'group_' + trimmedName.replace(/\s+/g, '_').toLowerCase() + Date.now()
-        }
-        this.customGroups.push(newGroup)
+        // 创建新数组而不是直接修改原数组
+        this.customGroups = [...this.customGroups, trimmedName]
         this.saveCustomGroups()
         this.newGroupName = ''
         return true
@@ -171,16 +229,22 @@ export class VideoSourcesViewModel {
   }
 
   // 删除自定义分组
-  async removeCustomGroup(group: GroupConfig) {
-    const groupToRemove = this.customGroups.find(g => g.value === group.value)
+  async removeCustomGroup(group: string) {
+    // 检查是否为默认分组
+    if (['不分组', '已启用', '已禁用'].includes(group)) {
+      ToastUtil.showToast({ message: "默认分组不能删除哦" })
+      return
+    }
+    const groupToRemove = this.customGroups.find(g => g === group)
     if (!groupToRemove) return
     // 更新所有使用该分组的源，将其group设为空
     const allSources = dataSourceManager.getAllDataSourceConfigs()
     const updatePromises: Promise<void>[] = []
     allSources.forEach(source => {
-      if (source.group === groupToRemove.name) {
+      if (source.group === groupToRemove) {
         const updatedConfig: DataSourceConfig = {
           key: source.key,
+          version: source.version,
           name: source.name,
           group: '',
           baseUrl: source.baseUrl,
@@ -195,42 +259,44 @@ export class VideoSourcesViewModel {
     try {
       await Promise.all(updatePromises)
       // 从自定义分组列表中删除
-      const index = this.customGroups.findIndex(g => g.value === group.value)
+      const index = this.customGroups.findIndex(g => g === group)
       if (index > -1) {
         this.customGroups.splice(index, 1)
         this.saveCustomGroups()
       }
       // 重新加载数据源
       await this.loadSources()
-      ToastUtil.showToast({ message: `已删除分组"${groupToRemove.name}"` })
+      ToastUtil.showToast({ message: `已删除分组"${groupToRemove}"` })
     } catch (error) {
       ToastUtil.showToast({ message: "删除分组失败" })
     }
   }
 
   // 编辑分组名称
-  async editCustomGroup(groupValue: string, newName: string) {
-    if (!newName || newName.trim() === '') return false
-
-    const trimmedName = newName.trim()
-    const groupToEdit = this.customGroups.find(g => g.value === groupValue)
+  async editCustomGroup(groupName: string, newGroupName: string) {
+    if (!newGroupName || newGroupName.trim() === '') return false
+    // 检查是否为默认分组
+    if (['不分组', '已启用', '已禁用'].includes(groupName)) {
+      ToastUtil.showToast({ message: "默认分组不能编辑哦" })
+      return false
+    }
+    const trimmedName = newGroupName.trim()
+    let groupToEdit = this.customGroups.find(g => g === groupName)
     if (!groupToEdit) return false
-
     // 检查新名称是否已存在
-    const exists = this.customGroups.some(g => g.name === trimmedName && g.value !== groupValue)
+    const exists = this.customGroups.some(g => g === trimmedName && g !== groupName)
     if (exists) {
       ToastUtil.showToast({ message: "分组名称已存在" })
       return false
     }
-
     // 更新所有使用该分组的源
     const allSources = dataSourceManager.getAllDataSourceConfigs()
     const updatePromises: Promise<void>[] = []
-
     allSources.forEach(source => {
-      if (source.group === groupToEdit.name) {
+      if (source.group === groupToEdit) {
         const updatedConfig: DataSourceConfig = {
           key: source.key,
+          version: source.version,
           name: source.name,
           group: trimmedName,
           baseUrl: source.baseUrl,
@@ -242,18 +308,16 @@ export class VideoSourcesViewModel {
         updatePromises.push(dataSourceManager.updateDataSource(source.key, updatedConfig))
       }
     })
-
     try {
       await Promise.all(updatePromises)
-
       // 更新分组名称
-      groupToEdit.name = trimmedName
-      // value保持不变，避免影响当前筛选状态
-      this.saveCustomGroups()
-
+      const index = this.customGroups.findIndex(g => g === groupName)
+      if (index > -1) {
+        this.customGroups[index] = trimmedName
+        this.saveCustomGroups()
+      }
       // 重新加载数据源
       await this.loadSources()
-
       ToastUtil.showToast({ message: "分组名称已更新" })
       return true
     } catch (error) {
@@ -263,53 +327,39 @@ export class VideoSourcesViewModel {
   }
 
   // 获取所有分组选项（包括默认选项和自定义分组）
-  getAllGroupOptions(): Array<GroupConfig> {
-    const options: GroupConfig[] = [
-      { name: '不分组', value: 'not_filter' },
-      { name: '已启用', value: 'enabled' },
-      { name: '已禁用', value: 'disabled' }
-    ]
-
+  getAllGroupOptions(): Array<string> {
+    const options: string[] = ['不分组', '已启用', '已禁用']
     // 添加自定义分组
     this.customGroups.forEach(group => {
       options.push(group)
     })
-
     return options
   }
 
   // 获取分组数据
   private getGroupedData(sources: DataSourceConfig[]): Map<string, DataSourceConfig[]> {
     const groups = new Map<string, DataSourceConfig[]>()
-
     switch (this.groupType) {
-      case 'enabled':
+      case '已启用':
         groups.set('已启用', sources.filter(s => s.enabled))
         break
-      case 'disabled':
+      case '已禁用':
         groups.set('已禁用', sources.filter(s => !s.enabled))
         break
       default:
       // 自定义分组
-        const groupConfig = this.customGroups.find(g => g.value === this.groupType)
+        const groupConfig = this.customGroups.find(g => g === this.groupType)
         if (groupConfig) {
-          groups.set(groupConfig.name, sources.filter(s => s.group === groupConfig.name))
+          groups.set(groupConfig, sources.filter(s => s.group === groupConfig))
         }
         break
     }
-
     return groups
-  }
-
-  // 根据value获取分组名称
-  getGroupNameByValue(value: string): string {
-    const group = this.customGroups.find(g => g.value === value)
-    return group ? group.name : value
   }
 
   // 检查分组名称是否存在
   isGroupNameExists(name: string, excludeValue?: string): boolean {
-    return this.customGroups.some(g => g.name === name && g.value !== excludeValue)
+    return this.customGroups.some(g => g === name)
   }
 
   // 保存自定义分组到持久化存储
@@ -325,14 +375,12 @@ export class VideoSourcesViewModel {
   // 获取过滤后的源（用于全选判断）
   private getFilteredSources(): DataSourceConfig[] {
     let sources = dataSourceManager.getAllDataSourceConfigs()
-
     if (this.searchText) {
       sources = sources.filter(source =>
       source.name.toLowerCase().includes(this.searchText.toLowerCase()) ||
       source.key.toLowerCase().includes(this.searchText.toLowerCase())
       )
     }
-
     return sources
   }
 
@@ -341,16 +389,13 @@ export class VideoSourcesViewModel {
     switch (this.sortType) {
       case SortType.PRIORITY:
         return sources.sort((a, b) => a.priority - b.priority)
-
       case SortType.NAME:
         return sources.sort((a, b) => a.name.localeCompare(b.name))
-
       case SortType.ENABLED:
         return sources.sort((a, b) => {
           if (a.enabled === b.enabled) return 0
           return a.enabled ? -1 : 1
         })
-
       case SortType.CUSTOM:
         return sources.sort((a, b) => {
           if (a.defaultSource !== b.defaultSource) {
@@ -361,7 +406,6 @@ export class VideoSourcesViewModel {
           }
           return a.priority - b.priority
         })
-
       default:
         return sources
     }
@@ -369,45 +413,30 @@ export class VideoSourcesViewModel {
 
   // 分组逻辑
   private applyGrouping(sources: DataSourceConfig[]): DataSourceConfig[] {
-    if (this.groupType === 'not_filter') {
+    if (this.groupType === '不分组') {
       return sources
     }
-    const groupedSources: DataSourceConfig[] = []
+    // 对于分组筛选，直接返回过滤后的数据源，不添加分组标题
     const groups = this.getGroupedData(sources)
-    groups.forEach((items, groupName) => {
-      // 添加分组标题
-      groupedSources.push(this.createGroupHeader(groupName))
-      // 添加组内项目
-      groupedSources.push(...items)
+    let filteredSources: DataSourceConfig[] = []
+    groups.forEach((items) => {
+      filteredSources = filteredSources.concat(items)
     })
-
-    return groupedSources
+    return filteredSources
   }
 
-  // 创建分组标题项
-  private createGroupHeader(groupName: string): DataSourceConfig {
-    return {
-      key: `group_header_${groupName}`,
-      name: groupName,
-      group: groupName,
-      baseUrl: '',
-      enabled: true,
-      priority: -1,
-      defaultSource: false,
-      parserConfig: {} as ParserConfig
-    }
-  }
-
-  // 设置排序类型
+  // 设置列表排序类型
   setSortType(type: SortType) {
     this.sortType = type
     this.appSettings.video_sources_order = type
     this.getSources()
   }
 
-  // 设置分组类型
+  // 设置分组筛选类型
   setGroupType(type: string) {
+    if (type == 'group_manage') return
     this.groupType = type
+    this.appSettings.video_sources_group_filter = type
     this.getSources()
   }
 
@@ -473,7 +502,6 @@ export class VideoSourcesViewModel {
     if (this.selectCount === 0) {
       return false
     }
-
     return new Promise((resolve) => {
       ToastUtil.showAlertDialog({
         title: '移除视频源',

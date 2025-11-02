@@ -20,6 +20,7 @@ struct Index {
   @Provide('StateView') state: number = 0
   // 手机横屏监听
   @Provide isPhoneLandscape: boolean = false
+
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
@@ -28,6 +29,8 @@ struct Index {
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
   // 高度断点
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
+  // 全局背景模糊
+  @StorageLink('ShowIndexForegroundBlur') showIndexForegroundBlur: boolean = false
 
   private controller: TabsController = new TabsController()
   @Provide('pageStack') pageStack: NavPathStack = new NavPathStack()
@@ -106,6 +109,8 @@ struct Index {
     }.hideToolBar(true)
     .mode(NavigationMode.Stack)
     .width('100%').height('100%')
+    .foregroundBlurStyle(this.showIndexForegroundBlur && this.appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,
+      { colorMode: ThemeColorMode.SYSTEM, adaptiveColor: AdaptiveColor.DEFAULT, scale: 0.3 })
   }
 
   @Builder TabBarBuilder(index: number, title: string, icon: Resource, iconSelected: Resource) {

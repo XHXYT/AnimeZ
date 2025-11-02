@@ -20,6 +20,10 @@ export class AppConfigs {
    */
   auto_resume_download_on_wifi: boolean = false
   /**
+   * 背景模糊
+   */
+  need_blur: boolean = false
+  /**
    * 最大同时下载任务数，默认为3
    */
   max_downloading_count: number = 3
@@ -50,7 +54,7 @@ export class AppConfigs {
   /**
    * 视频源分组筛选
    */
-  video_sources_group_filter: string = 'not_filter'
+  video_sources_group_filter: string = '不分组'
   /**
    * 视频源分组管理
    */

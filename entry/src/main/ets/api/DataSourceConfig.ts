@@ -81,6 +81,7 @@ export interface DataSourceConfig {
   name: string;
   group: string,
   baseUrl: string;
+  version: number;
   enabled: boolean;
   priority: number;
   defaultSource: boolean; // 是否为默认数据源

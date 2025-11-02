@@ -3,6 +3,7 @@
   "sources": [
     {
       "key": "key_yinghuavideo",
+      "version": "1.0.0",
       "name": "樱花动漫",
       "group": "动漫",
       "baseUrl": "http://www.iyinghua.com/",
@@ -89,6 +90,7 @@
     },
     {
       "key": "key_agedmvideo",
+      "version": "1.0.1",
       "name": "AGE动漫",
       "group": "动漫",
       "baseUrl": "https://www.agedm.io/",

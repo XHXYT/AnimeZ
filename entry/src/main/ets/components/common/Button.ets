@@ -4,16 +4,16 @@ import { SymbolGlyphModifier } from "@kit.ArkUI";
  * 功能按钮
  */
 @Component
-export struct  ButtonBuilder {
+export struct ButtonBuilder {
 
   @Prop config: ButtonConfig
   @Prop menuSelected: string | number
 
   build() {
-    Button({ type: this.config.type || ButtonType.Normal }) {
+    Button({ type: this.config.type || ButtonType.Circle }) {
       ButtonContent(this.config)
     }
-    .width(this.config.size).height(this.config.size)
+    .width(this.config.size || 36).height(this.config.size || 36)
     .backgroundColor(this.config.backgroundColor ?? Color.Transparent)
     .enabled(this.config.enabled ?? true) // 使用 ?? 处理 undefined，默认为 true
     .onClick(() => {
@@ -34,7 +34,9 @@ export struct  ButtonBuilder {
             symbolStartIcon: item.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolStart)) : undefined,
             symbolEndIcon: this.menuSelected == item.value ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
           }).onClick(() => {
-            this.menuSelected = item.value
+            if (item.value != config.prohibitValue) {
+              this.menuSelected = item.value
+            }
             item.action?.()
           })
         })
@@ -97,6 +99,7 @@ export interface ButtonConfig {
   menuSelected?: string | number
   menuTitle?: ResourceStr
   menuItems?: MenuItem[]; // 绑定的菜单项列表
+  prohibitValue?: string, // 禁止赋值的值
 
   // 样式属性
   type?: ButtonType; // 按钮类型，默认 ButtonType.Normal
