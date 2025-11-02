@@ -1,4 +1,4 @@
-import { DataSourceConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { VideoSourcesViewModel, SortType } from "../viewmodel/VideoSourcesViewModel"
 import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
@@ -101,7 +101,7 @@ struct VideoSources {
         }
       })
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: this.topHeight - 15, bottom: this.bottomHeight - 15})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -138,7 +138,8 @@ struct VideoSources {
     }) {
       // 搜索框
       Search({ placeholder: '搜索视频源', controller: this.searchController })
-        .margin({ top: 8, bottom: 8})
+        .margin({ top: 24, bottom: 24})
+        .height(36)
         .onChange((value: string) => {
           this.viewModel.setSearchText(value)
         })
@@ -221,7 +222,7 @@ struct VideoSources {
         this.viewModel.toggleItemSelection(item)
       } else {
         // 点击跳转到详情页
-        this.pageStack.pushPathByName('VideoSourceDetail', null, true)
+        this.goToSourceDetail(false, item)
       }
     })
   }
@@ -359,7 +360,7 @@ struct VideoSources {
             value: 'add',
             symbolStart: 'plus_circle',
             action: () => {
-
+              this.goToSourceDetail(true)
             }
           },
           {
@@ -399,6 +400,27 @@ struct VideoSources {
     ]
 
     return controlButtons
+  }
+
+  goToSourceDetail(isNew: boolean, config?: DataSourceConfig) {
+    if (isNew) {
+      const newSource: DataSourceConfig = {
+        key: 'new', // new标识
+        name: '',
+        group: '',
+        baseUrl: '',
+        version: 1,
+        enabled: true,
+        priority: 100,
+        description: '',
+        defaultSource: false,
+        parserConfig: {} as ParserConfig
+      }
+      this.pageStack.pushPathByName('VideoSourceDetail', newSource, true)
+    } else {
+      // 编辑现有数据源
+      this.pageStack.pushPathByName('VideoSourceDetail', config, true)
+    }
   }
 
 }

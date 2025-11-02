@@ -84,6 +84,7 @@ export interface DataSourceConfig {
   version: number;
   enabled: boolean;
   priority: number;
+  description: string
   defaultSource: boolean; // 是否为默认数据源
   parserConfig: ParserConfig;
 }
