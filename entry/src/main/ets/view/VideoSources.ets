@@ -6,6 +6,7 @@ import { ButtonBuilder, ButtonConfig, MenuItem } from "../components/common/Butt
 import { LengthMetrics } from "@kit.ArkUI"
 import { AppConfigs } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
+import { ToastUtil } from "../utils/ToastUtils"
 
 // 系统路由 - 视频源
 @Builder
@@ -78,10 +79,6 @@ struct VideoSources {
         })
           .width('100%')
           .layoutWeight(1)
-        // 编辑工具栏
-        if (this.viewModel.selectMode) {
-          this.EditToolbar()
-        }
       }
       .bindSheet($$this.showGroupManager, this.GroupManager(), {
         detents: [SheetSize.LARGE],
@@ -114,19 +111,12 @@ struct VideoSources {
 
   @Builder
   VideoSourcesContent() {
-    Column() {
-      // 列表内容
-      List({space: 12}) {
-        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
-          // 普通数据项
-          ListItem() {
-            this.SourceItem(item)
-          }
-        })
+    SourcesList({
+      viewModel: this.viewModel,
+      goDetail: (isNew: boolean, config?: DataSourceConfig) => {
+        this.goToSourceDetail(isNew, config)
       }
-      .layoutWeight(1)
-      .margin({ left: 16, right: 16})
-    }
+    })
   }
 
   @Builder
@@ -170,98 +160,6 @@ struct VideoSources {
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
     .backgroundColor($r('app.color.background_color_accent'))
-  }
-
-  @Builder
-  SourceItem(item: DataSourceConfig) {
-    Row() {
-      // 选择框
-      if (this.viewModel.selectMode) {
-        Image(this.viewModel.selectionManager.isSelect(item) ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
-          .margin({ right: 12 })
-      }
-      // 数据源信息
-      Column() {
-        Text(item.name)
-          .fontSize(16)
-          .fontColor($r('app.color.color_text_major'))
-        Text(`${item.group || '未分组'} | ${item.version}`)
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .margin({ top: 4 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      // 状态标识
-      if (item.defaultSource) {
-        Text('默认')
-          .fontSize(12)
-          .fontColor(Color.White)
-          .backgroundColor($r('app.color.primary_color_accent'))
-          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .borderRadius(4)
-          .margin({ right: 8 })
-      }
-      if (!item.enabled) {
-        Text('已禁用')
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .margin({ right: 8 })
-      }
-    }
-    .padding(16)
-    .width('100%')
-    .borderRadius(16)
-    .backgroundColor($r('app.color.background_color'))
-    .onClick(() => {
-      if (this.viewModel.selectMode) {
-        this.viewModel.toggleItemSelection(item)
-      } else {
-        // 点击跳转到详情页
-        this.goToSourceDetail(false, item)
-      }
-    })
-  }
-
-  @Builder
-  EditToolbar() {
-    Row() {
-      Row() {
-        Image(this.viewModel.hasSelectAll ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
-          .fillColor(this.viewModel.hasSelectAll ?
-            $r('app.color.primary_color_accent') :
-            $r('app.color.color_text_minor'))
-        Text(this.viewModel.hasSelectAll ? '全不选' : '全选')
-          .fontColor($r('app.color.color_text_major'))
-          .fontSize(14)
-          .margin({ left: 8 })
-      }
-      .margin({ left: 16 })
-      .onClick(() => {
-        this.viewModel.toggleSelectAll()
-      })
-
-      Blank()
-
-      Text(`删除(${this.viewModel.selectCount})`)
-        .fontColor(this.viewModel.selectCount == 0 ?
-          $r('app.color.color_text_minor') : Color.Red)
-        .fontSize(14)
-        .margin({ right: 16 })
-        .onClick(() => {
-          this.viewModel.deleteSelectedItems()
-        })
-    }
-    .width('100%')
-    .height(42)
   }
 
   getControlButtons() {
@@ -376,7 +274,7 @@ struct VideoSources {
             value: 'import_url',
             symbolStart: 'plus_circle',
             action: () => {
-
+              ToastUtil.showToast({message: '开发中'})
             }
           },
           {
@@ -384,7 +282,15 @@ struct VideoSources {
             value: 'import_qr',
             symbolStart: 'plus_circle',
             action: () => {
-
+              ToastUtil.showToast({message: '开发中'})
+            }
+          },
+          {
+            name: '批量管理',
+            value: 'batch_manage',
+            symbolStart: 'square_and_square',
+            action: () => {
+              this.viewModel.toggleSelectionMode()
             }
           },
           {
@@ -421,6 +327,127 @@ struct VideoSources {
       // 编辑现有数据源
       this.pageStack.pushPathByName('VideoSourceDetail', config, true)
     }
+  }
+
+}
+
+
+@Component
+struct SourcesList {
+
+  @ObjectLink viewModel: VideoSourcesViewModel
+  goDetail: (isNew: boolean, config?: DataSourceConfig) => void = () => {}
+
+  build() {
+    Column() {
+      // 列表内容
+      List({space: 12}) {
+        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
+          // 普通数据项
+          ListItem() {
+            this.SourceItem(item)
+          }
+        })
+      }
+      .layoutWeight(1)
+      .margin({ left: 16, right: 16})
+      // 编辑工具栏
+      if (this.viewModel.selectMode) {
+        this.EditToolbar()
+      }
+    }
+  }
+
+  @Builder
+  SourceItem(item: DataSourceConfig) {
+    Row() {
+      // 选择框
+      if (this.viewModel.selectMode) {
+        Image(this.viewModel.selectionManager.isSelect(item) ?
+          $r('app.media.ic_selection_selected') :
+          $r('app.media.ic_selection_none'))
+          .width(24)
+          .height(24)
+          .margin({ right: 12 })
+      }
+      // 数据源信息
+      Column() {
+        Text(item.name)
+          .fontSize(16)
+          .fontColor($r('app.color.color_text_major'))
+        Text(`${item.group || '未分组'} | ${item.version}`)
+          .fontSize(12)
+          .fontColor($r('app.color.color_text_minor'))
+          .margin({ top: 4 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      // 状态标识
+      if (item.defaultSource) {
+        Text('默认')
+          .fontSize(12)
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.primary_color_accent'))
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .borderRadius(4)
+          .margin({ right: 8 })
+      }
+      if (!item.enabled) {
+        Text('已禁用')
+          .fontSize(12)
+          .fontColor($r('app.color.color_text_minor'))
+          .margin({ right: 8 })
+      }
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(16)
+    .backgroundColor($r('app.color.background_color'))
+    .onClick(() => {
+      if (this.viewModel.selectMode) {
+        this.viewModel.toggleItemSelection(item)
+      } else {
+        // 点击跳转到详情页
+        this.goDetail(false, item)
+      }
+    })
+  }
+
+  @Builder
+  EditToolbar() {
+    Row() {
+      Row() {
+        Image(this.viewModel.hasSelectAll ?
+          $r('app.media.ic_selection_selected') :
+          $r('app.media.ic_selection_none'))
+          .width(24)
+          .height(24)
+          .fillColor(this.viewModel.hasSelectAll ?
+            $r('app.color.primary_color_accent') :
+            $r('app.color.color_text_minor'))
+        Text(this.viewModel.hasSelectAll ? '全不选' : '全选')
+          .fontColor($r('app.color.color_text_major'))
+          .fontSize(14)
+          .margin({ left: 8 })
+      }
+      .margin({ left: 16 })
+      .onClick(() => {
+        this.viewModel.toggleSelectAll()
+      })
+
+      Blank()
+
+      Text(`删除(${this.viewModel.selectCount})`)
+        .fontColor(this.viewModel.selectCount == 0 ?
+          $r('app.color.color_text_minor') : Color.Red)
+        .fontSize(14)
+        .margin({ right: 16 })
+        .onClick(() => {
+          this.viewModel.deleteSelectedItems()
+        })
+    }
+    .width('100%')
+    .height(42)
   }
 
 }

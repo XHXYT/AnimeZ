@@ -1,4 +1,4 @@
-import { DataSourceConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig, SelectorConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import TitleBar from "../components/TitleBar"
 import { ToastUtil } from "../utils/ToastUtils"
@@ -212,8 +212,13 @@ struct VideoSourceDetail {
       this.isLoading = true
       if (this.sourceConfig.key === 'new') {
         // 添加新数据源
-        await dataSourceManager.addDataSource(this.editingConfig)
-        ToastUtil.showToast({ message: "数据源添加成功" })
+        try {
+          await dataSourceManager.addDataSource(this.editingConfig)
+          ToastUtil.showToast({ message: "数据源添加成功" })
+        } catch (err) {
+          console.error(`${err}`)
+          ToastUtil.showToast({message: `${this.sourceConfig.key} 不唯一`})
+        }
       } else {
         // 更新现有数据源
         await dataSourceManager.updateDataSource(this.sourceConfig.key, this.editingConfig)
@@ -282,7 +287,7 @@ struct VideoSourceDetail {
     Scroll() {
       Column({ space: 16 }) {
         // Key
-        this.InputFieldWithTitle('Key', this.editingConfig.key, (value: string) => {
+        this.InputFieldWithTitle('Key(请确保唯一性)', this.editingConfig.key, (value: string) => {
           this.editingConfig.key = value
           this.markAsChanged()
         }, '数据源唯一标识')
@@ -339,9 +344,41 @@ struct VideoSourceDetail {
     Scroll() {
       Column({ space: 16 }) {
         Text('搜索配置')
-          .titleStyles()
+          .titleStyles(1)
+        Row({space: 12}) {
+          // 是否需要基础URL
+          Row({space: 5}) {
+            Toggle({ type: ToggleType.Checkbox, isOn: this.editingConfig.parserConfig.search.videos.urlNeedBaseUrl })
+              .onChange((isOn: boolean) => {
+                this.editingConfig.parserConfig.search.videos.urlNeedBaseUrl = isOn
+                this.markAsChanged()
+              })
+            Text('拼接基础URL')
+              .fontSize(16)
+              .fontColor($r('app.color.color_text_major'))
+              .width('30%')
+          }
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
+          // 启用HTTPS
+          Row() {
+            Toggle({ type: ToggleType.Checkbox, isOn: this.editingConfig.parserConfig.search.videos.enabledHttps })
+              .onChange((isOn: boolean) => {
+                this.editingConfig.parserConfig.search.videos.enabledHttps = isOn
+                this.markAsChanged()
+              })
+            Text('启用HTTPS')
+              .fontSize(16)
+              .fontColor($r('app.color.color_text_major'))
+              .width('30%')
+          }
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
+        }
+        .justifyContent(FlexAlign.Start)
+        .alignItems(VerticalAlign.Center)
         // URL模板
-        this.InputFieldWithTitle('URL模板', this.editingConfig.parserConfig.search.videos.urlTemplate, (value: string) => {
+        this.InputFieldWithTitle('搜索链接模板', this.editingConfig.parserConfig.search.videos.urlTemplate, (value: string) => {
           this.editingConfig.parserConfig.search.videos.urlTemplate = value
           this.markAsChanged()
         }, '搜索URL模板，如：/search?q={keyword}&page={page}')
@@ -350,55 +387,22 @@ struct VideoSourceDetail {
           this.editingConfig.parserConfig.search.videos.listSelector = value
           this.markAsChanged()
         }, '搜索结果列表的CSS选择器')
-        // 是否需要基础URL
-        Row() {
-          Text('需要拼接基础URL')
-            .fontSize(16)
-            .fontColor($r('app.color.color_text_major'))
-            .width('30%')
-          Blank()
-          Toggle({ type: ToggleType.Switch, isOn: this.editingConfig.parserConfig.search.videos.urlNeedBaseUrl })
-            .onChange((isOn: boolean) => {
-              this.editingConfig.parserConfig.search.videos.urlNeedBaseUrl = isOn
-              this.markAsChanged()
-            })
-        }
-        .width('100%')
-        // 启用HTTPS
-        Row() {
-          Text('启用HTTPS')
-            .fontSize(16)
-            .fontColor($r('app.color.color_text_major'))
-            .width('30%')
-          Blank()
-          Toggle({ type: ToggleType.Switch, isOn: this.editingConfig.parserConfig.search.videos.enabledHttps })
-            .onChange((isOn: boolean) => {
-              this.editingConfig.parserConfig.search.videos.enabledHttps = isOn
-              this.markAsChanged()
-            })
-        }
-        .width('100%')
-        // 项目选择器
-        this.JsonInputFieldWithTitle('项目选择器', JSON.stringify(this.editingConfig.parserConfig.search.videos.itemSelectors, null, 2), (value: string) => {
-          try {
-            this.editingConfig.parserConfig.search.videos.itemSelectors = JSON.parse(value)
-            this.markAsChanged()
-          } catch (e) {
-            ToastUtil.showToast({ message: "JSON格式错误" })
-          }
-        }, '视频项目选择器的JSON配置')
+        // 搜索结果配置 - 视频信息
+        this.VideoInfoSelector('搜索结果配置', this.editingConfig.parserConfig.search.videos.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+          this.editingConfig.parserConfig.search.videos.itemSelectors = config
+          this.markAsChanged()
+        })
       }
       .tabContentStyles()
     }
   }
 
-  // 主页配置Tab
   @Builder
   HomepageConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
         Text('轮播图配置')
-          .titleStyles()
+          .titleStyles(1)
         // Banner URL拼接模板
         this.InputFieldWithTitle('基础URL拼接模板', this.editingConfig.parserConfig.homepage.banner.urlTemplate, (value: string) => {
           this.editingConfig.parserConfig.homepage.banner.urlTemplate = value
@@ -409,18 +413,13 @@ struct VideoSourceDetail {
           this.editingConfig.parserConfig.homepage.banner.listSelector = value
           this.markAsChanged()
         }, 'Banner列表的CSS选择器')
-        // Banner项目选择器
-        this.JsonInputFieldWithTitle('项目选择器', JSON.stringify(this.editingConfig.parserConfig.homepage.banner.itemSelectors, null, 2), (value: string) => {
-          try {
-            this.editingConfig.parserConfig.homepage.banner.itemSelectors = JSON.parse(value)
-            this.markAsChanged()
-          } catch (e) {
-            ToastUtil.showToast({ message: "JSON格式错误" })
-          }
-        }, 'Banner项目选择器的JSON配置')
-
+        // Banner配置 - 视频信息
+        this.VideoInfoSelector('轮播项目配置', this.editingConfig.parserConfig.homepage.banner.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+          this.editingConfig.parserConfig.homepage.banner.itemSelectors = config
+          this.markAsChanged()
+        })
         Text('分类配置')
-          .titleStyles()
+          .titleStyles(1)
         // 分类标题选择器
         this.InputFieldWithTitle('标题选择器', this.editingConfig.parserConfig.homepage.category.title, (value: string) => {
           this.editingConfig.parserConfig.homepage.category.title = value
@@ -441,18 +440,22 @@ struct VideoSourceDetail {
           this.editingConfig.parserConfig.homepage.category.videoLists = value
           this.markAsChanged()
         }, '分类视频列表容器的CSS选择器')
+        // 分类视频配置 - 视频信息
+        this.VideoInfoSelector('分类视频项目配置', this.editingConfig.parserConfig.homepage.category.videos.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+          this.editingConfig.parserConfig.homepage.category.videos.itemSelectors = config
+          this.markAsChanged()
+        })
       }
       .tabContentStyles()
     }
   }
 
-  // 详情配置Tab
   @Builder
   DetailConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
         Text('影片详情')
-          .titleStyles()
+          .titleStyles(1)
         // 标题选择器
         this.InputFieldWithTitle('标题选择器', this.editingConfig.parserConfig.detail.titleSelector, (value: string) => {
           this.editingConfig.parserConfig.detail.titleSelector = value
@@ -469,45 +472,126 @@ struct VideoSourceDetail {
           this.markAsChanged()
         }, '视频详情页封面的CSS选择器')
         Text('剧集配置')
-          .titleStyles()
-        // 剧集容器选择器
-        this.InputFieldWithTitle('剧集容器选择器', this.editingConfig.parserConfig.detail.episodes.containerSelector || '', (value: string) => {
+          .titleStyles(1)
+        // 多路线标题选择器
+        this.InputFieldWithTitle('多路线标题选择器(可选)', this.editingConfig.parserConfig.detail.episodes.routeTitlesSelector || '', (value: string) => {
+          this.editingConfig.parserConfig.detail.episodes.routeTitlesSelector = value
+          this.markAsChanged()
+        }, '多路线标题的CSS选择器')
+        // 多路线剧集选择器
+        this.InputFieldWithTitle('多路线剧集选择器(可选)', this.editingConfig.parserConfig.detail.episodes.routeContainersSelector || '', (value: string) => {
+          this.editingConfig.parserConfig.detail.episodes.routeContainersSelector = value
+          this.markAsChanged()
+        }, '多路线剧集的CSS选择器')
+        // 单路线剧集选择器
+        this.InputFieldWithTitle('单路线剧集选择器(仅单路线时必选)', this.editingConfig.parserConfig.detail.episodes.containerSelector || '', (value: string) => {
           this.editingConfig.parserConfig.detail.episodes.containerSelector = value
           this.markAsChanged()
-        }, '剧集列表容器的CSS选择器')
-        // 剧集项目选择器
-        this.InputFieldWithTitle('剧集项目选择器', this.editingConfig.parserConfig.detail.episodes.itemSelector, (value: string) => {
+        }, '单路线剧集的CSS选择器')
+        // 剧集列表选择器
+        this.InputFieldWithTitle('剧集列表选择器', this.editingConfig.parserConfig.detail.episodes.itemSelector, (value: string) => {
           this.editingConfig.parserConfig.detail.episodes.itemSelector = value
           this.markAsChanged()
-        }, '剧集项目的CSS选择器')
-        // 剧集项目选择器配置
-        this.JsonInputFieldWithTitle('剧集项目配置', JSON.stringify(this.editingConfig.parserConfig.detail.episodes.itemSelectors, null, 2), (value: string) => {
-          try {
-            this.editingConfig.parserConfig.detail.episodes.itemSelectors = JSON.parse(value)
-            this.markAsChanged()
-          } catch (e) {
-            ToastUtil.showToast({ message: "JSON格式错误" })
-          }
-        }, '剧集项目选择器的JSON配置')
+        }, '剧集列表的CSS选择器')
+        // 剧集配置 - 剧集信息
+        this.EpisodeSelector('单集剧集配置', this.editingConfig.parserConfig.detail.episodes.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+          this.editingConfig.parserConfig.detail.episodes.itemSelectors = config
+          this.markAsChanged()
+        })
         Text('推荐配置')
-          .titleStyles()
+          .titleStyles(1)
         // 推荐列表选择器
         this.InputFieldWithTitle('推荐列表选择器', this.editingConfig.parserConfig.detail.recommends.listSelector, (value: string) => {
           this.editingConfig.parserConfig.detail.recommends.listSelector = value
           this.markAsChanged()
         }, '推荐视频列表的CSS选择器')
-        // 推荐项目选择器配置
-        this.JsonInputFieldWithTitle('推荐项目配置', JSON.stringify(this.editingConfig.parserConfig.detail.recommends.itemSelectors, null, 2), (value: string) => {
-          try {
-            this.editingConfig.parserConfig.detail.recommends.itemSelectors = JSON.parse(value)
-            this.markAsChanged()
-          } catch (e) {
-            ToastUtil.showToast({ message: "JSON格式错误" })
-          }
-        }, '推荐项目选择器的JSON配置')
+        // 推荐配置 - 视频信息
+        this.VideoInfoSelector('推荐番剧配置', this.editingConfig.parserConfig.detail.recommends.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+          this.editingConfig.parserConfig.detail.recommends.itemSelectors = config
+          this.markAsChanged()
+        })
       }
       .tabContentStyles()
     }
+  }
+
+  // 视频信息选择器
+  @Builder
+  VideoInfoSelector(title: string, config: SelectorConfig, onChange: (config: SelectorConfig) => void) {
+    Column({ space: 12 }) {
+      Text(title)
+        .titleStyles(0)
+      // 番剧名选择器
+      this.InputFieldWithTitle('番剧名', config.title || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: value,
+          url: config.url || '',
+          imgUrl: config.imgUrl || '',
+          episode: config.episode || ''
+        }
+        onChange(newConfig)
+      }, '番剧名称的CSS选择器')
+      // 封面链接选择器
+      this.InputFieldWithTitle('封面链接', config.imgUrl || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: config.title || '',
+          url: config.url || '',
+          imgUrl: value,
+          episode: config.episode || ''
+        }
+        onChange(newConfig)
+      }, '封面图片链接的CSS选择器')
+      // 番剧链接选择器
+      this.InputFieldWithTitle('番剧链接', config.url || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: config.title || '',
+          url: value,
+          imgUrl: config.imgUrl || '',
+          episode: config.episode || ''
+        }
+        onChange(newConfig)
+      }, '番剧详情链接的CSS选择器')
+
+      // 剧集数选择器
+      this.InputFieldWithTitle('剧集数', config.episode || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: config.title || '',
+          url: config.url || '',
+          imgUrl: config.imgUrl || '',
+          episode: value
+        }
+        onChange(newConfig)
+      }, '剧集数量的CSS选择器')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  // 剧集选择器 用于剧集列表
+  @Builder
+  EpisodeSelector(title: string, config: SelectorConfig, onChange: (config: SelectorConfig) => void) {
+    Column({ space: 12 }) {
+      Text(title)
+        .titleStyles(0)
+      // 标题选择器
+      this.InputFieldWithTitle('标题', config.title || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: value,
+          url: config.url || ''
+        }
+        onChange(newConfig)
+      }, '剧集标题的CSS选择器')
+      // 链接选择器
+      this.InputFieldWithTitle('链接', config.url || '', (value: string) => {
+        const newConfig: SelectorConfig = {
+          title: config.title || '',
+          url: value
+        }
+        onChange(newConfig)
+      }, '剧集链接的CSS选择器')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   // 视频配置Tab
@@ -515,8 +599,8 @@ struct VideoSourceDetail {
   VideoConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
-        // URL选择器
-        this.InputFieldWithTitle('URL选择器', this.editingConfig.parserConfig.videoUrl.urlSelector || '', (value: string) => {
+        // 播放链接选择器
+        this.InputFieldWithTitle('播放链接选择器', this.editingConfig.parserConfig.videoUrl.urlSelector || '', (value: string) => {
           this.editingConfig.parserConfig.videoUrl.urlSelector = value
           this.markAsChanged()
         }, '视频播放链接的CSS选择器')
@@ -531,6 +615,7 @@ struct VideoSourceDetail {
             { value: '选择器' },
             { value: '正则表达式' }
           ])
+            .enabled(false)
             .selected(0)
             .value(this.editingConfig.parserConfig.videoUrl.pattern || '选择器')
             .font({ size: 16 })
@@ -539,17 +624,18 @@ struct VideoSourceDetail {
               this.markAsChanged()
             })
         }
+        .enabled(false)
         .width('100%')
         // 后处理
         this.InputFieldWithTitle('后处理', this.editingConfig.parserConfig.videoUrl.postProcess || '', (value: string) => {
           this.editingConfig.parserConfig.videoUrl.postProcess = value
           this.markAsChanged()
         }, '视频链接后处理脚本')
-        // 内嵌选择器
-        this.InputFieldWithTitle('内嵌选择器', this.editingConfig.parserConfig.videoUrl.iframeSelector || '', (value: string) => {
+        // 内嵌视频选择器
+        this.InputFieldWithTitle('内嵌视频选择器(执行JS，最终需返回播放链接)', this.editingConfig.parserConfig.videoUrl.iframeSelector || '', (value: string) => {
           this.editingConfig.parserConfig.videoUrl.iframeSelector = value
           this.markAsChanged()
-        }, '内嵌视频播放器的CSS选择器')
+        }, '内嵌视频播放器的JS操作')
       }
       .tabContentStyles()
     }
@@ -583,38 +669,12 @@ struct VideoSourceDetail {
     .alignItems(HorizontalAlign.Start)
   }
 
-  // 带标题的JSON输入框
-  @Builder
-  JsonInputFieldWithTitle(title: string, value: string, onChange: (value: string) => void, placeholder: string) {
-    Column({ space: 8 }) {
-      Text(title)
-        .fontSize(16)
-        .fontColor($r('app.color.color_text_major'))
-        .width('100%')
-        .textAlign(TextAlign.Start)
-      TextArea({
-        placeholder: placeholder,
-        text: value
-      })
-        .width('100%')
-        .fontSize(14)
-        .backgroundColor($r('app.color.background_color'))
-        .borderRadius(8)
-        .padding(12)
-        .onChange((value: string) => {
-          onChange(value)
-        })
-        .fontFamily('monospace')
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
 }
 
+
 @Extend(Text)
-function titleStyles() {
-  .fontWeight(FontWeight.Bold)
+function titleStyles(weight: 0 | 1) {
+  .fontWeight(weight == 0 ? FontWeight.Medium : FontWeight.Bold)
   .textAlign(TextAlign.Start)
   .width('100%')
   .fontSize(18)

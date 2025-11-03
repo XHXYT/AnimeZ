@@ -1,7 +1,10 @@
 
-// 选择器类型定义
+// 定义配置接口类型
 export interface SelectorConfig {
-  [key: string]: string;
+  title?: string
+  url?: string
+  imgUrl?: string
+  episode?: string
 }
 
 /** 视频集配置接口 */
@@ -88,3 +91,4 @@ export interface DataSourceConfig {
   defaultSource: boolean; // 是否为默认数据源
   parserConfig: ParserConfig;
 }
+

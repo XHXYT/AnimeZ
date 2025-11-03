@@ -23,26 +23,26 @@ export enum ViewState {
 @Observed
 export class VideoSourcesViewModel {
   // 视图状态
-  public state: ViewState = ViewState.CONTENT
-  public errorMessage: string = ''
+  @Track state: ViewState = ViewState.CONTENT
+  @Track errorMessage: string = ''
 
   // 选择相关状态
-  public selectCount: number = 0
-  public selectMode: boolean = false
-  public hasSelectAll: boolean = false
+  @Track selectCount: number = 0
+  @Track selectMode: boolean = false
+  @Track hasSelectAll: boolean = false
 
   // 排序和分组控制
-  public sortType: SortType = SortType.PRIORITY
-  public searchText: string = ''
+  @Track sortType: SortType = SortType.PRIORITY
+  @Track searchText: string = ''
 
   // 分组管理相关状态
-  public groupManagerVisible: boolean = false
-  public groupType: string = '不分组'
-  public customGroups: string[] = []
-  public newGroupName: string = ''
+  @Track groupManagerVisible: boolean = false
+  @Track groupType: string = '不分组'
+  @Track customGroups: string[] = []
+  @Track newGroupName: string = ''
 
   // 数据源列表
-  public videoSources: DataSourceConfig[] = []
+  @Track videoSources: DataSourceConfig[] = []
   // 持久化配置
   public appSettings: AppConfigs = new AppConfigs()
   public pageStack: NavPathStack = new NavPathStack()
