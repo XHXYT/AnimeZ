@@ -43,9 +43,11 @@ struct VideoSources {
     this.onShow = false
     this.viewModel.pageStack = this.pageStack
     this.viewModel.appSettings = this.appSettings
-    // 初始化分组数据
+
+    // 初始化选择回调
+    this.viewModel.initializeCallbacks()
+    // 数据初始化
     this.viewModel.loadCustomGroups()
-    // 初始化数据源
     this.viewModel.initialize()
   }
 
@@ -111,12 +113,115 @@ struct VideoSources {
 
   @Builder
   VideoSourcesContent() {
-    SourcesList({
-      viewModel: this.viewModel,
-      goDetail: (isNew: boolean, config?: DataSourceConfig) => {
-        this.goToSourceDetail(isNew, config)
+    Column() {
+      // 列表内容
+      List({space: 12}) {
+        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
+          // 普通数据项
+          ListItem() {
+            this.SourceItem(item)
+          }
+        })
+      }
+      .layoutWeight(1)
+      .margin({ left: 16, right: 16})
+      // 编辑工具栏
+      if (this.viewModel.selectMode) {
+        this.EditToolbar()
+      }
+    }
+  }
+
+  @Builder
+  SourceItem(item: DataSourceConfig) {
+    Row() {
+      // 选择框
+      if (this.viewModel.selectMode) {
+        Image(this.viewModel.selectionManager.isSelect(item) ?
+          $r('app.media.ic_selection_selected') :
+          $r('app.media.ic_selection_none'))
+          .width(24)
+          .height(24)
+          .margin({ right: 12 })
+      }
+      // 数据源信息
+      Column() {
+        Text(item.name)
+          .fontSize(16)
+          .fontColor($r('app.color.color_text_major'))
+        Text(`${item.group || '未分组'} | ${item.version}`)
+          .fontSize(12)
+          .fontColor($r('app.color.color_text_minor'))
+          .margin({ top: 4 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      // 状态标识
+      if (item.defaultSource) {
+        Text('默认')
+          .fontSize(12)
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.primary_color_accent'))
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .borderRadius(4)
+          .margin({ right: 8 })
+      }
+      if (!item.enabled) {
+        Text('已禁用')
+          .fontSize(12)
+          .fontColor($r('app.color.color_text_minor'))
+          .margin({ right: 8 })
+      }
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(16)
+    .backgroundColor($r('app.color.background_color'))
+    .onClick(() => {
+      if (this.viewModel.selectMode) {
+        this.viewModel.toggleItemSelection(item)
+      } else {
+        // 点击跳转到详情页
+        this.goToSourceDetail(false, item)
       }
     })
+  }
+
+  @Builder
+  EditToolbar() {
+    Row() {
+      Row() {
+        Image(this.viewModel.hasSelectAll ?
+          $r('app.media.ic_selection_selected') :
+          $r('app.media.ic_selection_none'))
+          .width(24)
+          .height(24)
+          .fillColor(this.viewModel.hasSelectAll ?
+            $r('app.color.primary_color_accent') :
+            $r('app.color.color_text_minor'))
+        Text(this.viewModel.hasSelectAll ? '全不选' : '全选')
+          .fontColor($r('app.color.color_text_major'))
+          .fontSize(14)
+          .margin({ left: 8 })
+      }
+      .margin({ left: 16 })
+      .onClick(() => {
+        this.viewModel.toggleSelectAll()
+      })
+
+      Blank()
+
+      Text(`删除(${this.viewModel.selectCount})`)
+        .fontColor(this.viewModel.selectCount == 0 ?
+          $r('app.color.color_text_minor') : Color.Red)
+        .fontSize(14)
+        .margin({ right: 16 })
+        .onClick(() => {
+          this.viewModel.deleteSelectedItems()
+        })
+    }
+    .width('100%')
+    .height(42)
   }
 
   @Builder
@@ -175,6 +280,7 @@ struct VideoSources {
       { // 排序按钮
         symbolSrc: 'mobiledata_circle', // Symbol 图标
         iconSize: 24,
+        needCheckmark: true,
         menuSelected: this.appSettings.video_sources_order,
         menuTitle: '排列顺序',
         fontColor: $r('app.color.color_text_major'),
@@ -212,6 +318,7 @@ struct VideoSources {
       { // 分组按钮
         symbolSrc: 'satellite_map', // Symbol 图标
         iconSize: 24,
+        needCheckmark: true,
         menuTitle: '分组筛选',
         prohibitValue: 'group_manage',
         menuSelected: this.appSettings.video_sources_group_filter,
@@ -251,6 +358,7 @@ struct VideoSources {
       { // 更多按钮
         symbolSrc: 'dot_grid_2x2', // Symbol 图标
         iconSize: 24,
+        needCheckmark: false,
         fontColor: $r('app.color.color_text_major'),
         menuItems: [
           {

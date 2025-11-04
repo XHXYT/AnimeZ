@@ -356,7 +356,6 @@ struct VideoSourceDetail {
             Text('拼接基础URL')
               .fontSize(16)
               .fontColor($r('app.color.color_text_major'))
-              .width('30%')
           }
           .justifyContent(FlexAlign.Start)
           .alignItems(VerticalAlign.Center)
@@ -370,7 +369,6 @@ struct VideoSourceDetail {
             Text('启用HTTPS')
               .fontSize(16)
               .fontColor($r('app.color.color_text_major'))
-              .width('30%')
           }
           .justifyContent(FlexAlign.Start)
           .alignItems(VerticalAlign.Center)

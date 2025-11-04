@@ -32,7 +32,7 @@ export struct ButtonBuilder {
             content: item.name,
             startIcon: item.startIconSrc ? item.startIconSrc : undefined, // MenuItem 的 icon 属性
             symbolStartIcon: item.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolStart)) : undefined,
-            symbolEndIcon: this.menuSelected == item.value ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+            symbolEndIcon: (this.menuSelected == item.value && config.needCheckmark) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
           }).onClick(() => {
             if (item.value != config.prohibitValue) {
               this.menuSelected = item.value
@@ -96,6 +96,7 @@ export interface ButtonConfig {
   iconSize?: number; // 图标大小，默认 24vp
 
   // 菜单属性
+  needCheckmark?: boolean
   menuSelected?: string | number
   menuTitle?: ResourceStr
   menuItems?: MenuItem[]; // 绑定的菜单项列表

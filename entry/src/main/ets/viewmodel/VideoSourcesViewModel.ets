@@ -23,35 +23,37 @@ export enum ViewState {
 @Observed
 export class VideoSourcesViewModel {
   // 视图状态
-  @Track state: ViewState = ViewState.CONTENT
-  @Track errorMessage: string = ''
+  public state: ViewState
+  public errorMessage: string
 
   // 选择相关状态
-  @Track selectCount: number = 0
-  @Track selectMode: boolean = false
-  @Track hasSelectAll: boolean = false
+  public selectCount: number
+  public selectMode: boolean
+  public hasSelectAll: boolean
 
   // 排序和分组控制
-  @Track sortType: SortType = SortType.PRIORITY
-  @Track searchText: string = ''
+  public sortType: SortType
+  public searchText: string
 
   // 分组管理相关状态
-  @Track groupManagerVisible: boolean = false
-  @Track groupType: string = '不分组'
-  @Track customGroups: string[] = []
-  @Track newGroupName: string = ''
+  public groupManagerVisible: boolean
+  public groupType: string
+  public customGroups: string[]
+  public newGroupName: string
 
   // 数据源列表
-  @Track videoSources: DataSourceConfig[] = []
+  public videoSources: DataSourceConfig[]
   // 持久化配置
   public appSettings: AppConfigs = new AppConfigs()
   public pageStack: NavPathStack = new NavPathStack()
 
   // 业务逻辑对象
+  private _initialized: boolean = false
   public selectionManager: SelectionManager<DataSourceConfig>
   private selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
+      console.log(`当前编辑状态：${this.selectMode}`)
       if (!this.selectMode) {
         this.selectCount = 0
       }
@@ -63,8 +65,25 @@ export class VideoSourcesViewModel {
   }
 
   constructor() {
+    this.state = ViewState.CONTENT
+    this.errorMessage = ''
+    this.videoSources = []
+    this.selectCount = 0
+    this.selectMode = false
+    this.hasSelectAll = false
+    this.sortType = SortType.PRIORITY
+    this.searchText = ''
+    this.groupManagerVisible = false
+    this.groupType = '不分组'
+    this.customGroups = []
+    this.newGroupName = ''
     this.selectionManager = new SelectionManager<DataSourceConfig>()
+  }
+
+  public initializeCallbacks() {
+    if (this._initialized) return
     this.initSelectionObserver()
+    this._initialized = true
   }
 
   // 初始化选择观察者
