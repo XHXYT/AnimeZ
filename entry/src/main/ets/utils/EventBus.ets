@@ -51,6 +51,11 @@ export const SOURCE_CHANGED_EVENT: Event = new EventImpl(1)
 export const HISTORY_CHANGED_EVENT: Event = new EventImpl(2)
 
 /**
+ * 视频数据源改变
+ */
+export const VIDEO_SOURCE_EVENT: Event = new EventImpl(3)
+
+/**
  * 应用接续恢复进度
  */
-export const APP_RESUME_PROGRESS_EVENT: Event = new EventImpl(3)
+export const APP_RESUME_PROGRESS_EVENT: Event = new EventImpl(4)

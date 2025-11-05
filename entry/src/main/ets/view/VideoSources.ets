@@ -7,6 +7,8 @@ import { LengthMetrics } from "@kit.ArkUI"
 import { AppConfigs } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
 import { ToastUtil } from "../utils/ToastUtils"
+import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
+import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
 
 // 系统路由 - 视频源
 @Builder
@@ -17,9 +19,10 @@ export function VideoSourcesBuilder(name: string, param: string) {
 @Component
 struct VideoSources {
 
+  @State selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
-  @State viewModel: VideoSourcesViewModel = new VideoSourcesViewModel()
+  @State viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
   // 添加搜索控制器
   private searchController: SearchController = new SearchController()
   @State errorMessage: string = this.viewModel.errorMessage
@@ -27,6 +30,7 @@ struct VideoSources {
 
   @Consume onShow: boolean
   @Consume DarkModeImage: boolean
+  @State selectMode: boolean = false
   @State showGroupManager: boolean = false
 
   @Consume('pageStack') pageStack: NavPathStack
@@ -39,20 +43,38 @@ struct VideoSources {
   // 高度断点
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
 
+  private selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
+    onSelectionModeChange: (isSelectionMode: boolean) => {
+      this.selectMode = isSelectionMode
+      console.log(`当前编辑状态：${this.selectMode}`)
+      if (!this.selectMode) {
+        this.viewModel.selectCount = 0
+      }
+    },
+    onSelectChange: (item: DataSourceConfig, isSelected) => {
+      this.viewModel.selectCount = this.selectionManager.getSelectionCount()
+      this.viewModel.hasSelectAll = this.viewModel.selectCount == this.viewModel.getFilteredSources().length
+    }
+  }
+
   aboutToAppear() {
+    this.selectionManager.addObserver(this.selectionObserver)
     this.onShow = false
     this.viewModel.pageStack = this.pageStack
     this.viewModel.appSettings = this.appSettings
-
-    // 初始化选择回调
-    this.viewModel.initializeCallbacks()
     // 数据初始化
     this.viewModel.loadCustomGroups()
-    this.viewModel.initialize()
+    // 注册数据源加载事件
+    VIDEO_SOURCE_EVENT.on(async () => {
+      await this.viewModel.initialize()
+    })
+    // 加载数据源
+    VIDEO_SOURCE_EVENT.emit()
   }
 
   aboutToDisappear() {
-    this.viewModel.dispose()
+    this.selectionManager.removeObserver(this.selectionObserver)
+    VIDEO_SOURCE_EVENT.off()
     this.onShow = true
   }
 
@@ -75,7 +97,7 @@ struct VideoSources {
           },
           custom: undefined,
           onRetry: () => {
-            this.viewModel.initialize()
+            VIDEO_SOURCE_EVENT.emit()
             return true
           }
         })
@@ -119,72 +141,29 @@ struct VideoSources {
         ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
           // 普通数据项
           ListItem() {
-            this.SourceItem(item)
+            SourceItem({
+              selectionManager: this.selectionManager,
+              selectMode: this.selectMode,
+              item: item
+            })
           }
+          .onClick(() => {
+            if (this.selectMode) {
+              this.viewModel.toggleItemSelection(item)
+            } else {
+              // 点击跳转到详情页
+              this.goToSourceDetail(false, item)
+            }
+          })
         })
       }
       .layoutWeight(1)
       .margin({ left: 16, right: 16})
       // 编辑工具栏
-      if (this.viewModel.selectMode) {
+      if (this.selectMode) {
         this.EditToolbar()
       }
     }
-  }
-
-  @Builder
-  SourceItem(item: DataSourceConfig) {
-    Row() {
-      // 选择框
-      if (this.viewModel.selectMode) {
-        Image(this.viewModel.selectionManager.isSelect(item) ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
-          .margin({ right: 12 })
-      }
-      // 数据源信息
-      Column() {
-        Text(item.name)
-          .fontSize(16)
-          .fontColor($r('app.color.color_text_major'))
-        Text(`${item.group || '未分组'} | ${item.version}`)
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .margin({ top: 4 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      // 状态标识
-      if (item.defaultSource) {
-        Text('默认')
-          .fontSize(12)
-          .fontColor(Color.White)
-          .backgroundColor($r('app.color.primary_color_accent'))
-          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .borderRadius(4)
-          .margin({ right: 8 })
-      }
-      if (!item.enabled) {
-        Text('已禁用')
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .margin({ right: 8 })
-      }
-    }
-    .padding(16)
-    .width('100%')
-    .borderRadius(16)
-    .backgroundColor($r('app.color.background_color'))
-    .onClick(() => {
-      if (this.viewModel.selectMode) {
-        this.viewModel.toggleItemSelection(item)
-      } else {
-        // 点击跳转到详情页
-        this.goToSourceDetail(false, item)
-      }
-    })
   }
 
   @Builder
@@ -441,37 +420,36 @@ struct VideoSources {
 
 
 @Component
-struct SourcesList {
+struct SourceItem {
 
-  @ObjectLink viewModel: VideoSourcesViewModel
-  goDetail: (isNew: boolean, config?: DataSourceConfig) => void = () => {}
-
-  build() {
-    Column() {
-      // 列表内容
-      List({space: 12}) {
-        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
-          // 普通数据项
-          ListItem() {
-            this.SourceItem(item)
-          }
-        })
-      }
-      .layoutWeight(1)
-      .margin({ left: 16, right: 16})
-      // 编辑工具栏
-      if (this.viewModel.selectMode) {
-        this.EditToolbar()
+  @Link selectMode: boolean
+  @Prop item: DataSourceConfig
+  @State isSelected: boolean = false
+  @Link selectionManager: SelectionManager<DataSourceConfig>
+  private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
+    onSelectionModeChange: (isSelectionMode: boolean) => {
+    },
+    onSelectChange: (item: DataSourceConfig, isSelected) => {
+      if (this.item.key == item.key ) {
+        this.isSelected = isSelected
       }
     }
   }
 
-  @Builder
-  SourceItem(item: DataSourceConfig) {
+  aboutToAppear() {
+    this.selectionManager.addObserver(this.selectionObserver)
+    this.isSelected = this.selectionManager.isSelect(this.item)
+  }
+
+  aboutToDisappear() {
+    this.selectionManager.removeObserver(this.selectionObserver)
+  }
+
+  build() {
     Row() {
       // 选择框
-      if (this.viewModel.selectMode) {
-        Image(this.viewModel.selectionManager.isSelect(item) ?
+      if (this.selectMode) {
+        Image(this.isSelected ?
           $r('app.media.ic_selection_selected') :
           $r('app.media.ic_selection_none'))
           .width(24)
@@ -480,10 +458,10 @@ struct SourcesList {
       }
       // 数据源信息
       Column() {
-        Text(item.name)
+        Text(this.item.name)
           .fontSize(16)
           .fontColor($r('app.color.color_text_major'))
-        Text(`${item.group || '未分组'} | ${item.version}`)
+        Text(`${this.item.group || '未分组'} | ${this.item.version}`)
           .fontSize(12)
           .fontColor($r('app.color.color_text_minor'))
           .margin({ top: 4 })
@@ -491,7 +469,7 @@ struct SourcesList {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       // 状态标识
-      if (item.defaultSource) {
+      if (this.item.defaultSource) {
         Text('默认')
           .fontSize(12)
           .fontColor(Color.White)
@@ -500,7 +478,7 @@ struct SourcesList {
           .borderRadius(4)
           .margin({ right: 8 })
       }
-      if (!item.enabled) {
+      if (!this.item.enabled) {
         Text('已禁用')
           .fontSize(12)
           .fontColor($r('app.color.color_text_minor'))
@@ -511,51 +489,6 @@ struct SourcesList {
     .width('100%')
     .borderRadius(16)
     .backgroundColor($r('app.color.background_color'))
-    .onClick(() => {
-      if (this.viewModel.selectMode) {
-        this.viewModel.toggleItemSelection(item)
-      } else {
-        // 点击跳转到详情页
-        this.goDetail(false, item)
-      }
-    })
-  }
-
-  @Builder
-  EditToolbar() {
-    Row() {
-      Row() {
-        Image(this.viewModel.hasSelectAll ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
-          .fillColor(this.viewModel.hasSelectAll ?
-            $r('app.color.primary_color_accent') :
-            $r('app.color.color_text_minor'))
-        Text(this.viewModel.hasSelectAll ? '全不选' : '全选')
-          .fontColor($r('app.color.color_text_major'))
-          .fontSize(14)
-          .margin({ left: 8 })
-      }
-      .margin({ left: 16 })
-      .onClick(() => {
-        this.viewModel.toggleSelectAll()
-      })
-
-      Blank()
-
-      Text(`删除(${this.viewModel.selectCount})`)
-        .fontColor(this.viewModel.selectCount == 0 ?
-          $r('app.color.color_text_minor') : Color.Red)
-        .fontSize(14)
-        .margin({ right: 16 })
-        .onClick(() => {
-          this.viewModel.deleteSelectedItems()
-        })
-    }
-    .width('100%')
-    .height(42)
   }
 
 }

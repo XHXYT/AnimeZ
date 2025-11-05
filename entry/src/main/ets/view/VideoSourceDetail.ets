@@ -1,9 +1,10 @@
 import { DataSourceConfig, SelectorConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import TitleBar from "../components/TitleBar"
+import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import { ToastUtil } from "../utils/ToastUtils"
 
-// 系统路由 - 视频源详情 TODO ①保存后视频源页面不会刷新 ②部分选项显示和描述错误 ③.....
+// 系统路由 - 视频源详情
 @Builder
 export function VideoSourceDetailBuilder(name: string, param: DataSourceConfig) {
   VideoSourceDetail({ sourceConfig: param })
@@ -214,6 +215,8 @@ struct VideoSourceDetail {
         // 添加新数据源
         try {
           await dataSourceManager.addDataSource(this.editingConfig)
+          // 通知数据源变更
+          VIDEO_SOURCE_EVENT.emit()
           ToastUtil.showToast({ message: "数据源添加成功" })
         } catch (err) {
           console.error(`${err}`)
@@ -222,6 +225,8 @@ struct VideoSourceDetail {
       } else {
         // 更新现有数据源
         await dataSourceManager.updateDataSource(this.sourceConfig.key, this.editingConfig)
+        // 通知数据源变更
+        VIDEO_SOURCE_EVENT.emit()
         ToastUtil.showToast({ message: "数据源更新成功" })
       }
       this.hasChanges = false

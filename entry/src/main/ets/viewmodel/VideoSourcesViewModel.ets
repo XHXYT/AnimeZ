@@ -1,6 +1,7 @@
 import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import { AppConfigs } from "../entryability/Settings"
+import { VIDEO_SOURCES_EDIT_EVENT } from "../utils/EventBus"
 import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
 
@@ -48,23 +49,9 @@ export class VideoSourcesViewModel {
   public pageStack: NavPathStack = new NavPathStack()
 
   // 业务逻辑对象
-  private _initialized: boolean = false
   public selectionManager: SelectionManager<DataSourceConfig>
-  private selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
-    onSelectionModeChange: (isSelectionMode: boolean) => {
-      this.selectMode = isSelectionMode
-      console.log(`当前编辑状态：${this.selectMode}`)
-      if (!this.selectMode) {
-        this.selectCount = 0
-      }
-    },
-    onSelectChange: (item: DataSourceConfig, isSelected) => {
-      this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == this.getFilteredSources().length
-    }
-  }
 
-  constructor() {
+  constructor(selectionManager: SelectionManager<DataSourceConfig>) {
     this.state = ViewState.CONTENT
     this.errorMessage = ''
     this.videoSources = []
@@ -77,18 +64,7 @@ export class VideoSourcesViewModel {
     this.groupType = '不分组'
     this.customGroups = []
     this.newGroupName = ''
-    this.selectionManager = new SelectionManager<DataSourceConfig>()
-  }
-
-  public initializeCallbacks() {
-    if (this._initialized) return
-    this.initSelectionObserver()
-    this._initialized = true
-  }
-
-  // 初始化选择观察者
-  private initSelectionObserver() {
-    this.selectionManager.addObserver(this.selectionObserver)
+    this.selectionManager = selectionManager
   }
 
   // 初始化数据
@@ -394,7 +370,7 @@ export class VideoSourcesViewModel {
   }
 
   // 获取过滤后的源（用于全选判断）
-  private getFilteredSources(): DataSourceConfig[] {
+  public getFilteredSources(): DataSourceConfig[] {
     let sources = dataSourceManager.getAllDataSourceConfigs()
     if (this.searchText) {
       sources = sources.filter(source =>
@@ -575,7 +551,7 @@ export class VideoSourcesViewModel {
 
   // 释放资源
   dispose() {
-    this.selectionManager.removeObserver(this.selectionObserver)
+
   }
 
 }
