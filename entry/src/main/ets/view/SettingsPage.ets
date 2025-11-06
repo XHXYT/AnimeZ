@@ -197,6 +197,19 @@ struct SettingsPage {
               }
             }
           },
+          {
+            title: '视频源覆盖更新',
+            info: '导入配置自动覆盖更新',
+            settings_key: 'video_source_import_overwrite',
+            preference: {
+              type: 'switch',
+              menu: [],
+              defaultValue: this.appSettings.video_source_import_overwrite,
+              onValueChange: (value) => {
+                this.appSettings.video_source_import_overwrite = value as boolean
+              }
+            }
+          },
         ]
       },
       {
@@ -258,7 +271,10 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_sensor_rotate
+              defaultValue: this.appSettings.auto_sensor_rotate,
+              onValueChange: (value) => {
+                this.appSettings.auto_sensor_rotate = value as boolean
+              }
             }
           },
           {
@@ -268,7 +284,10 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_play_next_episode
+              defaultValue: this.appSettings.auto_play_next_episode,
+              onValueChange: (value) => {
+                this.appSettings.auto_play_next_episode = value as boolean
+              }
             }
           },
           {
@@ -278,7 +297,10 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_play_on_no_wifi
+              defaultValue: this.appSettings.auto_play_on_no_wifi,
+              onValueChange: (value) => {
+                this.appSettings.auto_play_on_no_wifi = value as boolean
+              }
             }
           }
         ]

@@ -38,7 +38,7 @@ export class AppConfigs {
   /**
    * 自动旋转
    */
-  auto_sensor_rotate: number = 21
+  auto_sensor_rotate: boolean = false
   /**
    * 视频目录页列表类型
    */
@@ -59,6 +59,10 @@ export class AppConfigs {
    * 视频源分组管理
    */
   video_sources_group_filter_manager: string = ''
+  /**
+   * 视频源配置覆盖导入
+   */
+  video_source_import_overwrite: boolean = false
 
   constructor() {
   }

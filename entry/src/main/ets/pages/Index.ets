@@ -8,6 +8,7 @@ import { ColorModeManager } from '../utils/ColorModeManager';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { dataSourceManager } from '../api/DataSourceManager';
 
 @Entry
 @Component
@@ -43,7 +44,7 @@ struct Index {
   /**手机横屏监听*/
   PhoneLandscapeListener: mediaQuery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(320vp< height <= 500vp) and (640vp< width <= 1000vp)')
 
-  aboutToAppear() {
+  async aboutToAppear() {
     // 初始化颜色模式
     console.log(`当前颜色模式：${this.appSettings.color_mode}`)
     ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)

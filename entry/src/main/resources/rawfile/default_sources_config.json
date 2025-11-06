@@ -7,8 +7,9 @@
       "name": "樱花动漫",
       "group": "动漫",
       "baseUrl": "http://www.iyinghua.com/",
-      "enabled": true,
-      "priority": 1,
+      "enabled": false,
+      "priority": 2,
+      "description": "当前源已失效",
       "defaultSource": false,
       "parserConfig": {
         "search": {
@@ -95,7 +96,7 @@
       "group": "动漫",
       "baseUrl": "https://www.agedm.io/",
       "enabled": true,
-      "priority": 2,
+      "priority": 1,
       "defaultSource": true,
       "parserConfig": {
         "search": {

@@ -3,12 +3,13 @@ import { VideoSourcesViewModel, SortType } from "../viewmodel/VideoSourcesViewMo
 import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { ButtonBuilder, ButtonConfig, MenuItem } from "../components/common/Button"
-import { LengthMetrics } from "@kit.ArkUI"
+import { LengthMetrics, SymbolGlyphModifier } from "@kit.ArkUI"
 import { AppConfigs } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
 import { ToastUtil } from "../utils/ToastUtils"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
+import { dataSourceManager } from "../api/DataSourceManager"
 
 // 系统路由 - 视频源
 @Builder
@@ -122,7 +123,7 @@ struct VideoSources {
         }
       })
     }
-    .padding({top: this.topHeight - 15, bottom: this.bottomHeight - 15})
+    .padding({top: this.topHeight - 12, bottom: this.bottomHeight - 12})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -187,9 +188,7 @@ struct VideoSources {
       .onClick(() => {
         this.viewModel.toggleSelectAll()
       })
-
       Blank()
-
       Text(`删除(${this.viewModel.selectCount})`)
         .fontColor(this.viewModel.selectCount == 0 ?
           $r('app.color.color_text_minor') : Color.Red)
@@ -351,15 +350,16 @@ struct VideoSources {
           {
             name: '本地导入',
             value: 'import_file',
-            symbolStart: 'plus_circle',
-            action: () => {
-
+            symbolStart: 'doc_text_fill',
+            action: async () => {
+              const message = await dataSourceManager.importSourceConfigFromFile(this.getUIContext().getHostContext(), this.appSettings.video_source_import_overwrite)
+              ToastUtil.showToast({ message: message, duration: 2000 })
             }
           },
           {
             name: '网络导入',
             value: 'import_url',
-            symbolStart: 'plus_circle',
+            symbolStart: 'paperclip',
             action: () => {
               ToastUtil.showToast({message: '开发中'})
             }
@@ -367,7 +367,7 @@ struct VideoSources {
           {
             name: '二维码导入',
             value: 'import_qr',
-            symbolStart: 'plus_circle',
+            symbolStart: 'qrcode',
             action: () => {
               ToastUtil.showToast({message: '开发中'})
             }
@@ -425,6 +425,7 @@ struct SourceItem {
   @Link selectMode: boolean
   @Prop item: DataSourceConfig
   @State isSelected: boolean = false
+  @State isShowMenu: boolean = false
   @Link selectionManager: SelectionManager<DataSourceConfig>
   private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
@@ -489,6 +490,40 @@ struct SourceItem {
     .width('100%')
     .borderRadius(16)
     .backgroundColor($r('app.color.background_color'))
+    .bindContextMenu(this.isShowMenu, this.menuBuilder(this.item),
+      {
+        preview: MenuPreviewMode.IMAGE,
+        previewAnimationOptions: { scale: [1.0, 1.1] },
+        placement: Placement.BottomRight,
+        aboutToAppear: () => {
+        },
+        aboutToDisappear: () => {
+          this.isShowMenu = false
+        }
+      })
+    .onMouse((event) => {
+      if (event.action == MouseAction.Press && event.button == MouseButton.Right) {
+        this.isShowMenu = true
+      }
+    })
+    .gesture(LongPressGesture()
+      .onAction(() => {
+        // 显示菜单
+        this.isShowMenu = true
+      }))
+  }
+
+  @Builder
+  menuBuilder(item: DataSourceConfig) {
+    Menu() {
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.doc_text')).fontSize(16).fontColor([$r('sys.color.font_primary')]),
+        content: '导出视频源',
+      })
+        .onClick(() => {
+          dataSourceManager.exportDataSourceConfigs(this.getUIContext().getHostContext(), [this.item])
+        })
+    }
   }
 
 }

@@ -1,8 +1,7 @@
 import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import { AppConfigs } from "../entryability/Settings"
-import { VIDEO_SOURCES_EDIT_EVENT } from "../utils/EventBus"
-import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
+import { SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
 
 // 排序类型枚举
@@ -487,9 +486,6 @@ export class VideoSourcesViewModel {
   }
 
   goToSourceDetail(isNew: boolean) {
-    if (isNew) {
-
-    }
     // 跳转到新数据源详情页
     this.pageStack.pushPathByName('DataSourceDetailPage', null, true)
   }

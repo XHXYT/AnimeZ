@@ -1,11 +1,10 @@
 import Logger from '../utils/Logger';
 import GenericDataSource from './GenericDataSource';
 import { DataSourceConfig } from './DataSourceConfig';
-import { BusinessError } from '@kit.BasicServicesKit';
-import { fileIo, fileUri } from '@kit.CoreFileKit';
+import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import Url from '@ohos.url'
-import { common } from '@kit.AbilityKit';
+import { common, Context } from '@kit.AbilityKit';
 import VideoDetailInfo from '../entity/VideoDetailInfo';
 import VideoInfo from '../entity/VideoInfo';
 import HomepageData from '../entity/HomepageData';
@@ -300,6 +299,243 @@ class DataSourceManager {
       Logger.e('tips', `DataSourceManager.loadFromConfig Failed to load data sources: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * 从文件导入配置(支持批量导入)
+   * @param context 应用上下文
+   * @param overwrite 可选，是否覆盖已存在的数据源。默认为 false (不覆盖更新)
+   * @returns message 导入情况
+   */
+  async importSourceConfigFromFile(context: Context, overwrite: boolean = false): Promise<string> {
+    const filePicker = new picker.DocumentViewPicker(context)
+    const options = new picker.DocumentSelectOptions()
+    const result = await filePicker.select(options)
+    let message = ''
+    if (!result || result.length === 0) {
+      message = '未选择任何文件'
+      return message
+    }
+    let totalImported = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+    const failedFiles: string[] = [];
+    const skippedSources: { key: string, name: string, reason: string }[] = [];
+    try {
+      // 处理每个选择的文件
+      for (let i = 0; i < result.length; i++) {
+        const fileUri = result[i];
+        // 正确解码文件名 ---
+        let fileName: string;
+        try {
+          // URI 中的路径部分可能被百分号编码，需要解码
+          fileName = decodeURIComponent(fileUri.split('/').pop() || `文件${i + 1}`);
+        } catch (e) {
+          // 如果解码失败，使用原始名称作为后备
+          Logger.w('tips', `DataSourceManager.importSourceConfigFromFile Failed to decode file name from URI: ${fileUri}`);
+          fileName = fileUri.split('/').pop() || `文件${i + 1}`;
+        }
+        try {
+          // 使用 TextDecoder 正确读取文件内容
+          const file = fileIo.openSync(fileUri, fileIo.OpenMode.READ_ONLY);
+          // 读取所有字节到 buffer
+          const stat = fileIo.statSync(file.fd);
+          const buffer = new ArrayBuffer(stat.size);
+          fileIo.readSync(file.fd, buffer);
+          fileIo.closeSync(file);
+          // 使用 TextDecoder 将字节流解码为字符串
+          const textDecoder = util.TextDecoder.create('utf-8', { ignoreBOM: true });
+          const content = textDecoder.decodeToString(new Uint8Array(buffer));
+          // 智能解析配置文件内容，并获取版本信息
+          const { sources, version } = this.parseConfigFileWithVersion(content);
+          if (!sources || sources.length === 0) {
+            throw new Error('配置文件为空或格式无效');
+          }
+          // 验证版本兼容性 (示例：只兼容1.x.x版本)
+          if (version && !this.isVersionCompatible(version)) {
+            throw new Error(`不支持的配置文件版本: ${version}`);
+          }
+          // 导入数据源配置 (这部分逻辑保持不变)
+          for (const sourceConfig of sources) {
+            if (!sourceConfig.key || !sourceConfig.name) {
+              Logger.w('tips', `DataSourceManager.importSourceConfigFromFile Invalid source config: ${JSON.stringify(sourceConfig)}`);
+              skippedSources.push({ key: 'N/A', name: 'N/A', reason: '配置无效：缺少key或name' });
+              continue;
+            }
+            const existingConfig = this.dataSourceConfigs.get(sourceConfig.key);
+            if (existingConfig) {
+              if (overwrite) {
+                try {
+                  await this.updateDataSource(sourceConfig.key, sourceConfig);
+                  totalUpdated++;
+                  Logger.i(this, `DataSourceManager.importSourceConfigFromFile Updated source: ${sourceConfig.key}`);
+                } catch (error) {
+                  Logger.e('tips', `DataSourceManager.importSourceConfigFromFile Failed to update source ${sourceConfig.key}:${error.message}`);
+                  skippedSources.push({ key: sourceConfig.key, name: sourceConfig.name, reason: `更新失败: ${error.message}` });
+                }
+              } else {
+                totalSkipped++;
+                Logger.i(this, `DataSourceManager.importSourceConfigFromFile Skipped existing source: ${sourceConfig.key}`);
+                skippedSources.push({ key: sourceConfig.key, name: sourceConfig.name, reason: '已存在且未选择覆盖' });
+              }
+            } else {
+              try {
+                await this.addDataSource(sourceConfig);
+                totalImported++;
+                Logger.i(this, `DataSourceManager.importSourceConfigFromFile Imported new source: ${sourceConfig.key}`);
+              } catch (error) {
+                Logger.e('tips', `DataSourceManager.importSourceConfigFromFile Failed to import source ${sourceConfig.key}:${error.message}`);
+                skippedSources.push({ key: sourceConfig.key, name: sourceConfig.name, reason: `导入失败: ${error.message}` });
+              }
+            }
+          }
+        } catch (error) {
+          totalFailed++;
+          failedFiles.push(fileName); // 使用解码后的文件名
+          Logger.e('tips', `DataSourceManager.importSourceConfigFromFile Failed to process file ${fileName}:${error.message}`);
+        }
+      }
+      // 构建详细的返回消息 (这部分逻辑保持不变)
+      const parts: string[] = [];
+      if (totalImported > 0) parts.push(`新增 ${totalImported} 个`);
+      if (totalUpdated > 0) parts.push(`更新 ${totalUpdated} 个`);
+      if (totalSkipped > 0) parts.push(`跳过 ${totalSkipped} 个`);
+      if (totalFailed > 0) parts.push(`${totalFailed} 个文件处理失败`);
+
+      if (parts.length > 0) {
+        message = `导入完成: ${parts.join('，')}`;
+      } else {
+        message = '没有可导入的数据源';
+      }
+      if (failedFiles.length > 0) {
+        Logger.w('tips', `DataSourceManager.importSourceConfigFromFile Failed files: ${failedFiles.join(', ')}`);
+      }
+      if (skippedSources.length > 0) {
+        Logger.w('tips', `DataSourceManager.importSourceConfigFromFile Skipped sources: ${JSON.stringify(skippedSources, null, 2)}`);
+      }
+    } catch (error) {
+      Logger.e('tips', `DataSourceManager.importSourceConfigFromFile Import process failed: ${error.message}`);
+      throw new Error(`导入失败: ${error.message}`);
+    }
+    return message;
+  }
+
+  /**
+   * 智能解析配置文件，并返回版本信息
+   */
+  private parseConfigFileWithVersion(content: string): { sources: DataSourceConfig[], version?: string } {
+    try {
+      const parsed = JSON.parse(content);
+      // 情况1: DataSourceConfigFile 格式
+      if (parsed && typeof parsed === 'object' && parsed.sources && Array.isArray(parsed.sources)) {
+        return { sources: parsed.sources, version: parsed.version };
+      }
+      // 情况2: DataSourceConfig 数组格式
+      if (Array.isArray(parsed)) {
+        const isValidArray = parsed.every(item =>
+        item && typeof item === 'object' && item.key && item.name
+        );
+        if (isValidArray) {
+          return { sources: parsed }; // 数组格式没有版本信息
+        }
+      }
+      // 情况3: 单个 DataSourceConfig 格式
+      if (parsed && typeof parsed === 'object' && parsed.key && parsed.name) {
+        return { sources: [parsed] }; // 单个对象格式也没有版本信息
+      }
+      throw new Error('无法识别的配置文件格式');
+    } catch (error) {
+      Logger.e('tips', `DataSourceManager.parseConfigFileWithVersion Failed to parse config: ${error.message}`);
+      throw new Error(`配置文件解析失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 检查版本兼容性
+   * @param version 配置文件的版本号，例如 "1.2.3"
+   * @returns 是否兼容
+   */
+  private isVersionCompatible(version: string): boolean {
+    // 这里实现你的版本兼容性逻辑
+    // 示例：只兼容主版本号为1的版本
+    const majorVersion = parseInt(version.split('.')[0], 10);
+    return majorVersion === 1;
+  }
+
+
+  /**
+   * 直接导出给定的数据源配置对象到文件
+   * @param context 应用上下文，用于文件选择器
+   * @param configs 要导出的数据源配置对象数组。如果不传或为空数组，则导出所有数据源。
+   * @returns 返回操作结果消息
+   */
+  async exportDataSourceConfigs(context: Context, configs?: DataSourceConfig[]): Promise<string> {
+    let message = '';
+    // 确定要导出的配置和默认文件名
+    let configsToExport: DataSourceConfig[];
+    let defaultFileName = 'AnimeZ_data_sources.json';
+    if (!configs || configs.length === 0) {
+      // 模式3: 导出所有数据源配置 (DataSourceConfigFile 格式)
+      configsToExport = this.getAllDataSourceConfigs();
+      defaultFileName = 'AnimeZ_all_data_sources.json';
+    } else {
+      // 模式1 & 2: 导出指定的一个或多个数据源 (DataSourceConfig[] 格式)
+      configsToExport = configs;
+      if (configs.length === 1) {
+        // 单个源，用源名做文件名
+        defaultFileName = `${configs[0].name}.json`;
+      } else {
+        // 多个源，用通用名
+        defaultFileName = 'AnimeZ_selected_data_sources.json';
+      }
+    }
+    if (configsToExport.length === 0) {
+      return "没有找到要导出的数据源";
+    }
+    // 准备要写入的JSON内容
+    let dataToExport: object;
+    if (!configs || configs.length === 0) { // 注意这里的判断条件，是基于原始参数
+      // 导出全部时，使用完整的文件格式
+      dataToExport = {
+        version: "1.0.0",
+        sources: configsToExport
+      };
+    } else {
+      // 导出部分时，直接导出配置数组
+      dataToExport = configsToExport;
+    }
+    const jsonContent = JSON.stringify(dataToExport, null, 2);
+    // 初始化文件选择器
+    const filePicker = new picker.DocumentViewPicker(context);
+    const options = new picker.DocumentSaveOptions();
+    options.newFileNames = [defaultFileName];
+    options.fileSuffixChoices = ["'JSON文件|.json'"]; // 设置默认后缀为.json
+    options.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+    try {
+      // 让用户选择保存位置
+      const result = await filePicker.save(options);
+      if (!result || result.length === 0) {
+        return "未选择保存位置，导出已取消";
+      }
+      const targetUri = new fileUri.FileUri(result[0] + `/${defaultFileName}`).path
+      Logger.i(this, `DataSourceManager.exportDataSourceConfigs Exporting to URI: ${targetUri} jsonContent: ${jsonContent.length}`);
+      // 将JSON内容写入文件
+      const file = fileIo.openSync(targetUri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.writeSync(file.fd, jsonContent);
+      fileIo.fsync(file.fd).catch((error: Error) => {
+        console.warn(`文件的缓存数据同步到存储失败：`, error)
+      })
+      fileIo.closeSync(file);
+      // 返回成功消息
+      message = `成功导出 ${configsToExport.length} 个数据源到: ${targetUri}`;
+      Logger.i(this, message);
+    } catch (error) {
+      // 错误处理
+      message = `导出失败: ${error.message}`;
+      Logger.e('tips', `DataSourceManager.exportDataSourceConfigs ${message}`);
+    }
+    return message;
   }
 
   /**
