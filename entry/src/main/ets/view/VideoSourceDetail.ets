@@ -139,7 +139,7 @@ struct VideoSourceDetail {
       name: '',
       group: '',
       baseUrl: '',
-      version: 1,
+      version: '1.0.0',
       description: '',
       enabled: true,
       priority: 100,
@@ -306,6 +306,11 @@ struct VideoSourceDetail {
           this.editingConfig.name = value
           this.markAsChanged()
         }, '数据源显示名称')
+        // 版本
+        this.InputFieldWithTitle('版本', this.editingConfig.version, (value: string) => {
+          this.editingConfig.version = value
+          this.markAsChanged()
+        }, '数据源版本号, 只能写数字哦，格式：x.x.x')
         // 描述
         this.InputFieldWithTitle('描述', this.editingConfig.description, (value: string) => {
           this.editingConfig.description = value

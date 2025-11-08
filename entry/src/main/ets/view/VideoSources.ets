@@ -75,6 +75,7 @@ struct VideoSources {
 
   aboutToDisappear() {
     this.selectionManager.removeObserver(this.selectionObserver)
+    this.viewModel.dispose()
     VIDEO_SOURCE_EVENT.off()
     this.onShow = true
   }
@@ -144,6 +145,7 @@ struct VideoSources {
           ListItem() {
             SourceItem({
               selectionManager: this.selectionManager,
+              viewModel: this.viewModel,
               selectMode: this.selectMode,
               item: item
             })
@@ -184,20 +186,73 @@ struct VideoSources {
           .fontSize(14)
           .margin({ left: 8 })
       }
-      .margin({ left: 16 })
       .onClick(() => {
         this.viewModel.toggleSelectAll()
       })
       Blank()
+      Text('反选')
+        .fontColor($r('app.color.color_text_major'))
+        .margin({ right: 16})
+        .fontSize(14)
+        .onClick(() => {
+          this.viewModel.toggleInverseSelection()
+        })
       Text(`删除(${this.viewModel.selectCount})`)
         .fontColor(this.viewModel.selectCount == 0 ?
           $r('app.color.color_text_minor') : Color.Red)
+        .margin({ right: 3})
         .fontSize(14)
-        .margin({ right: 16 })
         .onClick(() => {
           this.viewModel.deleteSelectedItems()
         })
+      // 编辑栏更多按钮
+      ButtonBuilder({
+        config: {
+          symbolSrc: 'dot_grid_1x2', // Symbol 图标
+          iconSize: 22,
+          needCheckmark: false,
+          fontColor: $r('app.color.color_text_major'),
+          menuItems: [
+            {
+              name: '启用所选',
+              value: 'enabled_selected',
+              action: () => {
+                this.viewModel.enableSelectedItems()
+              }
+            },
+            {
+              name: '禁用所选',
+              value: 'disabled_selected',
+              action: () => {
+                this.viewModel.disableSelectedItems()
+              }
+            },
+            {
+              name: '添加分组',
+              value: 'add_group',
+              action: () => {
+                this.viewModel.addGroupToSelected()
+              }
+            },
+            {
+              name: '移除分组',
+              value: 'remove_group',
+              action: () => {
+                this.viewModel.removeGroupFromSelected()
+              }
+            },
+            {
+              name: '置顶所选',
+              value: 'top_selected',
+              action: () => {
+                this.viewModel.pinSelectedItems()
+              }
+            }
+          ]
+        },
+      })
     }
+    .padding({ left: 16, right: 16})
     .width('100%')
     .height(42)
   }
@@ -402,7 +457,7 @@ struct VideoSources {
         name: '',
         group: '',
         baseUrl: '',
-        version: 1,
+        version: '1.0.0',
         enabled: true,
         priority: 100,
         description: '',
@@ -426,6 +481,7 @@ struct SourceItem {
   @Prop item: DataSourceConfig
   @State isSelected: boolean = false
   @State isShowMenu: boolean = false
+  @Link viewModel: VideoSourcesViewModel
   @Link selectionManager: SelectionManager<DataSourceConfig>
   private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
@@ -516,6 +572,14 @@ struct SourceItem {
   @Builder
   menuBuilder(item: DataSourceConfig) {
     Menu() {
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.square_link_square')).fontSize(16).fontColor([$r('sys.color.font_primary')]),
+        content: '多选',
+      })
+        .onClick(() => {
+          this.viewModel.toggleSelectionMode()
+          this.viewModel.selectionManager.selectItem(this.item)
+        })
       MenuItem({
         symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.doc_text')).fontSize(16).fontColor([$r('sys.color.font_primary')]),
         content: '导出视频源',

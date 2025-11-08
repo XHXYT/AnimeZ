@@ -84,7 +84,7 @@ export interface DataSourceConfig {
   name: string;
   group: string,
   baseUrl: string;
-  version: number;
+  version: string;
   enabled: boolean;
   priority: number;
   description: string

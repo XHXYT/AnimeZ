@@ -1,6 +1,8 @@
 import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
+import { InputCustomDialog } from "../components/dialog/InputDialog"
 import { AppConfigs } from "../entryability/Settings"
+import Logger from "../utils/Logger"
 import { SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
 
@@ -25,6 +27,9 @@ export class VideoSourcesViewModel {
   // 视图状态
   public state: ViewState
   public errorMessage: string
+
+  // 弹窗输入文本
+  public dialogInputTextValue: string = ''
 
   // 选择相关状态
   public selectCount: number
@@ -142,7 +147,13 @@ export class VideoSourcesViewModel {
     // 收集所有被使用的分组
     allSources.forEach(source => {
       if (source.group && source.group.trim() !== '') {
-        usedGroups.add(source.group.trim())
+        // 使用 parseGroups 方法拆分分组字符串
+        const sourceGroups = this.parseGroups(source.group)
+        sourceGroups.forEach(group => {
+          if (group && group.trim() !== '') {
+            usedGroups.add(group.trim())
+          }
+        })
       }
     })
     // 返回未被使用的自定义分组（排除默认分组）
@@ -192,16 +203,19 @@ export class VideoSourcesViewModel {
   // 从现有源配置中提取分组
   private extractGroupsFromSources() {
     const allSources = dataSourceManager.getAllDataSourceConfigs()
-    const groups = new Map<string, string>()
+    const groups = new Set<string>()
     allSources.forEach(source => {
       if (source.group && source.group.trim() !== '') {
-        const groupName = source.group.trim()
-        if (!groups.has(groupName)) {
-          groups.set(groupName, groupName)
-        }
+        // 使用 parseGroups 方法拆分分组字符串
+        const sourceGroups = this.parseGroups(source.group)
+        sourceGroups.forEach(group => {
+          if (group && group.trim() !== '') {
+            groups.add(group.trim())
+          }
+        })
       }
     })
-    this.customGroups = Array.from(groups.values())
+    this.customGroups = Array.from(groups.values()).sort()
     this.saveCustomGroups()
   }
 
@@ -229,25 +243,12 @@ export class VideoSourcesViewModel {
       ToastUtil.showToast({ message: "默认分组不能删除哦" })
       return
     }
-    const groupToRemove = this.customGroups.find(g => g === group)
-    if (!groupToRemove) return
-    // 更新所有使用该分组的源，将其group设为空
+    // 更新所有使用该分组的源，从group字符串中移除该分组
     const allSources = dataSourceManager.getAllDataSourceConfigs()
     const updatePromises: Promise<void>[] = []
     allSources.forEach(source => {
-      if (source.group === groupToRemove) {
-        const updatedConfig: DataSourceConfig = {
-          key: source.key,
-          version: source.version,
-          name: source.name,
-          group: '',
-          description: source.description,
-          baseUrl: source.baseUrl,
-          enabled: source.enabled,
-          priority: source.priority,
-          defaultSource: source.defaultSource,
-          parserConfig: source.parserConfig
-        }
+      if (this.hasGroup(source, group)) {
+        const updatedConfig = this.removeGroupFromSource(source, group)
         updatePromises.push(dataSourceManager.updateDataSource(source.key, updatedConfig))
       }
     })
@@ -261,7 +262,7 @@ export class VideoSourcesViewModel {
       }
       // 重新加载数据源
       await this.loadSources()
-      ToastUtil.showToast({ message: `已删除分组"${groupToRemove}"` })
+      ToastUtil.showToast({ message: `已删除分组"${group}"` })
     } catch (error) {
       ToastUtil.showToast({ message: "删除分组失败" })
     }
@@ -276,8 +277,9 @@ export class VideoSourcesViewModel {
       return false
     }
     const trimmedName = newGroupName.trim()
-    let groupToEdit = this.customGroups.find(g => g === groupName)
-    if (!groupToEdit) return false
+    const groupToEditIndex = this.customGroups.findIndex(g => g === groupName)
+    if (groupToEditIndex === -1) return false
+    const groupToEdit = this.customGroups[groupToEditIndex]  // 通过索引获取
     // 检查新名称是否已存在
     const exists = this.customGroups.some(g => g === trimmedName && g !== groupName)
     if (exists) {
@@ -288,12 +290,17 @@ export class VideoSourcesViewModel {
     const allSources = dataSourceManager.getAllDataSourceConfigs()
     const updatePromises: Promise<void>[] = []
     allSources.forEach(source => {
-      if (source.group === groupToEdit) {
+      if (this.hasGroup(source, groupToEdit)) {
+        // 使用正则表达式替换分组名称
+        const newGroupString = source.group.replace(
+          new RegExp(`\\b${groupToEdit}\\b`, 'g'),
+          trimmedName
+        )
         const updatedConfig: DataSourceConfig = {
           key: source.key,
           version: source.version,
           name: source.name,
-          group: trimmedName,
+          group: newGroupString,
           description: source.description,
           baseUrl: source.baseUrl,
           enabled: source.enabled,
@@ -307,11 +314,8 @@ export class VideoSourcesViewModel {
     try {
       await Promise.all(updatePromises)
       // 更新分组名称
-      const index = this.customGroups.findIndex(g => g === groupName)
-      if (index > -1) {
-        this.customGroups[index] = trimmedName
-        this.saveCustomGroups()
-      }
+      this.customGroups[groupToEditIndex] = trimmedName
+      this.saveCustomGroups()
       // 重新加载数据源
       await this.loadSources()
       ToastUtil.showToast({ message: "分组名称已更新" })
@@ -343,10 +347,13 @@ export class VideoSourcesViewModel {
         groups.set('已禁用', sources.filter(s => !s.enabled))
         break
       default:
-      // 自定义分组
+      // 自定义分组 - 检查数据源是否包含该分组
         const groupConfig = this.customGroups.find(g => g === this.groupType)
         if (groupConfig) {
-          groups.set(groupConfig, sources.filter(s => s.group === groupConfig))
+          groups.set(groupConfig, sources.filter(s => {
+            const sourceGroups = this.parseGroups(s.group)
+            return sourceGroups.includes(groupConfig)
+          }))
         }
         break
     }
@@ -461,6 +468,46 @@ export class VideoSourcesViewModel {
     }
   }
 
+  /**
+   * 反选功能
+   */
+  toggleInverseSelection(): void {
+    // 获取当前过滤后的所有数据源
+    const filteredSources = this.getFilteredSources()
+    // 获取当前已选中的数据源
+    const selectedSources = Array.from(this.selectionManager.getSelections())
+    // 清除所有选中状态
+    this.selectionManager.clearSelections()
+    // 选中之前未被选中的项
+    const toSelect: DataSourceConfig[] = []
+    for (let i = 0; i < filteredSources.length; i++) {
+      const source = filteredSources[i]
+      let isSelected = false
+      // 检查是否在已选中列表中
+      for (let j = 0; j < selectedSources.length; j++) {
+        if (selectedSources[j].key === source.key) {
+          isSelected = true
+          break
+        }
+      }
+      // 如果之前未被选中，则添加到待选中列表
+      if (!isSelected) {
+        toSelect.push(source)
+      }
+    }
+    // 批量选中
+    if (toSelect.length > 0) {
+      this.selectionManager.selectItems(toSelect)
+    }
+    // 更新状态
+    this.selectCount = toSelect.length
+    this.hasSelectAll = toSelect.length === filteredSources.length
+    Logger.i(this, `DataSourceManager.toggleInverseSelection Inverse selection completed: selected ${toSelect.length} items`)
+  }
+
+  /**
+   * 重置为默认配置
+   */
   resetToDefault() {
     ToastUtil.showAlertDialog({
       title: '重置配置',
@@ -485,9 +532,553 @@ export class VideoSourcesViewModel {
     })
   }
 
-  goToSourceDetail(isNew: boolean) {
-    // 跳转到新数据源详情页
-    this.pageStack.pushPathByName('DataSourceDetailPage', null, true)
+  /**
+   * 启用选中的数据源
+   */
+  async enableSelectedItems(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    return new Promise((resolve) => {
+      ToastUtil.showAlertDialog({
+        title: '启用视频源',
+        message: `确认启用选中的${this.selectCount}项视频源？`,
+        primaryButton: {
+          value: '取消',
+          fontColor: $r('app.color.primary_color_accent'),
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '确定',
+          action: async () => {
+            try {
+              const data = Array.from(this.selectionManager.getSelections())
+              const total = data.filter(item => item.key).length
+              let completed = 0
+              await Promise.all(
+                data.map(async (item) => {
+                  if (item.key && !item.enabled) {
+                    // 手动创建新对象
+                    const updatedConfig: DataSourceConfig = {
+                      key: item.key,
+                      name: item.name,
+                      group: item.group,
+                      baseUrl: item.baseUrl,
+                      version: item.version,
+                      enabled: true,
+                      priority: item.priority,
+                      description: item.description,
+                      defaultSource: item.defaultSource,
+                      parserConfig: item.parserConfig
+                    }
+                    await dataSourceManager.updateDataSource(item.key, updatedConfig)
+                    completed++
+                    ToastUtil.showToast({
+                      message: `启用进度: ${completed}/${total}`
+                    })
+                  }
+                }))
+              ToastUtil.showToast({ message: "已启用选中的视频源" })
+              this.selectionManager.clearSelections()
+              // this.selectionManager.toggleSelectionMode()
+              await this.loadSources()
+              resolve(true)
+            } catch (error) {
+              ToastUtil.showToast({ message: "启用失败" })
+              resolve(false)
+            }
+          }
+        }
+      })
+    })
+  }
+
+  /**
+   * 禁用选中的数据源
+   */
+  async disableSelectedItems(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    return new Promise((resolve) => {
+      ToastUtil.showAlertDialog({
+        title: '禁用视频源',
+        message: `确认禁用选中的${this.selectCount}项视频源？`,
+        primaryButton: {
+          value: '取消',
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '确定',
+          fontColor: Color.Orange,
+          action: async () => {
+            try {
+              const data = Array.from(this.selectionManager.getSelections())
+              const total = data.filter(item => item.key).length
+              let completed = 0
+              await Promise.all(
+                data.map(async (item) => {
+                  if (item.key && item.enabled) {
+                    // 手动创建新对象
+                    const updatedConfig: DataSourceConfig = {
+                      key: item.key,
+                      name: item.name,
+                      group: item.group,
+                      baseUrl: item.baseUrl,
+                      version: item.version,
+                      enabled: false,
+                      priority: item.priority,
+                      description: item.description,
+                      defaultSource: item.defaultSource,
+                      parserConfig: item.parserConfig
+                    }
+                    await dataSourceManager.updateDataSource(item.key, updatedConfig)
+                    completed++
+                    ToastUtil.showToast({
+                      message: `禁用进度: ${completed}/${total}`
+                    })
+                  }
+                }))
+              ToastUtil.showToast({ message: "已禁用选中的视频源" })
+              this.selectionManager.clearSelections()
+              // this.selectionManager.toggleSelectionMode()
+              await this.loadSources()
+              resolve(true)
+            } catch (error) {
+              ToastUtil.showToast({ message: "禁用失败" })
+              resolve(false)
+            }
+          }
+        }
+      })
+    })
+  }
+
+  /**
+   * 为选中的数据源添加分组（支持多分组）
+   */
+  async addGroupToSelected(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    // 显示添加分组输入弹窗
+    this.showInputDialog('添加分组', '请输入分组名称，多个分组用空格分隔')
+    // 监听输入值变化
+    return new Promise((resolve) => {
+      // 使用定时器检查输入值
+      const checkInput = setInterval(() => {
+        if (this.dialogInputTextValue !== '') {
+          clearInterval(checkInput)
+          // 解析输入的分组名称
+          const inputGroups = this.parseGroups(this.dialogInputTextValue)
+          if (inputGroups.length === 0) {
+            ToastUtil.showToast({ message: "请输入有效的分组名称" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 检查分组名称是否有效
+          const validGroups: string[] = []
+          for (let i = 0; i < inputGroups.length; i++) {
+            const group = inputGroups[i]
+            if (group.trim() !== '') {
+              validGroups.push(group.trim())
+            }
+          }
+          if (validGroups.length === 0) {
+            ToastUtil.showToast({ message: "请输入有效的分组名称" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 执行添加操作
+          this.executeAddGroups(validGroups).then(success => {
+            this.dialogInputTextValue = ''
+            this.selectionManager.clearSelections()
+            resolve(success)
+          })
+        }
+      }, 500)
+    })
+  }
+
+  /**
+   * 从选中的数据源移除分组（支持多分组）
+   */
+  async removeGroupFromSelected(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    const data = Array.from(this.selectionManager.getSelections())
+    const allGroups = new Set<string>()
+    data.forEach(item => {
+      const groups = this.getSourceGroups(item)
+      groups.forEach(group => allGroups.add(group))
+    })
+    if (allGroups.size === 0) {
+      ToastUtil.showToast({ message: "选中的视频源没有分组" })
+      return false
+    }
+    // 显示移除分组输入弹窗
+    this.showInputDialog('移除分组', '请输入要移除的分组名称，多个分组用空格分隔')
+    // 监听输入值变化
+    return new Promise((resolve) => {
+      // 使用定时器检查输入值变化
+      const checkInput = setInterval(() => {
+        if (this.dialogInputTextValue !== '') {
+          clearInterval(checkInput)
+          // 解析输入的分组名称
+          const inputGroups = this.parseGroups(this.dialogInputTextValue)
+          if (inputGroups.length === 0) {
+            ToastUtil.showToast({ message: "请输入有效的分组名称" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 检查输入的分组是否存在于选中项的分组中
+          const validGroups: string[] = []
+          const allGroupsArray: string[] = []
+          allGroups.forEach(group => allGroupsArray.push(group))
+          for (let i = 0; i < inputGroups.length; i++) {
+            const group = inputGroups[i]
+            if (group.trim() !== '' && allGroupsArray.includes(group)) {
+              validGroups.push(group.trim())
+            }
+          }
+          if (validGroups.length === 0) {
+            ToastUtil.showToast({ message: "输入的分组不存在于选中项中" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 执行移除操作
+          this.executeRemoveGroups(validGroups).then(success => {
+            this.dialogInputTextValue = ''
+            this.selectionManager.clearSelections()
+            resolve(success)
+          })
+        }
+      }, 500)
+    })
+  }
+
+  /**
+   * 置顶选中的数据源
+   */
+  async pinSelectedItems(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    return new Promise((resolve) => {
+      ToastUtil.showAlertDialog({
+        title: '置顶视频源',
+        message: `确认置顶选中的${this.selectCount}项视频源？\n这将按次序调整它们的优先级到最前面`,
+        primaryButton: {
+          value: '取消',
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '确定',
+          fontColor: $r('app.color.primary_color_accent'),
+          action: async () => {
+            try {
+              const allSources = dataSourceManager.getAllDataSourceConfigs()
+              const selectedData = Array.from(this.selectionManager.getSelections())
+              // 获取当前最小优先级
+              let minPriority = allSources[0].priority
+              for (let i = 1; i < allSources.length; i++) {
+                if (allSources[i].priority < minPriority) {
+                  minPriority = allSources[i].priority
+                }
+              }
+              // 为选中的数据源分配新的优先级
+              const updates: Promise<void>[] = []
+              for (let i = 0; i < selectedData.length; i++) {
+                const item = selectedData[i]
+                if (item.key) {
+                  // 手动创建新对象
+                  const updatedConfig: DataSourceConfig = {
+                    key: item.key,
+                    name: item.name,
+                    group: item.group,
+                    baseUrl: item.baseUrl,
+                    version: item.version,
+                    enabled: item.enabled,
+                    priority: minPriority - (selectedData.length - i),
+                    description: item.description,
+                    defaultSource: item.defaultSource,
+                    parserConfig: item.parserConfig
+                  }
+                  updates.push(dataSourceManager.updateDataSource(item.key, updatedConfig))
+                }
+              }
+              const total = updates.length
+              let completed = 0
+              await Promise.all(
+                updates.map(async (update) => {
+                  await update
+                  completed++
+                  ToastUtil.showToast({
+                    message: `置顶进度: ${completed}/${total}`
+                  })
+                })
+              )
+              // 置顶完成后，重新规范化所有优先级
+              ToastUtil.showToast({ message: "正在优化优先级..." })
+              await this.normalizeAllPriorities()
+              ToastUtil.showToast({ message: "已置顶选中的视频源" })
+              await this.loadSources()
+              resolve(true)
+            } catch (error) {
+              ToastUtil.showToast({ message: "置顶失败" })
+              resolve(false)
+            }
+          }
+        }
+      })
+    })
+  }
+
+  /**
+   * 重新规范化所有数据源的优先级
+   * 将优先级重新分配为 10, 20, 30... 这样的间隔，便于后续插入
+   */
+  private async normalizeAllPriorities(): Promise<void> {
+    try {
+      const allSources = dataSourceManager.getAllDataSourceConfigs()
+      // 按当前优先级排序
+      const sortedSources = allSources.sort((a, b) => a.priority - b.priority)
+      // 重新分配优先级，以10为间隔
+      const updates: Promise<void>[] = []
+      for (let i = 0; i < sortedSources.length; i++) {
+        const source = sortedSources[i]
+        const newPriority = (i + 1) * 10  // 从10开始，10, 20, 30...
+        // 只有当优先级确实需要改变时才更新
+        if (source.priority !== newPriority) {
+          const updatedConfig: DataSourceConfig = {
+            key: source.key,
+            name: source.name,
+            group: source.group,
+            baseUrl: source.baseUrl,
+            version: source.version,
+            enabled: source.enabled,
+            priority: newPriority,
+            description: source.description,
+            defaultSource: source.defaultSource,
+            parserConfig: source.parserConfig
+          }
+          updates.push(dataSourceManager.updateDataSource(source.key, updatedConfig))
+        }
+      }
+      // 批量更新
+      if (updates.length > 0) {
+        await Promise.all(updates)
+        Logger.i(this, `Normalized priorities for ${updates.length} sources`)
+      }
+    } catch (error) {
+      Logger.e('tips', `Failed to normalize priorities: ${error.message}`)
+      throw new Error(`Failed to normalize priorities: ${error.message}`)
+    }
+  }
+
+  /**
+   * 执行添加分组操作
+   */
+  private async executeAddGroups(groups: string[]): Promise<boolean> {
+    try {
+      const data = Array.from(this.selectionManager.getSelections())
+      const total = data.filter(item => item.key).length
+      let completed = 0
+
+      await Promise.all(
+        data.map(async (item) => {
+          if (item.key) {
+            // 先复制原始配置
+            let updatedConfig: DataSourceConfig = {
+              key: item.key,
+              name: item.name,
+              group: item.group,
+              baseUrl: item.baseUrl,
+              version: item.version,
+              enabled: item.enabled,
+              priority: item.priority,
+              description: item.description,
+              defaultSource: item.defaultSource,
+              parserConfig: item.parserConfig
+            }
+
+            // 添加输入的分组
+            for (let i = 0; i < groups.length; i++) {
+              updatedConfig = this.addGroupToSource(updatedConfig, groups[i])
+            }
+
+            await dataSourceManager.updateDataSource(item.key, updatedConfig)
+            completed++
+            ToastUtil.showToast({
+              message: `分组进度: ${completed}/${total}`
+            })
+          }
+        })
+      )
+
+      // 更新自定义分组列表
+      for (let i = 0; i < groups.length; i++) {
+        if (!this.customGroups.includes(groups[i])) {
+          this.customGroups.push(groups[i])
+        }
+      }
+      this.saveCustomGroups()
+
+      ToastUtil.showToast({ message: `已添加到${groups.length}个分组` })
+      await this.loadSources()
+      return true
+    } catch (error) {
+      ToastUtil.showToast({ message: "添加分组失败" })
+      return false
+    }
+  }
+
+  /**
+   * 执行移除分组操作
+   */
+  private async executeRemoveGroups(groups: string[]): Promise<boolean> {
+    try {
+      const data = Array.from(this.selectionManager.getSelections())
+      const total = data.filter(item => item.key).length
+      let completed = 0
+      await Promise.all(
+        data.map(async (item) => {
+          if (item.key) {
+            // 先复制原始配置
+            let updatedConfig: DataSourceConfig = {
+              key: item.key,
+              name: item.name,
+              group: item.group,
+              baseUrl: item.baseUrl,
+              version: item.version,
+              enabled: item.enabled,
+              priority: item.priority,
+              description: item.description,
+              defaultSource: item.defaultSource,
+              parserConfig: item.parserConfig
+            }
+            // 移除输入的分组
+            for (let i = 0; i < groups.length; i++) {
+              updatedConfig = this.removeGroupFromSource(updatedConfig, groups[i])
+            }
+            await dataSourceManager.updateDataSource(item.key, updatedConfig)
+            completed++
+            ToastUtil.showToast({
+              message: `移除进度: ${completed}/${total}`
+            })
+          }
+        })
+      )
+
+      ToastUtil.showToast({ message: `已移除${groups.length}个分组` })
+      await this.loadSources()
+      return true
+    } catch (error) {
+      ToastUtil.showToast({ message: "移除分组失败" })
+      return false
+    }
+  }
+
+  /**
+   * 为数据源添加分组
+   */
+  private addGroupToSource(source: DataSourceConfig, group: string): DataSourceConfig {
+    const groups = this.parseGroups(source.group)
+    if (!groups.includes(group)) {
+      groups.push(group)
+      // 手动创建新对象
+      const newConfig: DataSourceConfig = {
+        key: source.key,
+        name: source.name,
+        group: this.joinGroups(groups),
+        baseUrl: source.baseUrl,
+        version: source.version,
+        enabled: source.enabled,
+        priority: source.priority,
+        description: source.description,
+        defaultSource: source.defaultSource,
+        parserConfig: source.parserConfig
+      }
+      return newConfig
+    }
+    return source
+  }
+
+  /**
+   * 从数据源移除分组
+   */
+  private removeGroupFromSource(source: DataSourceConfig, group: string): DataSourceConfig {
+    const groups = this.parseGroups(source.group)
+    const index = groups.indexOf(group)
+    if (index > -1) {
+      groups.splice(index, 1)
+      // 手动创建新对象
+      const newConfig: DataSourceConfig = {
+        key: source.key,
+        name: source.name,
+        group: this.joinGroups(groups),
+        baseUrl: source.baseUrl,
+        version: source.version,
+        enabled: source.enabled,
+        priority: source.priority,
+        description: source.description,
+        defaultSource: source.defaultSource,
+        parserConfig: source.parserConfig
+      }
+      return newConfig
+    }
+    return source
+  }
+
+  /**
+   * 获取数据源的所有分组
+   */
+  private getSourceGroups(source: DataSourceConfig): string[] {
+    return this.parseGroups(source.group)
+  }
+
+  /**
+   * 解析分组字符串为数组
+   */
+  private parseGroups(groupString: string): string[] {
+    if (!groupString || groupString.trim() === '') {
+      return []
+    }
+    return groupString.trim().split(/\s+/).filter(group => group.trim() !== '')
+  }
+
+  /**
+   * 将分组数组连接为字符串
+   */
+  private joinGroups(groups: string[]): string {
+    return groups.join(' ')
+  }
+
+  /**
+   * 检查数据源是否属于指定分组
+   */
+  private hasGroup(source: DataSourceConfig, group: string): boolean {
+    const groups = this.parseGroups(source.group)
+    return groups.includes(group)
+  }
+
+  /**
+   * 显示分组操作输入弹窗
+   * @param title 弹窗标题
+   * @param placeholder 输入框占位符
+   */
+  private showInputDialog(title: string, placeholder: string): void {
+    // 重置输入值及弹窗
+    this.dialogInputTextValue = ''
+    // 动态更新弹窗配置
+    ToastUtil.showInputDialog(title, placeholder, (value) => {
+      this.dialogInputTextValue = value
+    }, '', 'VideoSourcesViewModel.showInputDialog')
   }
 
   // 删除选中项

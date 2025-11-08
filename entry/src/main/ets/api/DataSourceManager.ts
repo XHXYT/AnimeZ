@@ -278,23 +278,33 @@ class DataSourceManager {
   // 从配置文件加载所有数据源
   async loadFromConfig(): Promise<void> {
     try {
+      let loadedFromDefault = false;
       // 首先尝试从沙箱目录读取配置文件
-      const sandboxConfig = await this.readSandboxConfig();
-      if (sandboxConfig) {
-        // 如果沙箱中有配置文件，使用它
-        await this.loadConfigData(sandboxConfig)
-        Logger.i(this, 'DataSourceManager.loadFromConfig Loaded data sources from sandbox config');
-      } else {
-        // 如果沙箱中没有配置文件，从rawfile获取默认配置
-        const defaultConfig = await this.readRawFileConfig()
-        await this.loadConfigData(defaultConfig)
-
+      try {
+        const sandboxConfig = await this.readSandboxConfig();
+        if (sandboxConfig) {
+          // 如果沙箱中有配置文件，使用它
+          await this.loadConfigData(sandboxConfig);
+          Logger.i(this, 'DataSourceManager.loadFromConfig Loaded data sources from sandbox config');
+        } else {
+          loadedFromDefault = true;
+        }
+      } catch (error) {
+        // 沙箱配置文件有问题
+        Logger.e('tips', `DataSourceManager.loadFromConfig Sandbox config error: ${error.message}`);
+        // 继续使用默认配置 TODO 可以在此抛出引导重置信号
+        loadedFromDefault = true;
+      }
+      if (loadedFromDefault) {
+        // 从rawfile获取默认配置
+        const defaultConfig = await this.readRawFileConfig();
+        await this.loadConfigData(defaultConfig);
         // 将默认配置保存到沙箱
-        await this.saveConfigToSandbox(defaultConfig)
+        await this.saveConfigToSandbox(defaultConfig);
         Logger.i(this, 'DataSourceManager.loadFromConfig Loaded data sources from default config and saved to sandbox');
       }
       // 设置默认数据源
-      this.setDefaultDataSource()
+      this.setDefaultDataSource();
     } catch (error) {
       Logger.e('tips', `DataSourceManager.loadFromConfig Failed to load data sources: ${error.message}`);
       throw error;
@@ -462,7 +472,6 @@ class DataSourceManager {
     const majorVersion = parseInt(version.split('.')[0], 10);
     return majorVersion === 1;
   }
-
 
   /**
    * 直接导出给定的数据源配置对象到文件
@@ -648,13 +657,10 @@ class DataSourceManager {
     try {
       // 从rawfile读取默认配置
       const defaultConfig = await this.readRawFileConfig();
-
       // 加载默认配置
       await this.loadConfigData(defaultConfig);
-
       // 保存到沙箱（覆盖当前配置）
       await this.saveConfigToSandbox(defaultConfig);
-
       Logger.i(this, 'DataSourceManager.resetToDefault Reset to default configuration');
     } catch (error) {
       Logger.e('tips', `DataSourceManager.resetToDefault Failed to reset to default configuration: ${error.message}`);
@@ -664,24 +670,60 @@ class DataSourceManager {
 
   // 从沙箱目录读取配置文件
   private async readSandboxConfig(): Promise<DataSourceConfigFile | null> {
+    const sandboxPath = this.context.filesDir + '/' + this.configFileName;
     try {
-      const sandboxPath = this.context.filesDir + '/' + this.configFileName;
       // 检查文件是否存在
-      try {
-        await fileIo.access(sandboxPath);
-      } catch {
-        // 文件不存在
-        Logger.e('tips', `DataSourceManager.readSandboxConfig Failed to read sandbox config: 文件不存在`);
-        return null;
-      }
-      // 读取文件内容
-      const content = await fileIo.readText(sandboxPath);
-      return JSON.parse(content) as DataSourceConfigFile;
-    } catch (error) {
-      Logger.e('tips', `DataSourceManager.readSandboxConfig Failed to read sandbox config: ${error.message}`);
+      await fileIo.access(sandboxPath);
+    } catch {
+      // 文件不存在，这是正常情况
+      Logger.i(this, `DataSourceManager.readSandboxConfig Sandbox config file does not exist: ${sandboxPath}`);
       return null;
     }
+    try {
+      // 读取文件内容
+      const content = await fileIo.readText(sandboxPath);
+      // 验证内容是否为空
+      if (!content || content.trim() === '') {
+        Logger.w('tips', `DataSourceManager.readSandboxConfig Sandbox config file is empty: ${sandboxPath}`);
+        return null;
+      }
+      // 尝试解析JSON
+      const config = JSON.parse(content) as DataSourceConfigFile;
+      // 验证配置格式
+      if (!config || !config.sources || !Array.isArray(config.sources)) {
+        Logger.w('tips', `DataSourceManager.readSandboxConfig Invalid sandbox config format: ${sandboxPath}`);
+        return null;
+      }
+      Logger.i(this, `DataSourceManager.readSandboxConfig Successfully loaded sandbox config with ${config.sources.length} sources`);
+      return config;
+    } catch (error) {
+      // 读取或解析失败，但不应该用默认配置覆盖
+      Logger.e('tips', `DataSourceManager.readSandboxConfig Failed to read sandbox config: ${error.message}`);
+      // 可以选择备份损坏的文件
+      try {
+        const backupPath = sandboxPath + '.backup';
+        const file = fileIo.openSync(sandboxPath, fileIo.OpenMode.READ_ONLY);
+        const backupFile = fileIo.openSync(backupPath, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+        const buffer = new ArrayBuffer(4096);
+        let readLen = 0;
+        do {
+          readLen = fileIo.readSync(file.fd, buffer);
+          if (readLen > 0) {
+            fileIo.writeSync(backupFile.fd, buffer.slice(0, readLen));
+          }
+        } while (readLen > 0);
+        fileIo.closeSync(file);
+        fileIo.closeSync(backupFile);
+        Logger.i(this, `DataSourceManager.readSandboxConfig Backed up corrupted config to: ${backupPath}`);
+      } catch (backupError) {
+        Logger.e('tips', `DataSourceManager.readSandboxConfig Failed to backup corrupted config: ${backupError.message}`);
+      }
+      // 返回null让用户知道配置文件有问题，而不是静默覆盖
+      throw new Error(`配置文件损坏或无法读取: ${error.message}。请检查文件或重置配置。`);
+    }
   }
+
+
 
   // 从rawfile读取默认配置文件
   private async readRawFileConfig(): Promise<DataSourceConfigFile> {
@@ -727,16 +769,31 @@ class DataSourceManager {
       Logger.i(this, `DataSourceManager.saveConfigToSandbox sandbox 配置地址：${sandboxPath}`);
       // 转换为JSON字符串
       const jsonContent = JSON.stringify(config, null, 2);
-      const sandboxUri = fileUri.getUriFromPath(sandboxPath)
-      Logger.i(this, `DataSourceManager.saveConfigToSandbox sandbox 配置地址uri：${sandboxUri}`);
+      // 确保目录存在
+      const dirPath = this.context.filesDir;
+      try {
+        await fileIo.access(dirPath);
+      } catch {
+        // 目录不存在，创建目录
+        await fileIo.mkdir(dirPath);
+      }
       // 写入配置文件
-      let fileModify = fileIo.openSync(sandboxUri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
-      fileIo.writeSync(fileModify.fd, jsonContent);
-      // fileIo.fsync(fileModify.fd).catch((error: Error) => {
-      //   console.error(`DataSourceManager.saveConfigToSandbox 文件的缓存数据同步到存储失败：`, error)
-      // })
-      fileIo.close(fileModify);
-      Logger.i(this, 'DataSourceManager.saveConfigToSandbox Configuration saved to sandbox');
+      const file = fileIo.openSync(sandboxPath, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+      fileIo.writeSync(file.fd, jsonContent);
+      // 确保数据写入磁盘
+      await fileIo.fsync(file.fd);
+      fileIo.closeSync(file);
+      // 验证写入是否成功
+      try {
+        const verifyContent = await fileIo.readText(sandboxPath);
+        if (verifyContent !== jsonContent) {
+          throw new Error('文件写入验证失败');
+        }
+      } catch (verifyError) {
+        Logger.e('tips', `DataSourceManager.saveConfigToSandbox Failed to verify written file: ${verifyError.message}`);
+        throw new Error(`配置文件保存失败: ${verifyError.message}`);
+      }
+      Logger.i(this, 'DataSourceManager.saveConfigToSandbox Configuration saved to sandbox successfully');
     } catch (error) {
       Logger.e('tips', `DataSourceManager.saveConfigToSandbox Failed to save configuration to sandbox: ${error.message}`);
       throw error;
@@ -744,12 +801,11 @@ class DataSourceManager {
   }
 
   // 保存当前配置到沙箱目录
-  private async saveCurrentConfig(): Promise<void> {
+  private async saveCurrentConfig(version: string = '1.0.0'): Promise<void> {
     const configFile: DataSourceConfigFile = {
-      version: "1.0.0",
+      version: version,
       sources: Array.from(this.dataSourceConfigs.values())
     };
-
     await this.saveConfigToSandbox(configFile);
   }
 

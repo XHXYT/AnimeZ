@@ -1,6 +1,8 @@
-import { promptAction } from "@kit.ArkUI"
+import { ComponentContent, promptAction } from "@kit.ArkUI"
 import { AsyncCallback } from "@kit.BasicServicesKit"
 import { BusinessError } from "@kit.BasicServicesKit";
+import { InputCustomDialog } from "../components/dialog/InputDialog";
+import { PromptActionClass } from "../entity/PromptActionClass";
 
 class ToastUtils {
 
@@ -8,6 +10,8 @@ class ToastUtils {
 
   initContext(UIContext: UIContext) {
     this.UIContext = UIContext
+    PromptActionClass.setContext(this.UIContext)
+    PromptActionClass.setOptions({ alignment: DialogAlignment.Center, offset: { dx: 0, dy: 50 } });
   }
 
   showToast(options: promptAction.ShowToastOptions, key?: string){
@@ -64,6 +68,46 @@ class ToastUtils {
     }
   }
 
+  showInputDialog(title: string, placeholder: string, onValueChange: (value: string) => void, textValue?: string, key?: string) {
+    if (!this.UIContext) {
+      console.error(`#showInputDialog ${key}: UIContext未初始化`)
+      throw new Error('UIContext未初始化')
+    }
+    const contentNode: ComponentContent<Object> =
+      new ComponentContent(this.UIContext, wrapBuilder(buildInput), new Params(title, placeholder, onValueChange, textValue));
+    PromptActionClass.setContentNode(contentNode)
+    PromptActionClass.openDialog()
+  }
+
 }
 
 export const ToastUtil = new ToastUtils()
+
+class Params {
+  title: string = ''
+  textValue?: string = ''
+  placeholder: string = ''
+  onValueChange: (value: string) => void
+
+  constructor(title: string, placeholder: string, onValueChange: (value: string) => void, textValue?: string) {
+    this.title = title;
+    this.placeholder = placeholder
+    this.textValue = textValue
+    this.onValueChange = onValueChange
+  }
+}
+
+@Builder
+function buildInput(params: Params) {
+  InputCustomDialog({
+    title: params.title,
+    placeholder: params.placeholder,
+    textValue: params.textValue,
+    close: () => {
+      PromptActionClass.closeDialog()
+    },
+    onValueChange: (value) => {
+      params.onValueChange(value)
+    }
+  })
+}

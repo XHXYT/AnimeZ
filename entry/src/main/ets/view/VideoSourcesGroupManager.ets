@@ -51,7 +51,7 @@ export struct GroupManager {
   }
 
   build() {
-    Column() {
+    Column({space: 12}) {
       // 标题栏
       TitleBar({
         showBack: false,
@@ -60,7 +60,6 @@ export struct GroupManager {
           this.AddButton()
         }
       })
-
       // 分组列表
       List({ space: 12 }) {
         ForEach(this.customGroups, (group: string) => {
@@ -136,6 +135,8 @@ export struct GroupManager {
     .padding(12)
     .onClick(() => {
       this.viewModel.removeCustomGroup(group)
+      // 本地列表删除处理
+      this.customGroups = this.customGroups.filter(value => value != group )
     })
   }
 

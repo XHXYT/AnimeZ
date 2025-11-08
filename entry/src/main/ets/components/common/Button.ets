@@ -13,7 +13,7 @@ export struct ButtonBuilder {
     Button({ type: this.config.type || ButtonType.Circle }) {
       ButtonContent(this.config)
     }
-    .width(this.config.size || 36).height(this.config.size || 36)
+    .width(this.config.width || 36).height(this.config.height || 36)
     .backgroundColor(this.config.backgroundColor ?? Color.Transparent)
     .enabled(this.config.enabled ?? true) // 使用 ?? 处理 undefined，默认为 true
     .onClick(() => {
@@ -51,25 +51,26 @@ export struct ButtonBuilder {
 function ButtonContent(config: ButtonConfig) {
   // 如果有图标
   if (config.imageSrc || config.symbolSrc) {
-    Row() {
-      // 优先使用 Image 图标
-      if (config.imageSrc) {
-        Image(config.imageSrc)
-          .width(config.iconSize || 24)
-          .height(config.iconSize || 24)
-          .fillColor(config.fontColor || Color.Transparent)
+    Row({space: 8}) {
+      if (config.imageSrc || config.symbolSrc) {
+        // 优先使用 Image 图标
+        if (config.imageSrc) {
+          Image(config.imageSrc)
+            .width(config.iconSize || 24)
+            .height(config.iconSize || 24)
+            .fillColor(config.fontColor || Color.Transparent)
+        }
+        // 否则使用 Symbol 图标
+        else if (config.symbolSrc) {
+          SymbolGlyph($r('sys.symbol.' + config.symbolSrc))
+            .fontSize(config.iconSize || 24)
+            .fontColor([config.fontColor || Color.Transparent])
+        }
       }
-      // 否则使用 Symbol 图标
-      else if (config.symbolSrc) {
-        SymbolGlyph($r('sys.symbol.' + config.symbolSrc))
-          .fontSize(config.iconSize || 24)
-          .fontColor([config.fontColor || Color.Transparent])
-      }
-      // 如果同时有文本，添加间距
+      // 如果同时有文本
       if (config.text) {
         Text(config.text)
           .fontColor(config.fontColor || Color.Transparent)
-          .margin({ left: 8 })
       }
     }
     .alignItems(VerticalAlign.Center)
@@ -104,7 +105,8 @@ export interface ButtonConfig {
 
   // 样式属性
   type?: ButtonType; // 按钮类型，默认 ButtonType.Normal
-  size?: number; // 按钮大小，
+  width?: Length; // 按钮宽度
+  height?: Length // 按钮高度
   backgroundColor?: ResourceColor; // 背景色
   fontColor?: ResourceColor; // 文本和图标颜色
   enabled?: boolean; // 是否可用，默认 true
