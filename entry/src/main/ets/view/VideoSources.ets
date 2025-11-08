@@ -10,6 +10,7 @@ import { ToastUtil } from "../utils/ToastUtils"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
 import { dataSourceManager } from "../api/DataSourceManager"
+import { Copy } from "../utils/ClipBoardUtil"
 
 // 系统路由 - 视频源
 @Builder
@@ -189,14 +190,27 @@ struct VideoSources {
       .onClick(() => {
         this.viewModel.toggleSelectAll()
       })
-      Blank()
       Text('反选')
         .fontColor($r('app.color.color_text_major'))
-        .margin({ right: 16})
+        .margin({ left: 16})
         .fontSize(14)
         .onClick(() => {
           this.viewModel.toggleInverseSelection()
         })
+      // 智能区间选择按钮
+      Column() {
+        Text('选中区间')
+          .fontColor(this.viewModel.selectionManager.getSelectionCount() >= 2 ?
+            Color.Orange : $r('app.color.color_text_major'))
+          .fontSize(14)
+        Text(this.viewModel.getRangeInfo())
+          .fontSize(12)
+      }
+        .margin({ left: 16 })
+        .onClick(() => {
+          this.viewModel.executeRangeSelection()
+        })
+      Blank()
       Text(`删除(${this.viewModel.selectCount})`)
         .fontColor(this.viewModel.selectCount == 0 ?
           $r('app.color.color_text_minor') : Color.Red)
@@ -246,6 +260,13 @@ struct VideoSources {
               value: 'top_selected',
               action: () => {
                 this.viewModel.pinSelectedItems()
+              }
+            },
+            {
+              name: '导出所选',
+              value: 'export_selected',
+              action: () => {
+                this.viewModel.exportSelectedItems(this.getUIContext().getHostContext()!)
               }
             }
           ]
@@ -407,8 +428,7 @@ struct VideoSources {
             value: 'import_file',
             symbolStart: 'doc_text_fill',
             action: async () => {
-              const message = await dataSourceManager.importSourceConfigFromFile(this.getUIContext().getHostContext(), this.appSettings.video_source_import_overwrite)
-              ToastUtil.showToast({ message: message, duration: 2000 })
+              this.viewModel.importFromFile(this.getUIContext().getHostContext()!, this.appSettings.video_source_import_overwrite)
             }
           },
           {
@@ -416,7 +436,15 @@ struct VideoSources {
             value: 'import_url',
             symbolStart: 'paperclip',
             action: () => {
-              ToastUtil.showToast({message: '开发中'})
+              this.viewModel.importFromNetwork(this.appSettings.video_source_import_overwrite)
+            }
+          },
+          {
+            name: '粘贴导入',
+            value: 'import_json',
+            symbolStart: 'clipboard_sharing',
+            action: () => {
+              this.viewModel.importFromClipboard(this.appSettings.video_source_import_overwrite)
             }
           },
           {
@@ -424,7 +452,7 @@ struct VideoSources {
             value: 'import_qr',
             symbolStart: 'qrcode',
             action: () => {
-              ToastUtil.showToast({message: '开发中'})
+              this.viewModel.importFromQR()
             }
           },
           {
@@ -433,6 +461,14 @@ struct VideoSources {
             symbolStart: 'square_and_square',
             action: () => {
               this.viewModel.toggleSelectionMode()
+            }
+          },
+          {
+            name: '导出全部',
+            value: 'export_all',
+            symbolStart: 'square_and_arrow_down',
+            action: () => {
+              this.viewModel.exportSource(this.getUIContext().getHostContext()!)
             }
           },
           {
@@ -573,7 +609,7 @@ struct SourceItem {
   menuBuilder(item: DataSourceConfig) {
     Menu() {
       MenuItem({
-        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.square_link_square')).fontSize(16).fontColor([$r('sys.color.font_primary')]),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.square_link_square')).fontSize(17).fontColor([$r('sys.color.font_primary')]),
         content: '多选',
       })
         .onClick(() => {
@@ -581,11 +617,19 @@ struct SourceItem {
           this.viewModel.selectionManager.selectItem(this.item)
         })
       MenuItem({
-        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.doc_text')).fontSize(16).fontColor([$r('sys.color.font_primary')]),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.clipboard_sharing')).fontSize(17).fontColor([$r('sys.color.font_primary')]),
+        content: '复制视频源',
+      })
+        .onClick(() => {
+          const jsonString = JSON.stringify(this.item, null, 2)
+          Copy(jsonString)
+        })
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.rectangle_and_arrowshape_turn_up_right')).fontSize(17).fontColor([$r('sys.color.font_primary')]),
         content: '导出视频源',
       })
         .onClick(() => {
-          dataSourceManager.exportDataSourceConfigs(this.getUIContext().getHostContext(), [this.item])
+          this.viewModel.exportSource(this.getUIContext().getHostContext()!, this.item)
         })
     }
   }

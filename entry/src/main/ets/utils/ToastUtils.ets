@@ -3,6 +3,7 @@ import { AsyncCallback } from "@kit.BasicServicesKit"
 import { BusinessError } from "@kit.BasicServicesKit";
 import { InputCustomDialog } from "../components/dialog/InputDialog";
 import { PromptActionClass } from "../entity/PromptActionClass";
+import { scanBarcode, scanCore } from "@kit.ScanKit";
 
 class ToastUtils {
 
@@ -77,6 +78,38 @@ class ToastUtils {
       new ComponentContent(this.UIContext, wrapBuilder(buildInput), new Params(title, placeholder, onValueChange, textValue));
     PromptActionClass.setContentNode(contentNode)
     PromptActionClass.openDialog()
+  }
+
+  showQRDialog(onQRValue: (value: string) => void, key?: string) {
+    if (!this.UIContext) {
+      console.error(`#showInputDialog ${key}: UIContext未初始化`)
+      throw new Error('UIContext未初始化')
+    }
+    // 定义扫码参数options
+    let options: scanBarcode.ScanOptions = {
+      scanTypes: [scanCore.ScanType.ALL],
+      enableMultiMode: true,
+      enableAlbum: true
+    };
+    try {
+      if (canIUse("SystemCapability.Multimedia.Scan.ScanBarcode")) {
+        scanBarcode.startScanForResult(this.UIContext.getHostContext(), options,
+          (error: BusinessError, result: scanBarcode.ScanResult) => {
+            if (error) {
+              console.error('[Scan]', `Failed to get ScanResult by callback with options. Code: ${error.code}, message: ${error.message}`);
+              return;
+            }
+            // 返回解析二维码值
+            onQRValue(result.originalValue)
+            console.info('[Scan]', `Succeeded in getting import origin url, origin url is ${result.originalValue}`);
+          })
+      } else {
+        this.showToast({ message: '当前设备不支持QR扫码哦' })
+        console.error( '[Scan]', `Failed to get ScanResult by callback with options, because unsupported SystemCapability.`);
+      }
+    } catch (error) {
+      console.error( '[Scan]', `Failed to start the scanning service. Code:${error.code}, message: ${error.message}`);
+    }
   }
 
 }

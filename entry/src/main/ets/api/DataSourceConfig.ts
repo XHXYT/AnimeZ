@@ -92,3 +92,11 @@ export interface DataSourceConfig {
   parserConfig: ParserConfig;
 }
 
+// 配置文件接口
+export interface DataSourceConfigFile {
+  version: string;
+  author: string,
+  update_time: string
+  sources: DataSourceConfig[];
+}
+

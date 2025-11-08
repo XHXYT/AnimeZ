@@ -21,6 +21,7 @@ export struct InputCustomDialog {
         .onChange((value: string) => {
           this.textValue = value
         })
+        .constraintSize({ maxHeight: 292})
       Row({space: 12}) {
         ButtonBuilder({
           config: {
@@ -46,10 +47,14 @@ export struct InputCustomDialog {
           }
         })
       }
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Center)
     }
     .width(400)
     .padding(5)
+    .clip(true)
     .borderRadius(32)
+    .constraintSize({ maxHeight: 390})
     .justifyContent(FlexAlign.SpaceBetween)
     .backgroundColor($r('app.color.start_window_background'))
     .onAppear(() => {

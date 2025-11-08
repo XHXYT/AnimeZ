@@ -2,9 +2,11 @@ import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import { InputCustomDialog } from "../components/dialog/InputDialog"
 import { AppConfigs } from "../entryability/Settings"
+import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import Logger from "../utils/Logger"
 import { SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
+import { scanBarcode, scanCore } from "@kit.ScanKit"
 
 // 排序类型枚举
 export enum SortType {
@@ -469,6 +471,60 @@ export class VideoSourcesViewModel {
   }
 
   /**
+   * 执行智能区间选择
+   * 根据当前选中项自动确定区间并选中
+   */
+  executeRangeSelection(): void {
+    if (!this.selectionManager.isSelectionMode()) {
+      ToastUtil.showToast({ message: "请先进入选择模式" })
+      return
+    }
+    const selectedCount = this.selectionManager.getSelectionCount()
+    if (selectedCount < 2) {
+      ToastUtil.showToast({ message: "请至少选择两个项目来创建区间" })
+      return
+    }
+    const success = this.selectionManager.selectRangeBasedOnSelection(this.videoSources)
+    if (success) {
+      const firstItem = this.selectionManager.getFirstSelected()
+      const lastItem = this.selectionManager.getLastSelected()
+      const firstIndex = this.videoSources.findIndex(s => s.key === firstItem!.key)
+      const lastIndex = this.videoSources.findIndex(s => s.key === lastItem!.key)
+      ToastUtil.showToast({
+        message: `已选中区间 ${firstIndex + 1} 到 ${lastIndex + 1}`
+      })
+    } else {
+      ToastUtil.showToast({ message: "区间选择失败" })
+    }
+  }
+
+  /**
+   * 获取选中项的区间信息（用于提示）
+   */
+  getRangeInfo(): string {
+    if (!this.selectionManager.isSelectionMode()) {
+      return ""
+    }
+    const selectedCount = this.selectionManager.getSelectionCount()
+    if (selectedCount === 0) {
+      return "请选择项目"
+    } else if (selectedCount === 1) {
+      return "已选择1项，请继续选择"
+    } else if (selectedCount === this.videoSources.length) {
+      return "已经全选了哦"
+    }  else {
+      const firstItem = this.selectionManager.getFirstSelected()
+      const lastItem = this.selectionManager.getLastSelected()
+      if (firstItem && lastItem) {
+        const firstIndex = this.videoSources.findIndex(s => s.key === firstItem.key)
+        const lastIndex = this.videoSources.findIndex(s => s.key === lastItem.key)
+        return `将选中区间 ${firstIndex + 1} 到 ${lastIndex + 1}`
+      }
+    }
+    return ""
+  }
+
+  /**
    * 反选功能
    */
   toggleInverseSelection(): void {
@@ -839,6 +895,342 @@ export class VideoSourcesViewModel {
     })
   }
 
+  async importFromFile(context:Context, overwrite: boolean) {
+    const message = await dataSourceManager.importSourceConfigFromFile(context, overwrite)
+    // 通知数据源变更
+    VIDEO_SOURCE_EVENT.emit()
+    ToastUtil.showToast({ message: message, duration: 2000 })
+  }
+
+  /**
+   * 从网络导入数据源配置
+   */
+  async importFromNetwork(overwrite: boolean, importUrl?: string): Promise<boolean> {
+    // 显示网络导入输入弹窗
+    this.showNetworkImportDialog(importUrl)
+    // 监听输入值变化
+    return new Promise((resolve) => {
+      // 使用定时器检查输入值
+      const checkInput = setInterval(() => {
+        if (this.dialogInputTextValue !== '') {
+          clearInterval(checkInput)
+          const urls = this.dialogInputTextValue.trim()
+          if (!urls) {
+            ToastUtil.showToast({ message: "请输入有效的URL" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 执行网络导入操作
+          this.executeNetworkImport(urls, overwrite).then(success => {
+            this.dialogInputTextValue = ''
+            // 通知数据源变更
+            VIDEO_SOURCE_EVENT.emit()
+            resolve(success)
+          })
+        }
+      }, 500)
+    })
+  }
+
+  /** 二维码导入 */
+  async importFromQR(): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.dialogInputTextValue = ''
+      // 设置超时
+      const timeout = setTimeout(() => {
+        ToastUtil.showToast({ message: "扫描超时" })
+        resolve(false)
+      }, 30000) // 30秒超时
+      ToastUtil.showQRDialog((value) => {
+        clearTimeout(timeout)
+        this.dialogInputTextValue = value
+      }, 'VideoSourcesViewModel.importFromQR')
+      // 监听QR返回值变化
+      const checkInput = setInterval(() => {
+        if (this.dialogInputTextValue !== '') {
+          clearInterval(checkInput)
+          clearTimeout(timeout)
+          this.processQRResult(this.dialogInputTextValue.trim())
+            .then(success => {
+              this.dialogInputTextValue = ''
+              resolve(success)
+            })
+            .catch((error: Error) => {
+              this.dialogInputTextValue = ''
+              Logger.e('fail', `二维码导入`, error)
+              resolve(false)
+            })
+        }
+      }, 500)
+    })
+  }
+
+  /** 剪贴板导入 */
+  async importFromClipboard(overwrite: boolean): Promise<boolean> {
+    // 显示粘贴导入输入弹窗
+    this.showClipboardImportDialog()
+    // 监听输入值变化
+    return new Promise((resolve) => {
+      // 使用定时器检查输入值
+      const checkInput = setInterval(() => {
+        if (this.dialogInputTextValue !== '') {
+          clearInterval(checkInput)
+          const content = this.dialogInputTextValue.trim()
+          if (!content) {
+            ToastUtil.showToast({ message: "请输入有效配置文本" })
+            this.dialogInputTextValue = ''
+            resolve(false)
+            return
+          }
+          // 执行剪贴板导入操作
+          this.executeClipboardImport(content, overwrite).then(success => {
+            this.dialogInputTextValue = ''
+            // 通知数据源变更
+            VIDEO_SOURCE_EVENT.emit()
+            resolve(success)
+          })
+        }
+      }, 500)
+    })
+  }
+
+  /**
+   * 处理二维码扫描结果
+   */
+  private async processQRResult(value: string): Promise<boolean> {
+    if (!value) {
+      ToastUtil.showToast({ message: "无效二维码" })
+      return false
+    }
+    try {
+      if (value.startsWith('http')) {
+        // 链接导入弹窗
+        this.importFromNetwork(this.appSettings.video_source_import_overwrite, value)
+        return true
+      } else {
+        // JSON配置导入
+        const message = await dataSourceManager.importSourceConfigFromJSON(
+          value,
+          this.appSettings.video_source_import_overwrite
+        )
+        // 通知数据源变更
+        VIDEO_SOURCE_EVENT.emit()
+        ToastUtil.showToast({ message: message, duration: 2000 })
+        return true
+      }
+    } catch (error) {
+      ToastUtil.showToast({ message: "导入失败" })
+      Logger.e('tips', `processQRResult failed: ${error.message}`)
+      return false
+    }
+  }
+
+  /**
+   * 执行网络导入操作
+   */
+  private async executeNetworkImport(urls: string, overwrite: boolean): Promise<boolean> {
+    try {
+      ToastUtil.showToast({ message: "正在从网络导入..." })
+      // 调用 DataSourceManager 的远程导入方法
+      const result = await dataSourceManager.importSourceConfigFromRemote(urls, overwrite)
+      // 显示导入结果
+      ToastUtil.showToast({ message: result })
+      // 重新加载数据源
+      await this.loadSources()
+      Logger.i(this, `VideoSourcesViewModel.executeNetworkImport Import completed: ${result}`)
+      return true
+    } catch (error) {
+      const message = `网络导入失败: ${error.message}`
+      ToastUtil.showToast({ message: message, duration: 3000 })
+      console.error(`VideoSourcesViewModel.executeNetworkImport ${message}`)
+      return false
+    }
+  }
+
+  /**
+   * 执行剪贴板导入操作
+   */
+  private async executeClipboardImport(content: string, overwrite: boolean): Promise<boolean> {
+    try {
+      ToastUtil.showToast({ message: "正在从配置文本导入..." })
+      // 调用 DataSourceManager 的JSON导入方法
+      const result = await dataSourceManager.importSourceConfigFromJSON(content, overwrite)
+      // 显示导入结果
+      ToastUtil.showToast({ message: result, duration: 1500 })
+      // 重新加载数据源
+      await this.loadSources()
+      Logger.i(this, `VideoSourcesViewModel.executeClipboardImport Import completed: ${result}`)
+      return true
+    } catch (error) {
+      const message = `粘贴导入失败: ${error.message}`
+      ToastUtil.showToast({ message: message, duration: 3000 })
+      console.error(`VideoSourcesViewModel.executeClipboardImport ${message}`)
+      return false
+    }
+  }
+
+  /**
+   * 显示网络导入输入弹窗
+   */
+  private showNetworkImportDialog(importUrl?: string): void {
+    // 重置输入值
+    if (importUrl) {
+      this.dialogInputTextValue = importUrl
+    } else {
+      this.dialogInputTextValue = ''
+    }
+    // 构建帮助文本
+    const helpText = `请输入远程配置文件的URL，支持：
+• 单个URL：https://example.com/config.json
+• 多个URL：用逗号或空格分隔
+• 支持三种格式：
+  - 标准配置文件
+  - 配置数组
+  - 单个配置对象`
+    // 显示输入对话框
+    ToastUtil.showInputDialog(
+      '网络导入',
+      helpText,
+      (value) => {
+        this.dialogInputTextValue = value
+      },
+      importUrl,
+      'VideoSourcesViewModel.showNetworkImportDialog'
+    )
+  }
+
+  /**
+   * 显示粘贴导入输入弹窗
+   */
+  private showClipboardImportDialog(): void {
+    // 重置输入值
+    this.dialogInputTextValue = ''
+    // 构建帮助文本
+    const helpText = `请输入配置文件，支持三种格式：
+  - 标准配置文本
+  - 配置对象数组
+  - 单个配置对象`
+    // 显示输入对话框
+    ToastUtil.showInputDialog(
+      '粘贴导入',
+      helpText,
+      (value) => {
+        this.dialogInputTextValue = value
+      },
+      '',
+      'VideoSourcesViewModel.showNetworkImportDialog'
+    )
+  }
+
+  /**
+   * 导出选中的数据源配置
+   */
+  async exportSelectedItems(context: Context): Promise<boolean> {
+    if (this.selectCount === 0) {
+      ToastUtil.showToast({ message: "请先选择要导出的数据源" })
+      return false
+    }
+    return new Promise((resolve) => {
+      ToastUtil.showAlertDialog({
+        title: '导出视频源',
+        message: `确认导出选中的${this.selectCount}项视频源配置？`,
+        primaryButton: {
+          value: '取消',
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '确定',
+          fontColor: $r('app.color.primary_color_accent'),
+          action: async () => {
+            try {
+              // 获取选中的配置
+              const selectedConfigs = Array.from(this.selectionManager.getSelections())
+              if (selectedConfigs.length === 0) {
+                ToastUtil.showToast({ message: "请先选中配置哦" })
+                resolve(false)
+                return
+              }
+              // 调用 DataSourceManager 的导出方法
+              const result = await dataSourceManager.exportDataSourceConfigs(
+                context,
+                selectedConfigs
+              )
+              // 显示导出结果
+              ToastUtil.showToast({ message: result, duration: 3000 })
+              Logger.i(this, `VideoSourcesViewModel.exportSelectedItems Export completed: ${result}`)
+              resolve(true)
+            } catch (error) {
+              const message = `导出失败: ${error.message}`
+              ToastUtil.showToast({ message: message })
+              Logger.e('tips', `VideoSourcesViewModel.exportSelectedItems ${message}`)
+              resolve(false)
+            }
+          }
+        }
+      })
+    })
+  }
+
+  async exportSource(context: Context, config?: DataSourceConfig) {
+    let message = ''
+    if (config) {
+      message = await dataSourceManager.exportDataSourceConfigs(context, [config])
+    } else {
+      message = await dataSourceManager.exportDataSourceConfigs(context)
+    }
+    ToastUtil.showToast({ message: message })
+  }
+
+  // 删除选中项
+  async deleteSelectedItems(): Promise<boolean> {
+    if (this.selectCount === 0) {
+      return false
+    }
+    return new Promise((resolve) => {
+      ToastUtil.showAlertDialog({
+        title: '移除视频源',
+        message: `确认移除选中的${this.selectCount}项视频源？`,
+        primaryButton: {
+          value: '取消',
+          action: () => resolve(false)
+        },
+        secondaryButton: {
+          value: '确定',
+          fontColor: Color.Red,
+          action: async () => {
+            try {
+              const data = Array.from(this.selectionManager.getSelections())
+              // 显示一个更通用的提示，因为精确计数会因失败而误导
+              ToastUtil.showToast({ message: "正在删除，请稍候..." })
+              // 并行执行所有内存中的删除操作, 这里操作很快，因为不涉及文件IO
+              await Promise.all(
+                data.map(async (item) => {
+                  if (item.key) {
+                    await dataSourceManager.removeDataSource(item.key)
+                  }
+                }))
+              // 所有内存配置删除成功后，统一保存一次配置文件，避免文件写入竞态条件
+              await dataSourceManager.saveCurrentConfig()
+              // 只有在全部成功后才执行到这里
+              ToastUtil.showToast({ message: "全部删除成功" })
+              this.selectionManager.toggleSelectionMode()
+              await this.loadSources()
+              resolve(true)
+            } catch (error) {
+              // 如果任何步骤出错，都会被这里捕获
+              Logger.e('tips', `VideoSourcesViewModel.deleteSelectedItems failed: ${error.message}`)
+              ToastUtil.showToast({ message: `删除失败: ${error.message || '未知错误'}` })
+              // 即使失败，也尝试重新加载数据，以恢复界面状态
+              await this.loadSources()
+              resolve(false)
+            }
+          }
+        }
+      })
+    })
+  }
+
   /**
    * 重新规范化所有数据源的优先级
    * 将优先级重新分配为 10, 20, 30... 这样的间隔，便于后续插入
@@ -1079,52 +1471,6 @@ export class VideoSourcesViewModel {
     ToastUtil.showInputDialog(title, placeholder, (value) => {
       this.dialogInputTextValue = value
     }, '', 'VideoSourcesViewModel.showInputDialog')
-  }
-
-  // 删除选中项
-  async deleteSelectedItems(): Promise<boolean> {
-    if (this.selectCount === 0) {
-      return false
-    }
-    return new Promise((resolve) => {
-      ToastUtil.showAlertDialog({
-        title: '移除视频源',
-        message: `确认移除选中的${this.selectCount}项视频源？`,
-        primaryButton: {
-          value: '取消',
-          action: () => resolve(false)
-        },
-        secondaryButton: {
-          value: '确定',
-          fontColor: Color.Red,
-          action: async () => {
-            try {
-              const data = Array.from(this.selectionManager.getSelections())
-              const total = data.filter(item => item.key).length
-              let completed = 0
-              await Promise.all(
-                data.map(async (item) => {
-                  if (item.key) {
-                    await dataSourceManager.removeDataSource(item.key)
-                    completed++
-                    ToastUtil.showToast({
-                      message: `删除进度: ${completed}/${total}`
-                    })
-                  }
-                })
-              )
-              ToastUtil.showToast({ message: "全部删除成功" })
-              this.selectionManager.toggleSelectionMode()
-              await this.loadSources() // 重新加载数据
-              resolve(true)
-            } catch (error) {
-              ToastUtil.showToast({ message: "删除失败" })
-              resolve(false)
-            }
-          }
-        }
-      })
-    })
   }
 
   // 处理返回键
