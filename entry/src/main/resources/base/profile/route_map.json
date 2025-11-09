@@ -11,6 +11,11 @@
       "buildFunction": "SearchPageBuilder"
     },
     {
+      "name": "DownloadManagerPage",
+      "pageSourceFile": "src/main/ets/view/DownloadManagerPage.ets",
+      "buildFunction": "DownloadManagerPageBuilder"
+    },
+    {
       "name": "VideoHistoryPage",
       "pageSourceFile": "src/main/ets/view/VideoHistoryPage.ets",
       "buildFunction": "VideoHistoryPageBuilder"

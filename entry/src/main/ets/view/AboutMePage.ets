@@ -145,7 +145,6 @@ struct AboutMePage {
 
   }
 
-
   build() {
     NavDestination() {
       TitleBar({title: '关于作者'})

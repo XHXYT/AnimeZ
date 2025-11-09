@@ -146,7 +146,7 @@ class DataSourceManager {
   }
 
   // 根据key获取特定数据源
-  getDataSource(key: string): GenericDataSource | undefined {
+  getDataSource(key: string): GenericDataSource {
     return this.dataSources.get(key);
   }
 

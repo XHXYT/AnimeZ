@@ -13,6 +13,7 @@ import { dataSourceManager } from '../api/DataSourceManager';
 @Entry
 @Component
 struct Index {
+
   @State currentIndex: number = 0
   @Provide onShow: boolean = false
   // 深色模式监听

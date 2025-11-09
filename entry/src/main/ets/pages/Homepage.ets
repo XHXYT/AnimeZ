@@ -64,7 +64,7 @@ export struct HomePage {
         .backgroundColor($r('app.color.background_color_accent'))
         .borderRadius(32)
         .onClick(() => {
-          this.pageStack.pushPathByName("SearchPage", '')
+          this.pageStack.pushPathByName("SearchPage", '', true)
         })
 
         Image($r("app.media.ic_download_manager"))
@@ -73,14 +73,14 @@ export struct HomePage {
           .fillColor('#817977')
           .objectFit(ImageFit.Contain)
           .onClick(() => {
-            router.pushUrl({ url: 'pages/DownloadManagerPage' })
+            this.pageStack.pushPathByName("DownloadManagerPage", '', true)
           })
 
         SymbolGlyph($r('sys.symbol.clock'))
           .fontSize(20)
           .fontColor(['#817977'])
           .onClick(() => {
-            this.pageStack.pushPathByName("VideoHistoryPage", '')
+            this.pageStack.pushPathByName("VideoHistoryPage", '', true)
           })
       }
       .height(56)

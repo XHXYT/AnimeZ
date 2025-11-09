@@ -4,11 +4,12 @@ import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionMana
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
+import { HistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
+import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
 
 // 系统路由
 @Builder

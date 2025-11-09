@@ -1,8 +1,8 @@
 // VideoDetailViewModel.ets
 import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
-import { HistoryInfo, VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
-import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
+import { HistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
+import { CollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import { ToastUtil } from '../utils/ToastUtils';
@@ -17,6 +17,8 @@ import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
 import { window } from '@kit.ArkUI';
+import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
+import { VideoCollectionInfo } from '../entity/VideoCollectionInfo';
 
 @Observed
 export class VideoDetailViewModel {

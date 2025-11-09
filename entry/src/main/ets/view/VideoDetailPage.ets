@@ -25,6 +25,7 @@ import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import { Header } from '../components/common/Header';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
+import { VideoCacheList } from '../components/VideoCacheList';
 
 // 系统路由
 @Builder
@@ -137,7 +138,6 @@ struct VideoDetailPage {
       if (this.viewModel.handleBackPressed(this.panelController)) {
         return true;
       }
-
       if (!this.panelController.isShow() && !this.viewModel.isFullScreen) {
         SystemBarUtils.setWindowSystemBarTransparent(false);
         return false;
@@ -334,18 +334,17 @@ struct VideoDetailPage {
           .fontColor($r('app.color.color_text_major'))
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-
         Blank()
         Image($r('app.media.ic_close'))
-          .width(24).height(24)
+          .width(32).height(32)
           .onClick(() => {
             this.panelController.close();
           })
       }
       .padding({ left: 16, top: 16, right: 16, bottom: 8 })
       .width('100%')
-
       if (this.viewModel.panelContentType == 0) {
+        // 详情页
         Scroll() {
           Column() {
             this.VideoDetail()
@@ -356,6 +355,9 @@ struct VideoDetailPage {
         .edgeEffect(EdgeEffect.Spring)
         .width('100%')
         .height('100%')
+      } else {
+        // 缓存页
+        VideoCacheList({ videoDetailInfo: this.viewModel.videoDetailInfo })
       }
     }
     .backgroundColor($r('app.color.background_color'))
@@ -517,17 +519,14 @@ struct VideoDetailPage {
           this.viewModel.removeCollect();
         })
       }
-
       // 缓存
       this.IconWithText(
         $r('app.media.ic_download2'),
         '缓存',
         () => {
           this.viewModel.panelContentType = 1;
-          ToastUtil.showToast({ message: "开发中" });
-        }
-      )
-
+          this.panelController.show()
+        })
       // 分享
       this.IconWithText($r('app.media.ic_share'), "分享", () => {
         ToastUtil.showToast({ message: "开发中" });

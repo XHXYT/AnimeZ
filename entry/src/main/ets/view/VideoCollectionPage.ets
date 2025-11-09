@@ -3,12 +3,13 @@ import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionMana
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
-import { CollectionInfo, VideoCollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
+import { CollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
+import { VideoCollectionInfo } from '../entity/VideoCollectionInfo';
 
 // 系统路由
 @Builder

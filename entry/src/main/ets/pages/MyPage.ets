@@ -1,12 +1,13 @@
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { More } from '../components/MoreContainer';
 import { common } from '@kit.AbilityKit';
-import { VideoHistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
+import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppConfigs } from '../entryability/Settings';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
+import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
 
 const TAG: string = 'MyPage'
 
@@ -81,15 +82,13 @@ export struct MyPage {
         Column({ space: 16 }) {
           // 应用标题栏
           this.Header()
-
           // 快捷工具栏Start（收藏、缓存）
           Flex({ justifyContent: FlexAlign.SpaceAround }) {
             this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
-              this.pageStack.pushPathByName("VideoCollectionPage", '')
+              this.pageStack.pushPathByName("VideoCollectionPage", '', true)
             })
             this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
-              ToastUtil.showToast({ message: "开发中" })
-              // router.pushUrl({ url: 'pages/DownloadManagerPage' })
+              this.pageStack.pushPathByName("DownloadManagerPage", '', true)
             })
           }
           .padding(8)

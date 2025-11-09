@@ -4,9 +4,10 @@ import { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
-import { SearchHistoryInfo, searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
+import { searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
+import { SearchHistoryInfo } from '../entity/SearchHistoryInfo';
 
 const tag: string = 'SearchPage'
 
@@ -215,7 +216,7 @@ struct SearchPage {
       keyword: keyword,
       accessTime: new Date().getTime()
     }
-    await searchHistoryInfoDB.insert(result)
+    searchHistoryInfoDB.insert(result)
       .then((insertId) => {
         console.log('SearchTest #doSearch 插入成功id为：', insertId)
       })

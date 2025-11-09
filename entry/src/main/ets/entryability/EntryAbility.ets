@@ -10,6 +10,8 @@ import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '
 import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { permissionManage } from '../utils/PermissionManage';
 import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
+import AbsTable from '../db/AbsTable';
+import SQLite from '../db/SQLite';
 
 
 export default class EntryAbility extends UIAbility {
@@ -27,7 +29,6 @@ export default class EntryAbility extends UIAbility {
         this.context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
             console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
         })
-
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
         // 初始化 源管理器、数据库 上下文
         await dataSourceManager.init(this.context)
@@ -44,6 +45,8 @@ export default class EntryAbility extends UIAbility {
         // RedPlayerPreload.globalInit('your preload cache path', 20, 4, 0)
 
         this.getContinueData(want, launchParam);
+        // 初始化数据库
+        SQLite.context = this.context
     }
 
     onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
