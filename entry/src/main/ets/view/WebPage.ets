@@ -12,7 +12,6 @@ export function WebPageBuilder(name: string, param: Object) {
   WebPage()
 }
 
-const context = getContext(this) as common.UIAbilityContext
 // User Agent modification from westinyang
 const PAD_USER_AGENT: string =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTMl, like Gecko) Chrome/99.0.4844.88 Safari/537.36'
@@ -122,7 +121,7 @@ struct WebPage {
         .enabled(typeof this.url === 'string')
         .onClick((selected) => {
           if (typeof this.url === 'string') {
-            GoToWeb(this.url, context)
+            GoToWeb(this.url, this.getUIContext().getHostContext()! as common.UIAbilityContext)
           }
         })
       MenuItem({
@@ -214,6 +213,7 @@ struct WebPage {
     // 更多
     SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
       .fontSize(28)
+      .margin({ left: 12 })
       .bindMenu(this.MoreMenu())
       .fontColor([$r('app.color.color_text_major')])
   }

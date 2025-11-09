@@ -1,34 +1,32 @@
 # AnimeZ
 <img src="entry/src/main/resources/base/media/icon.png" width="128px" style="box-shadow: 2px 2px 4px 4px #eeeeee; border-radius: 16px; margin: 16px"/>
-OpenHarmony开源看动漫应用。__数据均来源于网络，仅供学习交流!__
 
+### OpenHarmony开源看动漫应用
+### 数据均来源于网络，仅供学习交流!
 
 
 ## 开发环境
 
-- 一加6T OpenHarmony 3.2
-- DevEco Studio 4.0 Beta2
-- SDK API9 3.2.13.5
-
+- MatePad Pro 11 2024 - 6.0.0.110
+- DevEco Studio 6.0.0 Release - 6.0.0.858
+- SDK API20 - 6.0.0.47
 
 
 ## 已实现
-- 番剧列表、番剧搜索、番剧观看、番剧下载
-- 视频下载列表、视频收藏、历史记录、搜索记录
+- 番剧列表、番剧搜索、番剧观看、视频源配置
+- 视频收藏、历史记录、搜索记录
 - 支持AVPlayer、Video控件和IjkPlayer三种播放器（其中Video和IjkPlayer目前都不够完善，推荐使用AVPlayer）
-- 支持M3u8视频离线缓存，支持离线观看M3u8视频
 - 支持切换暗色模式
 
 
-
 ## 待实现
+- 番剧下载
 - 支持更多番剧数据源
 - 搜索时支持同时搜索多个数据源
 - 支持番剧分类、时间表等功能
 - 视频播放支持投屏、小窗播放等功能
 - 支持搜索下载列表、历史播放和收藏记录
 - 手势切换视频进度、视频音量和屏幕亮度
-
 
 
 ## 截图预览
@@ -57,27 +55,6 @@ OpenHarmony开源看动漫应用。__数据均来源于网络，仅供学习交�
 <img src="pics/img_20.png" width="49%" />
 <img src="pics/img_21.png" width="49%" />
 </div>
-
-
-
-## 更新日志
-
-- v1.0.1 (2023-11-18)
-  - 更新版本号为v1.0.1
-  - 工程适配ohpm
-  - 使用htmlsoup替代sanitize-html
-  - 修复首页轮播图点击无法跳转详情页的问题
-  - 日志输出、转场动画配置等代码优化
-
-
-- v1.0.0 (2023-08-20)
-  - v1.0.0版本首次发布
-  - 番剧列表、番剧搜索、番剧观看、番剧下载
-  - 视频下载列表、视频收藏、历史记录、搜索记录
-  - 支持AVPlayer、Video控件和IjkPlayer三种播放器（其中Video和IjkPlayer目前都不够完善，推荐使用AVPlayer）
-  - 支持M3u8视频离线缓存，支持离线观看M3u8视频
-  - 支持切换暗色模式
-
 
 
 ## License

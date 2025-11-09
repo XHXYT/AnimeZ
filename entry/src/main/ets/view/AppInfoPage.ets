@@ -1,10 +1,11 @@
 
 import TitleBar from '../components/TitleBar'
-import { ConfigurationConstant } from '@kit.AbilityKit';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { SettingGroupType, SettingItem } from '../entity/SettingsData';
 import { SettingRow } from '../components/SettingsItem';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppSettings } from '../entryability/Settings';
+import { GoToWeb } from '../utils/GoOutWeb';
 
 // 系统路由 - 应用信息
 @Builder
@@ -57,7 +58,8 @@ struct AppInfoPage {
     },
     { title: '鸿蒙交流群', settings_key: 'qq_group', info: '693903194', icon: $r('app.media.ic_qq'),
       onClick: () => {
-        ToastUtil.showToast({message: '开发中'})
+        GoToWeb('mqqapi://card/show_pslcard?src_type=internal&version=1&uin=693903194&card_type=group&source=qrcode',
+        this.getUIContext().getHostContext()! as common.UIAbilityContext)
       }
     }
   ]
