@@ -7,7 +7,6 @@ import { TaskManagerObserver } from '../download/core/TaskManager';
 import Logger from '../utils/Logger';
 import { ZDownloader } from '../download/ZDownloader';
 import StateView, { ViewState } from '../components/StateView';
-import { OPTIONS_TRANSITION_POP, OPTIONS_TRANSITION_PUSH } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { ToastUtil } from '../utils/ToastUtils';
 
@@ -86,9 +85,7 @@ struct DownloadManagerPage {
 
   aboutToAppear() {
     DOWNLOADER.addObserver(this.observer)
-
     DOWNLOADER.loadTasks()
-
     this.selectionManager.addObserver(this.selectionObserver)
     this.selectMode = this.selectionManager.isSelectionMode()
   }
@@ -149,7 +146,6 @@ struct DownloadManagerPage {
     .hideToolBar(true)
     .width('100%')
     .height('100%')
-
   }
 
   private onTasksChanged() {
@@ -159,15 +155,12 @@ struct DownloadManagerPage {
     } else {
       this.state = ViewState.EMPTY
     }
-
     this.taskCount = DOWNLOADER.tasks.length
     this.isAllComplete = DOWNLOADER.isComplete()
     this.canPauseAll = DOWNLOADER.canPauseAll()
-
   }
 
   private loadDownloadItems() {
-
   }
 
   @Builder

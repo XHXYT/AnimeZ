@@ -119,28 +119,29 @@ export default abstract class TaskManager<P extends Task = Task, T extends Task 
   /**
    * 从本地加载任务
    */
-  loadTasks() {
+  async loadTasks() {
     Logger.d(this, 'loadTasks isTaskLoaded=' + this.isTaskLoaded + ' isLoading=' + this.isLoading)
     if (this.isTaskLoaded || this.isLoading) {
       return
     }
     if (this.taskInfoRepository) {
       this.isLoading = true;
-      this.loadTasksInner()
-        .then(() => {
-          Logger.d(this, 'loadTasksInner finished!')
-          this.isLoading = false;
-          this.isTaskLoaded = true
 
-          if (this.observers) {
-            this.observers.forEach((o) => {
-              o.onTaskLoaded(this.tasks)
-            })
-          }
-        })
-        .catch((e) => {
-          Logger.d(this, 'loadTasksInner failed! e=' + JSON.stringify(e))
-        })
+      try {
+        await this.loadTasksInner()
+        Logger.d(this, 'loadTasksInner finished!')
+        this.isLoading = false;
+        this.isTaskLoaded = true
+
+        if (this.observers) {
+          this.observers.forEach((o) => {
+            o.onTaskLoaded(this.tasks)
+          })
+        }
+      } catch (e) {
+        Logger.d(this, 'loadTasksInner failed! e=' + JSON.stringify(e))
+        this.isLoading = false;
+      }
     }
   }
 

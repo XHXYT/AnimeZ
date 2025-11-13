@@ -8,7 +8,6 @@ import { VideoCollectionInfo } from '../../entity/VideoCollectionInfo';
 
 /**
  * 视频播放历史记录
- * TODO 通过装饰器配置数据库表信息
  * TODO 支持数据源key和数据源title
  */
 @Table({ db: 'video_manager', name: 'video_collection' })

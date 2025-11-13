@@ -15,13 +15,13 @@ export default class DownloadTaskInfoRepository implements TaskInfoRepository<Do
     }
 
     async create(taskInfo: DownloadTaskInfo): Promise<number> {
-        Logger.d(this, 'create taskId=' + taskInfo.taskId)
+        Logger.d(this, 'create taskId = ' + taskInfo.taskId)
         return SQLite.with(FileDownloadTable)
             .save(taskInfo)
     }
 
     async update(taskInfo: DownloadTaskInfo): Promise<number> {
-        Logger.d(this, 'update taskInfo=' + JSON.stringify(taskInfo))
+        Logger.d(this, 'update taskInfo = ' + JSON.stringify(taskInfo))
         return SQLite.with(FileDownloadTable)
             .update(taskInfo)
     }
@@ -32,7 +32,7 @@ export default class DownloadTaskInfoRepository implements TaskInfoRepository<Do
     }
 
     async queryAll(parentId: number): Promise<DownloadTaskInfo[]> {
-        Logger.d(this, 'loadTasks parentId=' + parentId)
+        Logger.d(this, 'loadTasks parentId = ' + parentId)
         return SQLite.with(FileDownloadTable)
             .queryAllByParentId(parentId)
     }

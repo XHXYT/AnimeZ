@@ -1,13 +1,43 @@
 
+import { Column } from '../db/decorator/Decorators';
 
-// 搜索历史记录的类型
-import { ValuesBucket } from "@kit.ArkData"
+/**
+ * 搜索历史记录
+ */
+export default class SearchHistoryInfo {
+  /**
+   * 记录ID，新增时设置为 null 可实现自增
+   */
+  @Column({
+    name: 'id',
+    type: 'INTEGER',
+    isPrimaryKey: true,
+    autoIncrement: true
+  })
+  id: number | null = null;
 
-// ValuesBucket 数据库类型约束
-export interface SearchHistoryInfo extends ValuesBucket {
-  id: number | null // 新增时 id 设置为 null ，可实现 id 自增
-  // 搜索词
-  keyword: string
-  // 添加时间
-  accessTime: number
+  /**
+   * 搜索词
+   */
+  @Column({
+    name: 'keyword',
+    type: 'TEXT',
+    notNull: true
+  })
+  keyword: string;
+
+  /**
+   * 访问时间
+   */
+  @Column({
+    name: 'accessTime',
+    type: 'INTEGER',
+    notNull: true
+  })
+  accessTime: number;
+
+  constructor(keyword: string, accessTime: number = new Date().getTime()) {
+    this.keyword = keyword;
+    this.accessTime = accessTime;
+  }
 }

@@ -21,7 +21,7 @@ export default class SQLite {
      * 传入数据库表类，获取对应的表对象，进行相应的增删改查操作
      * @param tableClass
      */
-    static with<T extends AbsTable<any>>(tableClass: { new (dbName, tableName, context: Context): T }): T {
+    static with<T extends AbsTable<any>>(tableClass: { new (context: Context, dbName: string, tableName: string): T }): T {
         let dbName = Reflect.getMetadata('Database', tableClass)
         if (!dbName) {
             throw new Error('table db is empty')

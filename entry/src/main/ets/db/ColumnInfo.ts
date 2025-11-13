@@ -1,16 +1,17 @@
 
 export enum ValueType {
-    TEXT, INTEGER, LONG
+    TEXT, INTEGER, LONG, BOOLEAN
 }
 
 export default interface ColumnInfo {
+    // 实体属性名
+    propertyKey: string;
 
     name: string,
-    type: 'TEXT' | 'INTEGER',
+    type: 'TEXT' | 'INTEGER' | 'BOOLEAN',
     isPrimaryKey?: boolean,
     autoIncrement?: boolean,
     unique?: boolean,
     notNull?: boolean,
     defaultValue?: ValueType
-
 }

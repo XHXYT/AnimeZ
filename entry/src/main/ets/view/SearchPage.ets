@@ -4,10 +4,10 @@ import { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
-import { searchHistoryInfoDB } from '../database/SearchHistoryInfoDB';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
-import { SearchHistoryInfo } from '../entity/SearchHistoryInfo';
+import SearchHistoryInfo from '../entity/SearchHistoryInfo';
+import { SearchHistoryTable } from '../db/impl/SearchHistoryDao';
 
 const tag: string = 'SearchPage'
 
@@ -28,16 +28,17 @@ struct SearchPage {
   @StorageLink('currentColorMode') currentMode: number = 1
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
   @State searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
   @State state: number = 0
   @State errorMessage: string = ''
   @State keyword: string = ''
 
+  private searchHistoryInfoDB = new SearchHistoryTable(this.getUIContext().getHostContext()!)
+
   async aboutToAppear() {
     this.state = ViewState.CUSTOM
     // 查询搜索历史
-    const search_list = await searchHistoryInfoDB.query()
+    const search_list = await this.searchHistoryInfoDB.queryAll()
     if (search_list) {
       this.searchHistoryList = search_list
     }
@@ -192,8 +193,6 @@ struct SearchPage {
           })
         }
         .margin(6)
-
-
       }
       .constraintSize({
         minHeight: '100%'
@@ -216,7 +215,7 @@ struct SearchPage {
       keyword: keyword,
       accessTime: new Date().getTime()
     }
-    searchHistoryInfoDB.insert(result)
+    this.searchHistoryInfoDB.insert(result)
       .then((insertId) => {
         console.log('SearchTest #doSearch 插入成功id为：', insertId)
       })
@@ -240,7 +239,7 @@ struct SearchPage {
   }
 
   private clearHistory() {
-    this.UIContext.showAlertDialog(
+    ToastUtil.showAlertDialog(
       {
         title: '清空搜索历史',
         message: '确认清空搜索历史记录？',
@@ -253,7 +252,7 @@ struct SearchPage {
           value: '确定',
           fontColor: Color.Red,
           action: async () => {
-            await searchHistoryInfoDB.delete()
+            await this.searchHistoryInfoDB.clearAll()
             this.searchHistoryList = []
           }
         }

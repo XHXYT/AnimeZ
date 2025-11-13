@@ -20,14 +20,15 @@ export default class DatabaseImpl implements IDatabase {
         this.key = "table_map_" + this.dbName
     }
 
-    getTable<T extends AbsTable<any>>(tableClass: { new (dbName, tableName, context): T }): T {
+    getTable<T extends AbsTable<any>>(tableClass: { new (context: Context, dbName: string, tableName: string): T }): T {
         return Globals.getOrCreate(this.dbName + '_' + tableClass.name, () => {
             let tableName = Reflect.getMetadata('TableName', tableClass)
             Logger.d(this, 'getTable tableName=' + tableName)
             if (!tableName) {
                 throw new Error('table name is empty')
             }
-            return new tableClass(this.dbName, tableName, this.context)
+            // 参数顺序：context, dbName, tableName
+            return new tableClass(this.context, this.dbName, tableName)
         })
     }
 

@@ -1,72 +1,90 @@
 import Logger from '../../utils/Logger';
-import { MyTable } from '../decorator/Decorators';
+import AutoTable from '../AutoTable';
+import { ValueType } from '../AbsTable';
+import SearchHistoryInfo from '../../entity/SearchHistoryInfo';
 import { Table } from '../decorator/Decorators';
-import AbsTable from '../AbsTable';
-import { ValuesBucket, ValueType } from '../AbsTable';
-import rdb from '@ohos.data.relationalStore';
-import { SearchHistoryInfo } from '../../entity/SearchHistoryInfo';
+import { Context } from '@kit.AbilityKit';
 
 /**
  * 视频搜索记录
  */
 @Table({ db: 'video_manager', name: 'search_history' })
-export class SearchHistoryTable extends AbsTable<SearchHistoryInfo> {
+export class SearchHistoryTable extends AutoTable<SearchHistoryInfo> {
+
+  constructor(context: Context) {
+    super(context, 'video_manager', 'search_history');
+  }
+
+  // 返回实体类
+  protected getEntityClass(): new (...args: any[]) => SearchHistoryInfo {
+    return SearchHistoryInfo;
+  }
+
+  /**
+   * 获取主键列名
+   */
   getColumnId(): string {
     return "id"
   }
 
-  getTableColumns(): string[] {
-    return ['id', 'keyword', 'accessTime']
-  }
-
-  getCreateTableSql(): string {
-    return "CREATE TABLE IF NOT EXISTS search_history(id INTEGER PRIMARY KEY AUTOINCREMENT, keyword TEXT, accessTime INTEGER)"
-  }
-
-  bindToValuesBucket(bucket: ValuesBucket, item: SearchHistoryInfo) {
-    this.getTableColumns().forEach((col) => {
-      bucket[col] = item[col]
-    })
-  }
-
+  /**
+   * 获取实体ID值
+   */
   getEntityId(item: SearchHistoryInfo): ValueType {
     return item.id
   }
 
-  createItem(cursor: rdb.ResultSet): SearchHistoryInfo {
-    let info: SearchHistoryInfo = {
-      id: cursor.getLong(cursor.getColumnIndex('id')),
-      keyword: cursor.getString(cursor.getColumnIndex('keyword')),
-      accessTime: cursor.getLong(cursor.getColumnIndex('accessTime'))
-    }
-    return info
-  }
-
+  /**
+   * 查询所有搜索历史，按时间倒序
+   */
   async queryAll(): Promise<SearchHistoryInfo[]> {
-    return this.query(this.getPredicates().orderByDesc('accessTime'), this.getTableColumns())
+    return this.query(this.getPredicates().orderByDesc('accessTime'))
   }
 
+  /**
+   * 保存或更新搜索关键词
+   */
   async saveOrUpdate(keyword: string): Promise<number> {
     Logger.d(this, 'saveOrUpdate keyword=' + keyword)
+
+    // 查询是否已存在
     let results = await this.query(this.getPredicates().equalTo('keyword', keyword))
-    Logger.d(this, 'saveOrUpdate results=' + JSON.stringify(results))
+
     let result;
     if (!results || results.length == 0) {
-      result = await this.insert({
-        keyword: keyword,
-        accessTime: new Date().getTime(),
-        id: null
-      })
+      // 不存在则插入新记录
+      result = await this.insert(new SearchHistoryInfo(keyword))
     } else {
+      // 存在则更新访问时间
       let info = results[0]
-      Logger.d(this, 'saveOrUpdate info=' + JSON.stringify(info))
-      result = await this.update({
-        id: info.id,
-        keyword: keyword,
-        accessTime: new Date().getTime()
-      }, this.getPredicates().equalTo('keyword', keyword))
+      info.accessTime = new Date().getTime()
+      result = await this.update(info)
     }
+
     Logger.d(this, 'saveOrUpdate result=' + result)
     return result
   }
+
+  /**
+   * 删除指定关键词的历史记录
+   */
+  async deleteByKeyword(keyword: string): Promise<number> {
+    return this.deleteAll(this.getPredicates().equalTo('keyword', keyword))
+  }
+
+  /**
+   * 清空所有搜索历史
+   */
+  async clearAll(): Promise<void> {
+    await this.clearTable()
+  }
+
+  /**
+   * 查询最近N条(默认为10)搜索历史
+   */
+  async queryRecent(limit: number = 10): Promise<SearchHistoryInfo[]> {
+    return this.query(this.getPredicates().orderByDesc('accessTime').limitAs(limit))
+  }
+
 }
+
