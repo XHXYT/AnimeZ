@@ -1,12 +1,10 @@
-import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
-import { InputCustomDialog } from "../components/dialog/InputDialog"
 import { AppConfigs } from "../entryability/Settings"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import Logger from "../utils/Logger"
 import { SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
-import { scanBarcode, scanCore } from "@kit.ScanKit"
 
 // 排序类型枚举
 export enum SortType {

@@ -109,7 +109,7 @@ export default abstract class AbsTable<T> implements ITable {
   async delete(item: T): Promise<number> {
     let predicates = this.getPredicates()
       .equalTo(this.getColumnId(), this.getEntityId(item))
-    return this.deleteAll(predicates)
+    return this.deleteItem(predicates)
   }
 
   async deleteItems(...items: T[]): Promise<number[]> {
@@ -120,7 +120,7 @@ export default abstract class AbsTable<T> implements ITable {
     for (const item of items) {
       let predicates = this.getPredicates()
         .equalTo(this.getColumnId(), this.getEntityId(item))
-      results.push(await this.deleteAll(predicates))
+      results.push(await this.deleteItem(predicates))
     }
     return results
   }
@@ -129,11 +129,10 @@ export default abstract class AbsTable<T> implements ITable {
    * 删除数据
    * @param item
    */
-  async deleteAll(predicates: rdb.RdbPredicates): Promise<number> {
+  async deleteItem(predicates: rdb.RdbPredicates): Promise<number> {
     let db = await this.futureDb
     return db.delete(predicates)
   }
-
 
   /**
    * 更新数据
@@ -173,11 +172,12 @@ export default abstract class AbsTable<T> implements ITable {
     let items = []
     if (resultSet.goToFirstRow()) {
       do {
-        Logger.d(this, 'queryAll rowIndex=' + resultSet.rowIndex)
+        Logger.d(this, 'queryAll rowIndex = ' + resultSet.rowIndex)
         items.push(this.createItem(resultSet))
       } while (resultSet.goToNextRow())
     }
-    Logger.d(this, 'queryAll items=' + JSON.stringify(items))
+    Logger.d(this, 'queryAll items = ' + JSON.stringify(items))
     return items;
   }
+
 }

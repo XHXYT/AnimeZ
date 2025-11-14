@@ -2,7 +2,6 @@
 import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { HistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
-import { CollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import { ToastUtil } from '../utils/ToastUtils';
@@ -18,7 +17,9 @@ import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
 import { window } from '@kit.ArkUI';
 import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
-import { VideoCollectionInfo } from '../entity/VideoCollectionInfo';
+import VideoCollectionInfo from '../entity/VideoCollectionInfo';
+import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
+
 
 @Observed
 export class VideoDetailViewModel {
@@ -52,8 +53,16 @@ export class VideoDetailViewModel {
 
   // 历史和收藏信息
   public historyInfo: VideoHistoryInfo = HistoryInfo;
-  public collectionInfo: VideoCollectionInfo = CollectionInfo;
+  public collectionInfo: VideoCollectionInfo = {
+    id: null,
+    link: '',
+    title: '',
+    coverUrl: '',
+    sourceKey: '',
+    accessTime: 0
+  }
 
+  public videoCollectionInfoDB: VideoCollectionTable
   // 播放器管理
   public playerManager: IPlayerManager;
 
@@ -67,7 +76,8 @@ export class VideoDetailViewModel {
   private onFullScreenChangedCallback?: (isFullScreen: boolean) => void;
   private onProgressChangeCallback?: (totalTime: number, currentTime: number) => void;
 
-  constructor(playerManager: IPlayerManager, appSettings: AppConfigs) {
+  constructor(playerManager: IPlayerManager, appSettings: AppConfigs, context: Context) {
+    this.videoCollectionInfoDB = new VideoCollectionTable(context)
     this.playerManager = playerManager;
     this.appSettings = appSettings;
     this.initPlayerListener();
@@ -152,7 +162,6 @@ export class VideoDetailViewModel {
   public async initialize(params: VideoNavigateInfo) {
     this.url = params.url as string;
     this.videoID = params.id;
-    this.collectID = params.id;
     this.title = params.title;
     this.sourceKey = params.sourceKey as string;
 
@@ -350,10 +359,9 @@ export class VideoDetailViewModel {
 
   // 检查收藏信息
   private async checkCollectionInfo() {
-    const CollectionList = await videoCollectionInfoDB.query(this.title);
-    if (CollectionList && CollectionList.length > 0) {
-      const CollectionDetail = CollectionList[0];
-      this.collectionInfo = CollectionDetail;
+    const CollectionInfo = await this.videoCollectionInfoDB.queryOneByTitle(this.title);
+    if (CollectionInfo.id) {
+      this.collectionInfo = CollectionInfo
       if (this.collectionInfo !== undefined && this.videoID !== null) {
         this.isCollect = true;
       }
@@ -362,44 +370,38 @@ export class VideoDetailViewModel {
 
   // 收藏视频
   public async collect() {
-    if (!this.videoDetailInfo.title || !this.videoDetailInfo.coverUrl) return;
-
-    const theCollectionInfo: VideoCollectionInfo = {
-      id: this.collectID,
-      link: this.url,
-      title: this.videoDetailInfo.title,
-      coverUrl: this.videoDetailInfo.coverUrl,
-      sourceKey: this.sourceKey,
-      accessTime: Date.now()
-    };
-
-    if (this.collectID === null) {
-      await videoCollectionInfoDB.insert(theCollectionInfo)
-        .then(() => {
-          this.isCollect = true;
-          ToastUtil.showToast({ message: "收藏成功" });
-        })
-        .catch((error: Error) => {
-          Logger.e('tips', `收藏失败: ${error}`);
-        });
-    } else {
-      await videoCollectionInfoDB.update(theCollectionInfo)
-        .then(() => {
-          this.isCollect = true;
-          ToastUtil.showToast({ message: "收藏成功" });
-        })
-        .catch((error: Error) => {
-          Logger.e('tips', `更新收藏失败: ${error}`);
-        });
+    Logger.d('collect', 'collect() called');
+    try {
+      // 创建收藏对象
+      const theCollectionInfo: VideoCollectionInfo = {
+        id: this.collectID,
+        link: this.url,
+        title: this.videoDetailInfo.title,
+        coverUrl: this.videoDetailInfo.coverUrl,
+        sourceKey: this.sourceKey,
+        accessTime: Date.now()
+      };
+      // 保存到数据库，返回插入的记录ID
+      const insertId = await this.videoCollectionInfoDB.save(theCollectionInfo);
+      // 更新 collectID 为数据库返回的实际ID
+      this.collectID = insertId;
+      this.isCollect = true;
+      ToastUtil.showToast({ message: "收藏成功" });
+      Logger.d('collect', `collect() success, new ID: ${insertId}`);
+    } catch (error) {
+      Logger.e('fail', 'collect()', error);
+      ToastUtil.showToast({ message: "收藏失败" });
     }
   }
 
   // 取消收藏
   public async removeCollect() {
-    if (this.collectID !== null) {
-      await videoCollectionInfoDB.delete(this.collectID);
+    try {
+      await this.videoCollectionInfoDB.deleteByLink(this.url);
       this.isCollect = false;
       ToastUtil.showToast({ message: "取消收藏" });
+    } catch (err) {
+      console.error(`取消收藏失败：${err.message}`)
     }
   }
 

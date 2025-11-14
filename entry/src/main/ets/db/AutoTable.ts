@@ -97,19 +97,20 @@ export default abstract class AutoTable<T> extends AbsTable<T> {
 
     const columns = this.getAllColumns();
     console.debug(`${this.constructor.name}, bindToValuesBucket found ${columns.length} columns`);
-
     columns.forEach(col => {
       let value = item[col.propertyKey];
       console.debug(`${this.constructor.name}, bindToValuesBucket ${col.propertyKey} raw value: ${value} (type: ${typeof value})`);
-
+      // 对于自增主键且值为 null 的情况，跳过该字段
+      if (col.isPrimaryKey && col.autoIncrement && (value === null || value === undefined)) {
+        console.debug(`${this.constructor.name}, bindToValuesBucket skipping auto-increment primary key: ${col.propertyKey}`);
+        return; // 跳过这个字段，不添加到 bucket
+      }
       if (col.type === 'BOOLEAN') {
         value = value ? 1 : 0;
       }
-
       bucket[col.name || col.propertyKey] = value;
       console.debug(`${this.constructor.name}, bindToValuesBucket set ${col.name || col.propertyKey} = ${value}`);
     });
-
     console.debug(`${this.constructor.name}, bindToValuesBucket final bucket: ${JSON.stringify(bucket)}`);
   }
 

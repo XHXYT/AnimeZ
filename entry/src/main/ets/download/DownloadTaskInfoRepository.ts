@@ -37,9 +37,9 @@ export default class DownloadTaskInfoRepository implements TaskInfoRepository<Do
             .queryAllByParentId(parentId)
     }
 
-    async deleteAll(parentId: number): Promise<number> {
+    async deleteItem(parentId: number): Promise<number> {
         let table = SQLite.with(FileDownloadTable)
-        return table.deleteAll(table.getPredicates().equalTo('taskParentId', parentId))
+        return table.deleteItem(table.getPredicates().equalTo('taskParentId', parentId))
     }
 
 }

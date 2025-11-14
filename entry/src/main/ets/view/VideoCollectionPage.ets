@@ -2,14 +2,13 @@ import Logger from '../utils/Logger';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
-import { CollectionInfo, videoCollectionInfoDB } from '../database/VideoCollectionInfoDB';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
-import { VideoCollectionInfo } from '../entity/VideoCollectionInfo';
+import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
+import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 
 // 系统路由
 @Builder
@@ -35,6 +34,7 @@ struct VideoCollectionPage {
   @StorageLink('currentColorMode') currentMode: number = 1
   @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
 
+  private videoCollectionInfoDB = new VideoCollectionTable(this.getUIContext().getHostContext()!)
   private readonly selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
   private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
@@ -257,9 +257,9 @@ struct VideoCollectionPage {
   }
 
   private async loadCollectionList() {
-    const list = await videoCollectionInfoDB.query()
+    const list = await this.videoCollectionInfoDB.queryAll()
     // 如果有历史记录，回显到页面中
-    // 倒序查询入组
+    // 查询入组
     this.items = list
     console.log('VideoCollectionTest 收藏页数据：', JSON.stringify(this.items))
     if (this.items.length == 0) {
@@ -270,8 +270,9 @@ struct VideoCollectionPage {
   }
 
   async deleteCollectionList(id: number) {
-    await videoCollectionInfoDB.delete(id)
+    await this.videoCollectionInfoDB.deleteById(id)
   }
+
 }
 
 /**
@@ -282,11 +283,10 @@ struct CollectionItem {
   @State selectionMode: boolean = false
   @State isSelected: boolean = false
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-  @State selectionManager: SelectionManager<VideoCollectionInfo> | undefined = undefined
-  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
-  @State item: VideoCollectionInfo = CollectionInfo
+  @Prop selectionManager: SelectionManager<VideoCollectionInfo>
   @State selectionIconMargin: number = 0
   @State selectionIconSize: number = 0
+  @Prop item: VideoCollectionInfo
 
   build() {
     Row() {
@@ -338,7 +338,7 @@ struct CollectionItem {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       if (isSelectionMode) {
         this.selectionMode = true
-        this.UIContext.animateTo({
+        ToastUtil.animateTo({
           duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
@@ -348,7 +348,7 @@ struct CollectionItem {
           this.selectionIconMargin = 16
         })
       } else {
-        this.UIContext.animateTo({
+        ToastUtil.animateTo({
           duration: DEFAULT_DURATION,
           curve: Curve.ExtremeDeceleration,
           iterations: 1,
@@ -363,26 +363,22 @@ struct CollectionItem {
       }
     },
     onSelectChange: (item: VideoCollectionInfo, isSelected) => {
-      if (this.item && this.item.src == item.src) {
-        Logger.e('tips', 'onSelectChange isSelect=' + isSelected)
+      if (this.item && this.item.id == item.id) {
+        Logger.d('tips', 'onSelectChange isSelect = ' + isSelected)
         this.isSelected = isSelected
       }
     }
   }
 
   aboutToAppear() {
-    Logger.e('tips', 'aboutToAppear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.addObserver(this.selectionObserver)
-      this.isSelected = this.selectionManager.isSelect(this.item)
-    }
+    Logger.d('tips', 'aboutToAppear')
+    this.selectionManager.addObserver(this.selectionObserver)
+    this.isSelected = this.selectionManager.isSelect(this.item)
   }
 
   aboutToDisappear() {
-    Logger.e('tips', 'aboutToDisappear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.removeObserver(this.selectionObserver)
-    }
+    Logger.d('tips', 'aboutToDisappear')
+    this.selectionManager.removeObserver(this.selectionObserver)
   }
 
 }

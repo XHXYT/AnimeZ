@@ -45,11 +45,9 @@ export class SearchHistoryTable extends AutoTable<SearchHistoryInfo> {
    * 保存或更新搜索关键词
    */
   async saveOrUpdate(keyword: string): Promise<number> {
-    Logger.d(this, 'saveOrUpdate keyword=' + keyword)
-
+    Logger.d(this, 'saveOrUpdate keyword = ' + keyword)
     // 查询是否已存在
     let results = await this.query(this.getPredicates().equalTo('keyword', keyword))
-
     let result;
     if (!results || results.length == 0) {
       // 不存在则插入新记录
@@ -60,8 +58,7 @@ export class SearchHistoryTable extends AutoTable<SearchHistoryInfo> {
       info.accessTime = new Date().getTime()
       result = await this.update(info)
     }
-
-    Logger.d(this, 'saveOrUpdate result=' + result)
+    Logger.d(this, 'saveOrUpdate result = ' + result)
     return result
   }
 
@@ -69,7 +66,7 @@ export class SearchHistoryTable extends AutoTable<SearchHistoryInfo> {
    * 删除指定关键词的历史记录
    */
   async deleteByKeyword(keyword: string): Promise<number> {
-    return this.deleteAll(this.getPredicates().equalTo('keyword', keyword))
+    return this.deleteItem(this.getPredicates().equalTo('keyword', keyword))
   }
 
   /**

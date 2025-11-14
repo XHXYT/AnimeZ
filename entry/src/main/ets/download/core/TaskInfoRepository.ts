@@ -34,5 +34,5 @@ export default interface TaskInfoRepository<T extends TaskInfo = TaskInfo> {
     /**
      * 删除下载任务
      */
-    deleteAll(parentId: number): Promise<number>
+    deleteItem(parentId: number): Promise<number>
 }

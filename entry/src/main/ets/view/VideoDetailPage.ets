@@ -56,7 +56,8 @@ struct VideoDetailPage {
 
   @State @Watch('onViewModelChange') viewModel: VideoDetailViewModel = new VideoDetailViewModel(
     new PlayerManagerImpl(),
-    new AppConfigs()
+    new AppConfigs(),
+    this.getUIContext().getHostContext()!
   )
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
   @State panelController: PanelController = new PanelController()
@@ -65,7 +66,7 @@ struct VideoDetailPage {
   private webviewController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear() {
-    this.viewModel = new VideoDetailViewModel(this.playerManager, this.appSettings)
+    this.viewModel = new VideoDetailViewModel(this.playerManager, this.appSettings, this.getUIContext().getHostContext()!)
     this.viewModel.setOnStatusChangedCallback((status: number) => {
       // 处理状态变化
       if (status == PlayerStatus.ERROR) {
