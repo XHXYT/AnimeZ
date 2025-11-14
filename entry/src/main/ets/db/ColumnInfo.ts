@@ -8,7 +8,7 @@ export default interface ColumnInfo {
     propertyKey: string;
 
     name: string,
-    type: 'TEXT' | 'INTEGER' | 'BOOLEAN',
+    type: 'TEXT' | 'INTEGER' | 'BOOLEAN' | 'REAL',
     isPrimaryKey?: boolean,
     autoIncrement?: boolean,
     unique?: boolean,

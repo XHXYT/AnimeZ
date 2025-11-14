@@ -1,13 +1,14 @@
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { More } from '../components/MoreContainer';
 import { common } from '@kit.AbilityKit';
-import { videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppConfigs } from '../entryability/Settings';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
-import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
+import VideoHistoryInfo from '../entity/VideoHistoryInfo';
+import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
+
 
 const TAG: string = 'MyPage'
 
@@ -16,6 +17,7 @@ const TAG: string = 'MyPage'
  */
 @Component
 export struct MyPage {
+
   @Consume('pageStack') pageStack: NavPathStack
   // 顶部避让高度
   @StorageProp('topRectHeight') topHeight: number = 0
@@ -23,12 +25,14 @@ export struct MyPage {
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
   // 应用设置
   @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
-  @Watch('onShowChanged') @Consume onShow: boolean
+  @Consume onShow: boolean
   @Consume DarkModeImage: boolean
-  @State items: VideoHistoryInfo[] = []
+  @StorageLink('HistoryList') historyList: VideoHistoryInfo[] = []
   @State bgHeight: number = 0
+
   private readonly scroller = new Scroller()
-  private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
+  private videoHistoryInfoDB = new VideoHistoryTable(this.getUIContext().getHostContext()!)
+
 
   aboutToAppear() {
     this.loadHistoryList()
@@ -44,21 +48,13 @@ export struct MyPage {
     HISTORY_CHANGED_EVENT.off()
   }
 
-  private onShowChanged() {
-    if (this.onShow) {
-      // 历史记录改变，重新加载
-      this.loadHistoryList()
-    }
-  }
-
   private async loadHistoryList() {
     // 查询全部历史记录
-    const list = await videoHistoryInfoDB.query()
+    const list = await this.videoHistoryInfoDB.queryAllByAccessTimeDesc()
     // 如果有历史记录，回显到页面中
     if (list) {
-      // 倒序查询入组
-      this.items = list
-      console.log(`${TAG} VideoTest #loadHistoryList 历史记录项：${JSON.stringify( this.items)}`)
+      this.historyList = list
+      console.log(`${TAG} VideoTest #loadHistoryList 历史记录项：${JSON.stringify( this.historyList)}`)
     }
   }
 
@@ -177,7 +173,7 @@ export struct MyPage {
             ToastUtil.showToast({ message: '当前设置为跟随系统捏' })
             return
           }
-          ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
+          ColorModeManager.switchColorMode(this.getUIContext().getHostContext()! as common.UIAbilityContext, this.appSettings.color_mode)
         })
     }
     .margin({ left: 16, right: 16, top: 56, bottom: 16 })
@@ -214,9 +210,9 @@ export struct MyPage {
         this.pageStack.pushPathByName("VideoHistoryPage", '')
       })
       Column() {
-        if (this.items && this.items.length > 0) {
+        if (this.historyList && this.historyList.length > 0) {
           List() {
-            ForEach(this.items, (item: VideoHistoryInfo) => {
+            ForEach(this.historyList, (item: VideoHistoryInfo) => {
               ListItem() {
                 this.HistoryItem(item)
               }

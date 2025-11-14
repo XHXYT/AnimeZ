@@ -4,12 +4,12 @@ import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionMana
 import VideoTimeUtils from '../utils/VideoTimeUtils';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { HistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
-import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
+import VideoHistoryInfo from '../entity/VideoHistoryInfo';
+import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 
 // 系统路由
 @Builder
@@ -23,7 +23,6 @@ struct VideoHistoryPage {
   @Consume onShow: boolean
   @State state: number = 0
   @State errorMessage: string = ''
-  @State items: VideoHistoryInfo[] = []
   @State selectMode: boolean = false
   @State selectCount: number = 0
   @State hasSelectAll: boolean = false
@@ -32,9 +31,11 @@ struct VideoHistoryPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
-  private readonly selectionManager: SelectionManager<VideoHistoryInfo> = new SelectionManager<VideoHistoryInfo>()
+  @StorageLink('HistoryList') items: VideoHistoryInfo[] = []
 
+  @State selectionManager: SelectionManager<VideoHistoryInfo> = new SelectionManager<VideoHistoryInfo>()
+
+  private videoHistoryInfoDB = new VideoHistoryTable(this.getUIContext().getHostContext()!)
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
@@ -50,7 +51,6 @@ struct VideoHistoryPage {
 
   aboutToAppear() {
     this.onShow = false
-    this.loadHistoryList()
     this.state = ViewState.CONTENT
     this.selectionManager.addObserver(this.selectionObserver)
     this.selectMode = this.selectionManager.isSelectionMode()
@@ -137,7 +137,7 @@ struct VideoHistoryPage {
                       await Promise.all(
                         data.map(async (item) => {
                           if (item.id) {
-                            await this.deleteHistoryList(item.id);
+                            await this.deleteHistoryListItem(item.id);
                             completed++;
                             ToastUtil.showToast({
                               message: `删除进度: ${completed}/${total}`
@@ -145,7 +145,7 @@ struct VideoHistoryPage {
                           }
                         })
                       );
-                      ToastUtil.showToast({ message: "全部删除成功" });
+                      ToastUtil.showToast({ message: `${completed}删除成功，${total - completed}项失败` })
                       this.selectionManager.toggleSelectionMode()
                       // 触发历史记录更新事件
                       HISTORY_CHANGED_EVENT.emit()
@@ -217,9 +217,9 @@ struct VideoHistoryPage {
             builder: () => { this.swipeActionEnd(item.id) },
             // 侧滑到一定距离会触发 onAction
             onAction: () => {
-              animateTo({ duration: 1000 }, () => {
+              ToastUtil.animateTo({ duration: 1000 }, () => {
                 // 侧滑删除
-                this.deleteHistoryList(item.id)
+                this.deleteHistoryListItem(item.id)
                 this.loadHistoryList()
               })
             },
@@ -257,7 +257,7 @@ struct VideoHistoryPage {
         .backgroundColor('#FF5E5D')
         .onClick(() => {
           // 删除列表行
-          this.deleteHistoryList(id)
+          this.deleteHistoryListItem(id)
           this.loadHistoryList()
         })
     }
@@ -267,7 +267,7 @@ struct VideoHistoryPage {
 
   private async loadHistoryList() {
     // 查询全部历史记录
-    const list = await videoHistoryInfoDB.query()
+    const list = await this.videoHistoryInfoDB.queryAllByAccessTimeDesc()
     // 如果有历史记录，回显到页面中
     if (list) {
       // 倒序查询入组
@@ -281,8 +281,13 @@ struct VideoHistoryPage {
     }
   }
 
-  async deleteHistoryList(id: number) {
-    await videoHistoryInfoDB.delete(id)
+  async deleteHistoryListItem(id: number) {
+    try {
+      await this.videoHistoryInfoDB.deleteById(id)
+      this.items = this.items.filter(value => { value.id != id })
+    } catch (err) {
+      Logger.e('fail', `videoHistoryInfoDB 删除 ${id} `, err)
+    }
   }
 
 }
@@ -293,13 +298,14 @@ struct VideoHistoryPage {
 @Component
 struct HistoryItem {
 
-  @State selectionMode: boolean = false
+  @Prop item: VideoHistoryInfo
   @State isSelected: boolean = false
-  @State selectionManager: SelectionManager<VideoHistoryInfo> | undefined = undefined
-  @State item: VideoHistoryInfo = HistoryInfo
+  @State selectionMode: boolean = false
+  @Link selectionManager: SelectionManager<VideoHistoryInfo>
   @State selectionIconMargin: number = 0
   @State selectionIconSize: number = 0
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       if (isSelectionMode) {
@@ -330,25 +336,21 @@ struct HistoryItem {
     },
     onSelectChange: (item: VideoHistoryInfo, isSelected) => {
       if (this.item && this.item.link == item.link) {
-        Logger.e('tips', 'onSelectChange isSelect=' + isSelected)
+        Logger.d('tips', 'onSelectChange isSelect = ' + isSelected)
         this.isSelected = isSelected
       }
     }
   }
 
   aboutToAppear() {
-    Logger.e('tips', 'aboutToAppear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.addObserver(this.selectionObserver)
-      this.isSelected = this.selectionManager.isSelect(this.item)
-    }
+    Logger.d('tips', 'aboutToAppear')
+    this.selectionManager.addObserver(this.selectionObserver)
+    this.isSelected = this.selectionManager.isSelect(this.item)
   }
 
   aboutToDisappear() {
-    Logger.e('tips', 'aboutToDisappear')
-    if (this.selectionManager !== undefined) {
-      this.selectionManager.removeObserver(this.selectionObserver)
-    }
+    Logger.d('tips', 'aboutToDisappear')
+    this.selectionManager.removeObserver(this.selectionObserver)
   }
 
 

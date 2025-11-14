@@ -34,8 +34,9 @@ struct VideoCollectionPage {
   @StorageLink('currentColorMode') currentMode: number = 1
   @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
 
+  @State selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
+
   private videoCollectionInfoDB = new VideoCollectionTable(this.getUIContext().getHostContext()!)
-  private readonly selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
   private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
@@ -270,7 +271,12 @@ struct VideoCollectionPage {
   }
 
   async deleteCollectionList(id: number) {
-    await this.videoCollectionInfoDB.deleteById(id)
+    try {
+      await this.videoCollectionInfoDB.deleteById(id)
+      this.items = this.items.filter(value => { value.id != id })
+    } catch (err) {
+      Logger.e('fail', `videoCollectionInfoDB 删除 ${id} `, err)
+    }
   }
 
 }
@@ -280,10 +286,11 @@ struct VideoCollectionPage {
  */
 @Component
 struct CollectionItem {
+
   @State selectionMode: boolean = false
   @State isSelected: boolean = false
   @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-  @Prop selectionManager: SelectionManager<VideoCollectionInfo>
+  @Link selectionManager: SelectionManager<VideoCollectionInfo>
   @State selectionIconMargin: number = 0
   @State selectionIconSize: number = 0
   @Prop item: VideoCollectionInfo

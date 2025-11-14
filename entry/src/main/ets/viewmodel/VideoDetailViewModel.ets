@@ -1,7 +1,6 @@
-// VideoDetailViewModel.ets
+
 import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
-import { HistoryInfo, videoHistoryInfoDB } from '../database/VideoHistoryInfoDB';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import { ToastUtil } from '../utils/ToastUtils';
@@ -16,9 +15,10 @@ import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
 import { window } from '@kit.ArkUI';
-import { VideoHistoryInfo } from '../entity/VideoHistoryInfo';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
+import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
+import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 
 
 @Observed
@@ -63,6 +63,7 @@ export class VideoDetailViewModel {
   }
 
   public videoCollectionInfoDB: VideoCollectionTable
+  public videoHistoryInfoDB: VideoHistoryTable
   // 播放器管理
   public playerManager: IPlayerManager;
 
@@ -78,6 +79,7 @@ export class VideoDetailViewModel {
 
   constructor(playerManager: IPlayerManager, appSettings: AppConfigs, context: Context) {
     this.videoCollectionInfoDB = new VideoCollectionTable(context)
+    this.videoHistoryInfoDB = new VideoHistoryTable(context)
     this.playerManager = playerManager;
     this.appSettings = appSettings;
     this.initPlayerListener();
@@ -313,27 +315,18 @@ export class VideoDetailViewModel {
     console.log(`当前执行保存历史记录次数：${this.saveCount}`)
     if (this.saveCount > 210 || needSave) {
       if (!this.historyInfo) return;
-      if (this.videoID !== null) {
-        this.historyInfo.id = this.videoID;
-        this.historyInfo.accessTime = new Date().getTime();
-        try {
-          const updateId = await videoHistoryInfoDB.update(this.historyInfo, this.videoID)
-          Logger.e('tips', `saveHistoryInfo 更新历史记录成功，ID: ${updateId}`);
-        } catch (error) {
-          Logger.e('fail', `saveHistoryInfo 更新历史记录`, error);
+      this.historyInfo.id = this.videoID;
+      this.historyInfo.accessTime = new Date().getTime();
+      try {
+        const insertId = await this.videoHistoryInfoDB.save(this.historyInfo)
+        if (insertId <= 0) {
+          console.error(`历史数据保存失败`)
+          return
         }
-      } else {
-        try {
-          const insertId = await videoHistoryInfoDB.insert(this.historyInfo)
-          if (insertId <= 0) {
-            console.error(`历史数据插入失败`)
-            return
-          }
-          Logger.w('tips', `插入历史记录成功，ID: ${insertId}`);
-          this.videoID = insertId;
-        } catch (error) {
-          Logger.e('fail', `saveHistoryInfo 新增历史记录`, error);
-        }
+        Logger.w('tips', `保存历史记录成功，ID: ${insertId}`);
+        this.videoID = insertId;
+      } catch (error) {
+        Logger.e('fail', `saveHistoryInfo 保存历史记录`, error);
       }
       this.saveCount = 0
     } else {
@@ -343,7 +336,7 @@ export class VideoDetailViewModel {
 
   // 检查视频历史信息
   private async checkVideoInfo() {
-    const HistoryList = await videoHistoryInfoDB.query(this.title);
+    const HistoryList = await this.videoHistoryInfoDB.queryByTitle(this.title);
     if (!HistoryList) {
       console.warn(`没有查询到历史记录，暂无历史记录`)
       return
