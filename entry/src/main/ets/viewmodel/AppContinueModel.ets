@@ -80,8 +80,7 @@ class AppContinueModel {
 
     this.currentPage = data.currentPage;
     this.currentPageParams = data.currentPageParams;
-    // TODO 待优化 -> 需等待播放器完全加载完资源才能恢复进度
-    // this.currentVideoDuration = data.currentVideoDuration;
+    this.currentVideoDuration = data.currentVideoDuration;
   }
 }
 

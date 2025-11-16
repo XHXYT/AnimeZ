@@ -3,6 +3,8 @@ import Logger from "../../utils/Logger";
 import { IPlayer } from '../model/IPlayer';
 import IPlayerManager, { PlayerStatus } from "../model/IPlayerManager";
 import { BusinessError } from "@kit.BasicServicesKit";
+import { appContinueModel } from '../../viewmodel/AppContinueModel';
+import { APP_RESUME_PROGRESS_EVENT } from "../../utils/EventBus";
 
 /**
  * 封装media.AVPlayer
@@ -64,7 +66,7 @@ export class AVPlayerWrapper {
             await this.avPlayer.reset();
             this.avPlayer.url = this.playUrl
           } else {
-            throw err; // 其他错误继续抛出
+            throw new Error(err); // 其他错误继续抛出
           }
         }
       },
@@ -206,6 +208,11 @@ export class AVPlayerWrapper {
           break;
         case media.BufferingInfoType.BUFFERING_END:
           Logger.w('Buffering', '缓冲结束，视频继续播放.');
+          if (!appContinueModel.isContinue) {
+            APP_RESUME_PROGRESS_EVENT.emit()
+
+            appContinueModel.isContinue = true
+          }
           break;
         case media.BufferingInfoType.BUFFERING_PERCENT:
           Logger.i('Buffering', `缓冲进度: ${value}%`);

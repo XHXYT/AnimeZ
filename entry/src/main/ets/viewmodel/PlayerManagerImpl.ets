@@ -259,12 +259,6 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   notifyDuration(duration: number) {
-    if (!appContinueModel.isContinue) {
-      APP_RESUME_PROGRESS_EVENT.emit()
-
-      appContinueModel.isContinue = true
-    }
-    
     this.totalTime = duration
     this.listeners.forEach((l) => {
       l.onProgressChange(this.totalTime, this.currentTime)

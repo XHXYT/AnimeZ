@@ -183,9 +183,11 @@ export struct VideoPlayerController {
     // 应用接续 -> 恢复播放
     APP_RESUME_PROGRESS_EVENT.on(() => {
       setTimeout(() => {
-        const currentTime = appContinueModel.getCurrentVideoDuration()
-        if (currentTime > 0) {
-          this.setProgress(this.playerManager.getDuration() as number, currentTime)
+        const seekValue = appContinueModel.getCurrentVideoDuration()
+        Logger.w('tips', `AppContinue seekValue = ${seekValue}`);
+        if (seekValue > 0) {
+          this.setProgress(this.playerManager.getDuration() as number, seekValue);
+          this.playerManager.seekTo(seekValue);
         }
       })
     })
