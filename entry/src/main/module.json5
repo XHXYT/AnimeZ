@@ -19,6 +19,8 @@
           "when": "always"
         },
         "reason": "$string:datasync_desc"
+      },{
+        "name": "ohos.permission.VIBRATE"
       }
     ],
     "name": "entry",

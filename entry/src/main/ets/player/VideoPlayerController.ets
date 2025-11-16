@@ -279,6 +279,8 @@ export struct VideoPlayerController {
 
   @Builder
   VolumeAndBrightnessBuilder() {
+    // TODO 后续根据手势调用振动马达 -> Vibrator
+
     if (this.isVolumeAndBrightnessVisible) {
       VolumeAndBrightnessProgress({
         isVolume: !this.isLeftSideGesture,
