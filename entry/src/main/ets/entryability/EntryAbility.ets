@@ -163,7 +163,7 @@ export default class EntryAbility extends UIAbility {
             wantParam["data"] = continueInput;
             // 取消 页面栈 自动迁移
             wantParam[wantConstant.Params.SUPPORT_CONTINUE_PAGE_STACK_KEY] = false;
-            // 按需退出
+            // 按需退出 -> 调试应用接续时推荐使用
             // wantParam[wantConstant.Params.SUPPORT_CONTINUE_SOURCE_EXIT_KEY] = false;
         }
 
