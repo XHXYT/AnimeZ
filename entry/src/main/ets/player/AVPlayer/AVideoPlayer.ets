@@ -19,6 +19,7 @@ const DEFAULT_ASPECT = 1.9
  */
 @Component
 export struct AVideoPlayer {
+  private avPlayer?: AVPlayerWrapper;
 
   @State videoUrl: string = ''
   @State isFullScreen: boolean = false
@@ -144,8 +145,9 @@ export struct AVideoPlayer {
           Logger.e('tips', `'AVPlayer XComponent onLoad surfaceId = ${surfaceId}`)
           media.createAVPlayer()
             .then((player) => {
-              const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
-              avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
+              this.avPlayer = new AVPlayerWrapper(player)
+              this.avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
+
             })
             .catch(() => {
               console.error(`AVPlayer XComponent 加载失败`)
@@ -153,6 +155,7 @@ export struct AVideoPlayer {
         })
         .onDestroy(() => {
           Logger.e('tips', 'AVPlayer XComponent onDestroy')
+          this.avPlayer?.destroy()
         })
         .width('100%')
         .aspectRatio(this.videoAspRatio)

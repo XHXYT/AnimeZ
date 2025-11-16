@@ -227,4 +227,9 @@ export class AVPlayerWrapper {
 
   }
 
+  destroy() {
+    this.avPlayer.stop()
+    this.avPlayer.release()
+  }
+
 }
