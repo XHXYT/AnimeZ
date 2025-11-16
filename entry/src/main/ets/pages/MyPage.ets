@@ -8,6 +8,7 @@ import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
 
 
 const TAG: string = 'MyPage'
@@ -282,6 +283,7 @@ export struct MyPage {
       }
       console.log('VideoTest 我的页面历史栏传递的params：', JSON.stringify(params))
       this.pageStack.pushPathByName("VideoDetailPage", params)
+      appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }
 

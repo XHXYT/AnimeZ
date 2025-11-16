@@ -9,6 +9,7 @@ import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
 
 // 系统路由
 @Builder
@@ -203,6 +204,7 @@ struct VideoCollectionPage {
           }
           console.log('VideoTest 视频收藏页传递的params：', JSON.stringify(params))
           this.pageStack.pushPathByName("VideoDetailPage", params)
+          appContinueModel.jumpVideoDetail("VideoDetailPage", params)
         })
         .swipeAction({
           end: {

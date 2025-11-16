@@ -10,6 +10,7 @@ import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
+import { appContinueModel } from '../viewmodel/AppContinueModel';
 
 // 系统路由
 @Builder
@@ -211,6 +212,7 @@ struct VideoHistoryPage {
           }
           console.log('VideoTest 历史记录页传递的params：', JSON.stringify(params))
           this.pageStack.pushPathByName("VideoDetailPage", params)
+          appContinueModel.jumpVideoDetail("VideoDetailPage", params)
         })
         .swipeAction({
           end: {

@@ -3,6 +3,7 @@ import { BaseDataSource } from "../../viewmodel/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
 import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";
+import { appContinueModel } from "../../viewmodel/AppContinueModel";
 
 // 主页轮播图
 @Component
@@ -76,6 +77,7 @@ export struct BannerView {
       }
       console.log('VideoTest 主页轮播图传递的params：', JSON.stringify(params))
       this.pageStack.pushPathByName("VideoDetailPage", params)
+      appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }
 
