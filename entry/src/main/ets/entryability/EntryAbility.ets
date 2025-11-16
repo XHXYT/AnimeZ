@@ -26,7 +26,7 @@ export default class EntryAbility extends UIAbility {
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
         // 关闭应用接续 -> 在特定的页面才打开
         this.context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
-            console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+            console.log(`EntryAbility - ContinueState.INACTIVE: : ${JSON.stringify(result)}`)
         })
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
         // 初始化 源管理器、数据库 上下文

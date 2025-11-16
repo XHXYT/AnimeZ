@@ -26,7 +26,7 @@ export struct MultiVideoPlayer {
     // 开启应用接续 -> 在播放的页面才打开
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     context.setMissionContinueState(AbilityConstant.ContinueState.ACTIVE, (result) => {
-      console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+      console.log(`ContinueState.ACTIVE: ${JSON.stringify(result)}`)
     })
   }
 
@@ -34,7 +34,7 @@ export struct MultiVideoPlayer {
     // 关闭应用接续
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
-      console.log(`setMissionContinueState: ${JSON.stringify(result)}`)
+      console.log(`ContinueState.INACTIVE: ${JSON.stringify(result)}`)
     })
   }
 
