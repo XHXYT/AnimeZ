@@ -226,30 +226,10 @@ export struct VideoPlayerController {
           this.lastGestureY = event.fingerList[0]?.localY ?? 0;
         })
         .onActionUpdate((event: GestureEvent) => {
-          // 左侧 -> 音量调节
+          this.isVolumeAndBrightnessVisible = true;
+
+          // 左侧 -> 亮度调节
           if (this.isLeftSideGesture) {
-            this.isVolumeAndBrightnessVisible = true;
-
-            // 获取当前手指的Y坐标
-            const currentY = event.fingerList[0]?.localY ?? 0;
-            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
-            const deltaY = currentY - this.lastGestureY;
-
-            // 根据滑动距离调节音量，每滑动30px改变1级音量
-            // 向上滑动增加音量，向下滑动降低音量
-            const volumeChange = -deltaY / 30;
-            let curVolume = this.volume + volumeChange;
-
-            // 限制音量范围在 0-15 之间
-            curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
-            curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
-            this.volume = curVolume;
-
-            // 更新上一次的Y坐标
-            this.lastGestureY = currentY;
-          } else {
-            this.isVolumeAndBrightnessVisible = true;
-
             // 获取当前手指的Y坐标
             const currentY = event.fingerList[0]?.localY ?? 0;
             // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
@@ -270,6 +250,26 @@ export struct VideoPlayerController {
             // 更新上一次的Y坐标
             this.lastGestureY = currentY;
           }
+          // 右侧 -> 音量调节
+          else {
+            // 获取当前手指的Y坐标
+            const currentY = event.fingerList[0]?.localY ?? 0;
+            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
+            const deltaY = currentY - this.lastGestureY;
+
+            // 根据滑动距离调节音量，每滑动30px改变1级音量
+            // 向上滑动增加音量，向下滑动降低音量
+            const volumeChange = -deltaY / 30;
+            let curVolume = this.volume + volumeChange;
+
+            // 限制音量范围在 0-15 之间
+            curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
+            curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
+            this.volume = curVolume;
+
+            // 更新上一次的Y坐标
+            this.lastGestureY = currentY;
+          }
         })
         .onActionEnd(() => {
           this.setHidePanelTimer();
@@ -281,7 +281,7 @@ export struct VideoPlayerController {
   VolumeAndBrightnessBuilder() {
     if (this.isVolumeAndBrightnessVisible) {
       VolumeAndBrightnessProgress({
-        isVolume: this.isLeftSideGesture,
+        isVolume: !this.isLeftSideGesture,
         volumeProgress: (this.volume / 15) * 100, // 将音量 0-15 转换为 0-100
         brightnessProgress: this.screenBrightness * 100 // 将亮度 0-1 转换为 0-100
       })
