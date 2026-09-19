@@ -3,21 +3,21 @@ import { BaseDataSource } from "../../viewmodel/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
 import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";
+import { AnimeState } from "../../entryability/AnimeState";
 
 // 主页轮播图
-@Component
+@ComponentV2
 export struct BannerView {
 
-  @Link bannerList: VideoInfo[]
-  @Consume('pageStack') pageStack: NavPathStack
+  @Param @Require bannerList: VideoInfo[]
   private bannerDataSource: BannerDataSource = new BannerDataSource([])
-  // 宽度断点
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
-  // 高度断点
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   aboutToAppear(): void {
+    this.bannerDataSource.pushData(this.bannerList)
+  }
+
+  @Monitor('bannerList')
+  onBannerListChange(): void {
     this.bannerDataSource.pushData(this.bannerList)
   }
 
@@ -32,9 +32,9 @@ export struct BannerView {
     .autoPlay(true)
     .interval(6000)
     .indicator(false)
-    .prevMargin(HomeBannerBannerMargin(this.widthBp))
-    .nextMargin(HomeBannerBannerMargin(this.widthBp))
-    .displayCount(HomeBannerDisplayCount(this.widthBp))
+    .prevMargin(HomeBannerBannerMargin(AnimeState.widthBp))
+    .nextMargin(HomeBannerBannerMargin(AnimeState.widthBp))
+    .displayCount(HomeBannerDisplayCount(AnimeState.widthBp))
   }
 
   // 轮播图项
@@ -47,13 +47,13 @@ export struct BannerView {
         .aspectRatio(1.75)
         .objectFit(ImageFit.Cover)
         .alt($r('app.media.pic_load_failed')) // 占位图
-        .shadow({ radius: 16, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+        .shadow({ radius: 16, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
       // 遮罩
       Row()
         .width('100%')
         .borderRadius(16)
         .aspectRatio(1.75)
-        .backgroundColor(this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
+        .backgroundColor(AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
       // 标题
       Text(item.title)
         .fontColor(Color.White)
@@ -75,7 +75,7 @@ export struct BannerView {
         cover: item.imgUrl as string
       }
       console.log('VideoTest 主页轮播图传递的params：', JSON.stringify(params))
-      this.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
     })
   }
 

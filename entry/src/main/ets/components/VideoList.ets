@@ -1,33 +1,35 @@
 
 import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { BaseDataSource } from '../viewmodel/BaseDataSource';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { VideoListColumnsTemplate, VideoListColumnsTemplate2 } from '../utils/breakpoint/BreakPoint';
 import { CategoryDataSource } from '../entity/CategoryData';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
+import { AnimeState } from '../entryability/AnimeState';
 
 /**
  * 视频列表
  */
-@Component
+@ComponentV2
 export struct VideoList {
 
-  @State scrollable: boolean = true
+  @Param scrollable: boolean = true
   // 列表是否占满窗口
-  @State isFullList: boolean = true
-  @State videoList?: VideoInfo[] = undefined
-  @Consume('pageStack') pageStack: NavPathStack
-  // 宽度断点
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
-  // 高度断点
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
-  @State videoListDataSource: CategoryDataSource = new CategoryDataSource([])
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @Param isFullList: boolean = true
+  @Param videoList: VideoInfo[] | undefined = undefined
+  @Param videoListDataSource: CategoryDataSource = new CategoryDataSource([])
 
   aboutToAppear(): void {
-    if (this.videoList)
-    this.videoListDataSource.pushData(this.videoList)
+    if (this.videoList) {
+      this.videoListDataSource.pushData(this.videoList)
+    }
+  }
+
+  @Monitor('videoList')
+  onVideoListChange(): void {
+    if (this.videoList) {
+      this.videoListDataSource.pushData(this.videoList)
+    }
   }
 
   build() {
@@ -40,7 +42,7 @@ export struct VideoList {
         }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
       }
       .hitTestBehavior(this.scrollable ? HitTestMode.Default : HitTestMode.None)
-      .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(this.widthBp) : VideoListColumnsTemplate2(this.widthBp))
+      .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(AnimeState.widthBp) : VideoListColumnsTemplate2(AnimeState.widthBp))
       .width('100%')
       .columnsGap(8)
       .rowsGap(8)
@@ -98,7 +100,7 @@ export struct VideoList {
     .borderRadius(12)
     .backgroundColor($r('app.color.background_color'))
     .alignContent(Alignment.BottomEnd)
-    .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
+    .shadow({ radius: 12, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
     .onClick(() => {
       // 默认为新增
       const params: VideoNavigateInfo = {
@@ -109,7 +111,7 @@ export struct VideoList {
         cover: item.imgUrl as string
       }
       console.log('VideoTest 视频列表传递的params：', JSON.stringify(params))
-      this.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
       appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }

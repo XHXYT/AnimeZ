@@ -1,4 +1,4 @@
-import { common } from '@kit.AbilityKit';
+import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 
 /**
@@ -37,6 +37,9 @@ export class _AnimeState {
   @Trace darkModeImage: boolean = false
   /** 手机横屏状态 */
   @Trace isPhoneLandscape: boolean = false
+
+  /** 当前生效颜色模式（EntryAbility 启动链与 onConfigurationUpdate 写入，替代幽灵 key currentColorMode） */
+  @Trace currentColorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
 
   /** WebView JS 解析通道：是否显示隐藏 WebView */
   @Trace showWebView: boolean = false

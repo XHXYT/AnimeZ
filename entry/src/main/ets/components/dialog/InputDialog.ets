@@ -1,25 +1,29 @@
 import { ButtonBuilder } from "../common/Button";
 
-@Component
+@ComponentV2
 export struct InputCustomDialog {
 
-  @Prop title: string = ''
-  @Prop textValue: string = ''
-  @Prop placeholder: string = ''
+  @Param title: string = ''
+  @Param placeholder: string = ''
+  @Param textValue: string = ''
+  @Local inputValue: string = ''
+  @Event close: () => void = () => {}
+  @Event onValueChange: (value: string) => void = () => {}
 
-  close: () => void = () => {}
-  onValueChange: (value: string) => void = () => {}
+  aboutToAppear(): void {
+    this.inputValue = this.textValue
+  }
 
   build() {
     Column({space: 13}) {
       Text(this.title).fontSize(20).margin({ top: 10, bottom: 10 })
-      TextArea({ placeholder: this.placeholder, text: this.textValue })
+      TextArea({ placeholder: this.placeholder, text: this.inputValue })
         .width('90%')
         .id('textInput')
         .constraintSize({ minHeight: 36 })
         .backgroundColor($r('app.color.background_color'))
         .onChange((value: string) => {
-          this.textValue = value
+          this.inputValue = value
         })
         .constraintSize({ maxHeight: 292})
       Row({space: 12}) {
@@ -41,7 +45,7 @@ export struct InputCustomDialog {
             fontColor: $r('app.color.primary_color'),
             type: ButtonType.Capsule,
             action: () => {
-              this.onValueChange(this.textValue)
+              this.onValueChange(this.inputValue)
               this.close()
             }
           }
@@ -58,7 +62,6 @@ export struct InputCustomDialog {
     .justifyContent(FlexAlign.SpaceBetween)
     .backgroundColor($r('app.color.start_window_background'))
     .onAppear(() => {
-      // 设置指定组件id获得焦点
       try {
         this.getUIContext().getFocusController().requestFocus('textInput')
       } catch (error) {

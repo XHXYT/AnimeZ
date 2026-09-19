@@ -1,16 +1,14 @@
-import DataStore from '../../utils/DataStore';
-
-@CustomDialog
+@ComponentV2
 export struct RadioDialog {
-  @State checkIndex: number = 0
-  private controller: CustomDialogController
-  private title: ResourceStr = ''
-  private prefKey: string = ''
-  private values: string[] = []
-  private onSelect: (index: number) => void = (index: number) => {}
+  @Param title: ResourceStr = ''
+  @Param values: string[] = []
+  @Param initialIndex: number = 0
+  @Local checkIndex: number = 0
+  @Event onSelect: (index: number) => void = () => {}
+  @Event onClose: () => void = () => {}
 
-  aboutToAppear() {
-    this.checkIndex = DataStore.getInt(this.prefKey, 0)
+  aboutToAppear(): void {
+    this.checkIndex = this.initialIndex
   }
 
   build() {
@@ -23,7 +21,6 @@ export struct RadioDialog {
         .alignSelf(ItemAlign.Start)
 
       Column() {
-
         ForEach(this.values, (item: string, i) => {
           Row() {
             Radio({ value: item, group: 'radioGroup' })
@@ -31,7 +28,6 @@ export struct RadioDialog {
               .height(20)
               .width(20)
               .onChange((isChecked: boolean) => {
-                console.log('Radio1 status is ' + isChecked)
                 if (isChecked) {
                   this.checkIndex = i
                 }
@@ -56,7 +52,7 @@ export struct RadioDialog {
           .fontSize(14)
           .fontColor($r('app.color.color_text_normal'))
           .onClick(() => {
-            this.controller.close();
+            this.onClose()
           })
         Row()
           .size({ width: 1.5, height: 14 })
@@ -68,10 +64,8 @@ export struct RadioDialog {
           .height("100%")
           .layoutWeight(1)
           .onClick(() => {
-            if (this.onSelect) {
-              this.onSelect(this.checkIndex)
-            }
-            this.controller.close();
+            this.onSelect(this.checkIndex)
+            this.onClose()
           })
       }
       .height(46)

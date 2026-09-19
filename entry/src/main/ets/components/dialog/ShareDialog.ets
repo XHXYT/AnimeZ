@@ -1,8 +1,6 @@
-import VideoDetailInfo from '../../entity/VideoDetailInfo';
-import DataStore from '../../utils/DataStore';
-import promptAction from '@ohos.promptAction';
+import { ToastUtil } from '../../utils/ToastUtils';
 
-interface  ShareItem {
+interface ShareItem {
   name: string,
   icons: Resource,
   onClick: () => void
@@ -11,53 +9,46 @@ interface  ShareItem {
 /**
  * 自定义分享弹窗
  */
-@CustomDialog
+@ComponentV2
 export struct ShareDialog {
-  private controller: CustomDialogController
-
-  /**
-   * 视频详情信息
-   */
-  // @State detailInfo: VideoDetailInfo = {}
 
   /**
    * 关闭弹窗回调
    */
-  @State onClose: () => void = () => {}
+  @Event onClose: () => void = () => {}
 
   /**
    * 分享选项
    */
-  @State
   private readonly shareItems: ShareItem[] = [
     { name: 'QQ', icons: $r('app.media.ic_share_qq'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享到QQ'})
+        ToastUtil.showToast({ message: 'TODO 分享到QQ'})
       }
     },
     { name: 'QQ空间', icons: $r('app.media.ic_share_qqzone'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享到QQ空间'})
+        ToastUtil.showToast({ message: 'TODO 分享到QQ空间'})
       }
     },
     { name: '新浪', icons: $r('app.media.ic_share_sina'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享到新浪微博'})
+        ToastUtil.showToast({ message: 'TODO 分享到新浪微博'})
       }
     },
     { name: '微信', icons: $r('app.media.ic_share_wechat'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享到微信'})
+        ToastUtil.showToast({ message: 'TODO 分享到微信'})
       }
     },
     { name: '朋友圈', icons: $r('app.media.ic_share_friends'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享到朋友圈'})
+        ToastUtil.showToast({ message: 'TODO 分享到朋友圈'})
       }
     },
     { name: '链接分享', icons: $r('app.media.ic_share_link'),
       onClick: () => {
-        promptAction.showToast({message: 'TODO 分享链接'})
+        ToastUtil.showToast({ message: 'TODO 分享链接'})
       }
     }
   ]
@@ -76,25 +67,6 @@ export struct ShareDialog {
           .onClick(this.onClose)
       }
       .width('100%')
-
-/*      if (this.detailInfo) {
-        Column() {
-          Text(this.detailInfo.title)
-            .fontSize(14)
-            .fontWeight(600)
-            .fontColor($r('app.color.color_text_major'))
-            .alignSelf(ItemAlign.Start)
-          Text(this.detailInfo.url)
-            .fontSize(12)
-            .fontColor($r('app.color.primary_color'))
-            .alignSelf(ItemAlign.Start)
-            .margin({top: 6})
-        }
-        .padding(16)
-        .borderRadius(16)
-        .width('100%')
-        .backgroundColor($r('app.color.background_color_accent'))
-      }*/
 
       Flex({
         alignItems: ItemAlign.Start,

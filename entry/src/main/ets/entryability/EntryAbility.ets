@@ -1,7 +1,7 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import hilog from '@ohos.hilog';
 import window from '@ohos.window';
-import { AbilityConstant, bundleManager, Configuration, Want, wantConstant } from '@kit.AbilityKit';
+import { AbilityConstant, bundleManager, Configuration, ConfigurationConstant, Want, wantConstant } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { appSettings, AppSettings } from './Settings';
@@ -110,6 +110,8 @@ export default class EntryAbility extends UIAbility {
     }
 
     onConfigurationUpdate(newConfig: Configuration): void {
+        // 系统深浅色等配置变化时同步全局状态（替代 V1 幽灵 key currentColorMode）
+        AnimeState.currentColorMode = newConfig.colorMode ?? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
     }
 
     onWindowStageCreate(windowStage: window.WindowStage) {
@@ -143,6 +145,8 @@ export default class EntryAbility extends UIAbility {
             }
             // 4. 初始化颜色模式（首帧前生效）
             ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
+            AnimeState.currentColorMode =
+                this.context.config.colorMode ?? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
             // 5. 加载首页
             await windowStage.loadContent('pages/Index')
             hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');

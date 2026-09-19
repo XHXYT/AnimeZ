@@ -4,18 +4,14 @@ import { DEFAULT_DURATION } from "../utils/TransitionHelper";
 /**
  * 通用面板
  */
-@Component
+@ComponentV2
 export default struct CustomPanel {
-  @StorageLink('currentColorMode') currentMode: number = 1
-//  @Watch("onShowPanelChanged") @State showPanel: boolean = false
-  // TODO 改为panel state
-  @State showPanelInner: boolean = false
-  @State translateY: number = 0
-  @State panelOpacity: number = 0
-  @State panelHeight: number = 0
+  @Local showPanelInner: boolean = false
+  @Local translateY: number = 0
+  @Local panelOpacity: number = 0
+  @Local panelHeight: number = 0
   @BuilderParam panelContent: () => void
-  @Link controller: PanelController
-  private onClose: () => void = () => {}
+  @Require @Param controller: PanelController
 
   aboutToAppear() {
     if (this.controller) {
@@ -36,7 +32,6 @@ export default struct CustomPanel {
           .height('100%')
           .opacity(this.panelOpacity)
           .onClick(() => {
-//            this.showPanel = false
             if (this.controller !== undefined) {
               this.controller.close()
             }
@@ -48,9 +43,6 @@ export default struct CustomPanel {
         .width('100%')
         .height('100%')
         .onClick(() => {})
-//        .onClick(() => {
-////          this.showPanel = false
-//        })
       }
     }
     .width('100%')
@@ -74,7 +66,6 @@ export default struct CustomPanel {
   onShowPanelChanged(show: boolean) {
     if (show) {
       if (!this.showPanelInner) {
-        //        this.ty = this.panelHeight
         this.showPanelInner = true
 
         setTimeout(() => {

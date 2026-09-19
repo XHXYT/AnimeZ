@@ -5,6 +5,15 @@ import { InputCustomDialog } from "../components/dialog/InputDialog";
 import { PromptActionClass } from "../entity/PromptActionClass";
 import { scanBarcode, scanCore } from "@kit.ScanKit";
 
+export interface ConfirmOptions {
+  title?: ResourceStr
+  message: ResourceStr
+  confirmText?: string
+  cancelText?: string
+  onConfirm?: () => void
+  onCancel?: () => void
+}
+
 class ToastUtils {
 
   UIContext: UIContext | undefined
@@ -67,6 +76,31 @@ class ToastUtils {
       let code = (error as BusinessError).code
       console.error(`${key} showDialog error code is ${code}, message is ${message}`)
     }
+  }
+
+  showConfirm(options: ConfirmOptions, key?: string) {
+    if (!this.UIContext) {
+      console.error(`#showConfirm ${key}: UIContext未初始化`)
+      return
+    }
+    this.showDialog({
+      title: options.title,
+      message: options.message,
+      buttons: [
+        { text: options.cancelText ?? '取消', color: $r('app.color.color_text_normal') },
+        { text: options.confirmText ?? '确定', color: $r('app.color.primary_color') }
+      ]
+    }, (error: BusinessError, result: promptAction.ShowDialogSuccessResponse) => {
+      if (error) {
+        options.onCancel?.()
+        return
+      }
+      if (result.index === 1) {
+        options.onConfirm?.()
+      } else {
+        options.onCancel?.()
+      }
+    }, key)
   }
 
   showInputDialog(title: string, placeholder: string, onValueChange: (value: string) => void, textValue?: string, key?: string) {
@@ -135,7 +169,7 @@ function buildInput(params: Params) {
   InputCustomDialog({
     title: params.title,
     placeholder: params.placeholder,
-    textValue: params.textValue,
+    textValue: params.textValue ?? '',
     close: () => {
       PromptActionClass.closeDialog()
     },

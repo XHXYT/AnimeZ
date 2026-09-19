@@ -2,15 +2,15 @@
 import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
 import { Header } from './common/Header';
 import { SettingRow } from './SettingsItem';
+import { AnimeState } from '../entryability/AnimeState';
 
 @Preview
-@Component
+@ComponentV2
 export struct More {
-  @Consume('pageStack') pageStack: NavPathStack
   /**
    * 更多列表数据
    */
-  @Provide moreItemData: SettingGroup<boolean | string | number>[] = [
+  @Local moreItemData: SettingGroup<boolean | string | number>[] = [
     {
       title: '更多',
       key: 'more',
@@ -20,7 +20,7 @@ export struct More {
           settings_key: 'settings',
           icon: $r('app.media.gearshape'),
           onClick: (item, callback) => {
-            this.pageStack.pushPathByName("SettingsPage", '')
+            AnimeState.pageStack.pushPathByName("SettingsPage", '')
             callback?.()
           }
         },
@@ -29,7 +29,7 @@ export struct More {
           settings_key: 'disclaimer',
           icon: $r('app.media.ic_gitee'),
           onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "disclaimer.html")
+            AnimeState.pageStack.pushPathByName("WebPage", "disclaimer.html")
             callback?.()
           }
         },
@@ -39,7 +39,7 @@ export struct More {
           info: 'https://github.com/Z-P-J/AnimeZ',
           icon: $r('app.media.ic_github'),
           onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J/AnimeZ")
+            AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J/AnimeZ")
             callback?.()
           }
         },
@@ -49,7 +49,7 @@ export struct More {
           info: 'https://github.com/XHXYT/AnimeZ',
           icon: $r('app.media.ic_github'),
           onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/AnimeZ")
+            AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/AnimeZ")
             callback?.()
           }
         }
@@ -102,4 +102,3 @@ export struct More {
 
   }
 }
-

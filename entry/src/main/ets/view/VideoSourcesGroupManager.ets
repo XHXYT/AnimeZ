@@ -1,6 +1,7 @@
 import TitleBar from '../components/TitleBar'
 import { VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
 import { CustomContentDialog } from '@kit.ArkUI'
+import { BusinessError } from '@kit.BasicServicesKit'
 
 @Component
 export struct GroupManager {
@@ -10,41 +11,7 @@ export struct GroupManager {
   @State isNewGroup: boolean = false
   @State editingGroupName: string = ''
   @State customGroups: string[] = []
-
-  private  dialogController: CustomDialogController = new CustomDialogController({
-    builder: CustomContentDialog({
-      primaryTitle: '添加新分组',
-      contentBuilder: () => {
-        this.InputBuilder()
-      },
-      buttons: [
-        {
-          value: '取消',
-          buttonStyle: ButtonStyleMode.TEXTUAL,
-          action: () => {
-            this.isNewGroup = false
-            this.groupName = ''
-          }
-        },
-        {
-          value: '确定',
-          buttonStyle: ButtonStyleMode.TEXTUAL,
-          action: () => {
-            if (this.isNewGroup) {
-              this.viewModel.addCustomGroup(this.groupName)
-              // 本地Push一下
-              this.pushGroup(this.groupName)
-            } else {
-              this.viewModel.editCustomGroup(this.editingGroupName, this.groupName)
-            }
-            this.isNewGroup = false
-            this.editingGroupName = ''
-            this.groupName = ''
-          }
-        }
-      ],
-    }),
-  });
+  private dialogId: number = -1
 
   aboutToAppear(): void {
     this.customGroups = this.viewModel.customGroups
@@ -79,7 +46,8 @@ export struct GroupManager {
               .onClick(() => {
                 this.groupName = group
                 this.editingGroupName = group
-                this.dialogController.open()
+                this.isNewGroup = false
+                this.openGroupDialog()
               })
             }
             .height(52)
@@ -100,6 +68,69 @@ export struct GroupManager {
     .height('100%')
   }
 
+  private openGroupDialog(): void {
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: () => {
+        this.GroupDialogBuilder()
+      },
+      alignment: DialogAlignment.Center
+    }).then((dialogId: number) => {
+      this.dialogId = dialogId
+    }).catch((error: BusinessError) => {
+      console.error(`openGroupDialog failed, code: ${error.code}, message: ${error.message}`)
+    })
+  }
+
+  private closeGroupDialog(): void {
+    if (this.dialogId === -1) {
+      return
+    }
+    try {
+      this.getUIContext().getPromptAction().closeCustomDialog(this.dialogId)
+    } catch (error) {
+      console.error(`closeGroupDialog failed, message: ${(error as BusinessError).message}`)
+    }
+    this.dialogId = -1
+  }
+
+  @Builder
+  GroupDialogBuilder() {
+    CustomContentDialog({
+      primaryTitle: this.isNewGroup ? '添加新分组' : '编辑分组',
+      contentBuilder: () => {
+        this.InputBuilder()
+      },
+      buttons: [
+        {
+          value: '取消',
+          buttonStyle: ButtonStyleMode.TEXTUAL,
+          action: () => {
+            this.isNewGroup = false
+            this.groupName = ''
+            this.closeGroupDialog()
+          }
+        },
+        {
+          value: '确定',
+          buttonStyle: ButtonStyleMode.TEXTUAL,
+          action: () => {
+            if (this.isNewGroup) {
+              this.viewModel.addCustomGroup(this.groupName)
+              // 本地Push一下
+              this.pushGroup(this.groupName)
+            } else {
+              this.viewModel.editCustomGroup(this.editingGroupName, this.groupName)
+            }
+            this.isNewGroup = false
+            this.editingGroupName = ''
+            this.groupName = ''
+            this.closeGroupDialog()
+          }
+        }
+      ],
+    })
+  }
+
   @Builder
   AddButton() {
     Button({ type: ButtonType.Circle }) {
@@ -112,7 +143,7 @@ export struct GroupManager {
     .onClick(() => {
       this.isNewGroup = true
       this.groupName = ''
-      this.dialogController.open()
+      this.openGroupDialog()
     })
   }
 

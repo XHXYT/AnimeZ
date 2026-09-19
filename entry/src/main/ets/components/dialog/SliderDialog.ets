@@ -1,18 +1,13 @@
-import DataStore from '../../utils/DataStore';
+import { appSettings } from '../../entryability/Settings';
 
-const KEY = 'key_max_downloading_count'
-
-@CustomDialog
+@ComponentV2
 export struct SliderDialog {
-  @StorageLink('currentColorMode') currentMode: number = 1
-  @State value: number = 1
-  private controller: CustomDialogController
+  @Local value: number = 3
+  @Event select: (value: number) => void = () => {}
+  @Event onClose: () => void = () => {}
 
-  select: (value: number) => void = (value: number) => {}
-  onClose: () => void = () => {}
-
-  aboutToAppear() {
-    this.value = DataStore.getInt(KEY, 3)
+  aboutToAppear(): void {
+    this.value = appSettings.max_downloading_count
   }
 
   build() {
@@ -51,7 +46,6 @@ export struct SliderDialog {
           .fontSize(14)
           .fontColor($r('app.color.color_text_normal'))
           .onClick(() => {
-//            this.controller.close(); // 关闭弹窗
             this.onClose()
           })
         Row()
@@ -64,12 +58,9 @@ export struct SliderDialog {
           .height("100%")
           .layoutWeight(1)
           .onClick(() => {
-            DataStore.set(KEY, this.value)
-            if (this.select) {
-              this.select(this.value)
-            }
+            appSettings.max_downloading_count = this.value
+            this.select(this.value)
             this.onClose()
-//            this.controller.close(); // 关闭弹窗
           })
       }
       .height(46)

@@ -1,5 +1,5 @@
 /**
- * @projectName:    AnimeZ 
+ * @projectName:    AnimeZ
  * @fileName:      VolumeAndBrightnessProgress
  * @author:     SummerKaze
  * @description:  音量和亮度进度条组件
@@ -7,20 +7,20 @@
  * @version:    1.0
  */
 
-@Component
+@ComponentV2
 export struct  VolumeAndBrightnessProgress {
   /** @description 是否是音量状态 */
-  @Prop isVolume: boolean = true
+  @Param isVolume: boolean = true
 
   /** @description 音量 */
-  @Prop volumeIcon: ResourceStr = $r('app.media.ic_volume')
-  @Prop volumeMuteIcon: ResourceStr = $r('app.media.ic_volume_mute')
-  @Prop volumeProgress: number = 0
+  @Param volumeIcon: ResourceStr = $r('app.media.ic_volume')
+  @Param volumeMuteIcon: ResourceStr = $r('app.media.ic_volume_mute')
+  @Param volumeProgress: number = 0
 
   /** @description 亮度 */
-  @Prop brightnessIcon: ResourceStr = $r('app.media.ic_lightbulb')
-  @Prop brightnessLowIcon: ResourceStr = $r('app.media.ic_lightbulb_low')
-  @Prop brightnessProgress: number = 0
+  @Param brightnessIcon: ResourceStr = $r('app.media.ic_lightbulb')
+  @Param brightnessLowIcon: ResourceStr = $r('app.media.ic_lightbulb_low')
+  @Param brightnessProgress: number = 0
 
   // TODO 设置主题色
 
@@ -35,10 +35,10 @@ export struct  VolumeAndBrightnessProgress {
         .aspectRatio(1)
         .fillColor(Color.White)
 
-      Progress({ 
-        value: this.isVolume ? this.volumeProgress : this.brightnessProgress, 
+      Progress({
+        value: this.isVolume ? this.volumeProgress : this.brightnessProgress,
         total: 100,
-        type: ProgressType.Linear 
+        type: ProgressType.Linear
       })
         .width('100%')
         .color($r('app.color.primary_color'))

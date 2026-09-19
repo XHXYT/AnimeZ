@@ -1,12 +1,11 @@
-import { LengthMetrics } from "@kit.ArkUI"
+import { AnimeState } from '../entryability/AnimeState'
 
-@Component
+@ComponentV2
 export default struct TitleBar {
-  @State title: ResourceStr = ''
-  @State subtitle: ResourceStr = ''
-  @State showBack: boolean = true
-  @Consume('pageStack') pageStack: NavPathStack
-  @BuilderParam button: () => void
+  @Param title: ResourceStr = ''
+  @Param subtitle: ResourceStr = ''
+  @Param showBack: boolean = true
+  @BuilderParam button?: () => void
 
   build() {
     Flex({
@@ -20,7 +19,7 @@ export default struct TitleBar {
             .fontSize(27)
             .fontColor([$r('app.color.color_text_major')])
             .onClick(() => {
-              this.pageStack.pop(true)
+              AnimeState.pageStack.pop(true)
             })
         }
         Column() {

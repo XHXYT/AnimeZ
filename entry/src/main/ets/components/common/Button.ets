@@ -3,11 +3,21 @@ import { SymbolGlyphModifier } from "@kit.ArkUI";
 /**
  * 功能按钮
  */
-@Component
+@ComponentV2
 export struct ButtonBuilder {
 
-  @Prop config: ButtonConfig
-  @Prop menuSelected: string | number
+  @Require @Param config: ButtonConfig
+  @Param menuSelected: string | number = ''
+  @Local selectedInner: string | number = ''
+
+  aboutToAppear(): void {
+    this.selectedInner = this.menuSelected
+  }
+
+  @Monitor('menuSelected')
+  onMenuSelectedChange(): void {
+    this.selectedInner = this.menuSelected
+  }
 
   build() {
     Button({ type: this.config.type || ButtonType.Circle }) {
@@ -32,10 +42,10 @@ export struct ButtonBuilder {
             content: item.name,
             startIcon: item.startIconSrc ? item.startIconSrc : undefined, // MenuItem 的 icon 属性
             symbolStartIcon: item.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolStart)) : undefined,
-            symbolEndIcon: (this.menuSelected == item.value && config.needCheckmark) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+            symbolEndIcon: (this.selectedInner == item.value && config.needCheckmark) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
           }).onClick(() => {
             if (item.value != config.prohibitValue) {
-              this.menuSelected = item.value
+              this.selectedInner = item.value
             }
             item.action?.()
           })

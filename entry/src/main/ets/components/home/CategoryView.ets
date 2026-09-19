@@ -4,16 +4,21 @@ import { DramaList } from "../../entity/HomepageData"
 import { VideoCategoryNavigateInfo } from "../../entity/VideoNavigateInfo"
 import { Header } from "../common/Header"
 import { VideoList } from "../VideoList"
+import { AnimeState } from "../../entryability/AnimeState"
 
 // 主页视频目录
-@Component
+@ComponentV2
 export struct CategoryView {
 
-  @Link categoryList: DramaList[]
-  @Consume('pageStack') pageStack: NavPathStack
+  @Param @Require categoryList: DramaList[]
   private categoryListDataSource: CategoryListDataSource = new CategoryListDataSource([])
 
   aboutToAppear(): void {
+    this.categoryListDataSource.pushData(this.categoryList)
+  }
+
+  @Monitor('categoryList')
+  onCategoryListChange(): void {
     this.categoryListDataSource.pushData(this.categoryList)
   }
 
@@ -42,9 +47,8 @@ export struct CategoryView {
         title: title,
         url: moreUrl
       }
-      this.pageStack.pushPathByName('CategoryPage', params)
+      AnimeState.pageStack.pushPathByName('CategoryPage', params)
     }, true)
   }
 
 }
-
