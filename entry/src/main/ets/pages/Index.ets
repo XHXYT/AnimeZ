@@ -2,7 +2,8 @@ import { MyPage } from './MyPage';
 import { HomePage } from './Homepage';
 import mediaQuery from '@ohos.mediaquery'
 import { common } from '@kit.AbilityKit';
-import { AppConfigs } from '../entryability/Settings';
+import { appSettings } from '../entryability/Settings';
+import { AnimeState } from '../entryability/AnimeState';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
@@ -35,9 +36,7 @@ struct Index {
   @StorageLink('ShowIndexForegroundBlur') showIndexForegroundBlur: boolean = false
 
   private controller: TabsController = new TabsController()
-  @Provide('pageStack') pageStack: NavPathStack = new NavPathStack()
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
+  @Provide('pageStack') pageStack: NavPathStack = AnimeState.pageStack
 
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
   /** 系统为深色模式时为true，否则为false */
@@ -47,16 +46,18 @@ struct Index {
 
   async aboutToAppear() {
     // 初始化颜色模式
-    console.log(`当前颜色模式：${this.appSettings.color_mode}`)
-    ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
+    console.log(`当前颜色模式：${appSettings.color_mode}`)
+    ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
     // 启用颜色模式监听
     this.DarkModeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
       this.DarkModeImage  = mediaQueryResult.matches as boolean
+      AnimeState.darkModeImage = this.DarkModeImage
     })
     // 当开启自动旋屏和设备类型为手机时启用手机横屏监听
-    if (this.appSettings.auto_sensor_rotate && deviceInfo.deviceType === 'phone') {
+    if (appSettings.auto_sensor_rotate && deviceInfo.deviceType === 'phone') {
       this.PhoneLandscapeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
         this.isPhoneLandscape = mediaQueryResult.matches
+        AnimeState.isPhoneLandscape = this.isPhoneLandscape
         console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)
       })
     }
@@ -111,7 +112,7 @@ struct Index {
     }.hideToolBar(true)
     .mode(NavigationMode.Stack)
     .width('100%').height('100%')
-    .foregroundBlurStyle(this.showIndexForegroundBlur && this.appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,
+    .foregroundBlurStyle(this.showIndexForegroundBlur && appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,
       { colorMode: ThemeColorMode.SYSTEM, adaptiveColor: AdaptiveColor.DEFAULT, scale: 0.3 })
   }
 

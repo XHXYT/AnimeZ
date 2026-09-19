@@ -4,7 +4,10 @@ import window from '@ohos.window';
 import { AbilityConstant, bundleManager, Configuration, Want, wantConstant } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { dataSourceManager } from '../api/DataSourceManager';
-import { AppSettings } from './Settings';
+import { appSettings, AppSettings } from './Settings';
+import { _AnimeState, AnimeState } from './AnimeState';
+import { preferenceUtil } from '../utils/PreferenceUtil';
+import { ColorModeManager } from '../utils/ColorModeManager';
 import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
 import { permissionManage } from '../utils/PermissionManage';
@@ -16,11 +19,43 @@ import SQLite from '../db/SQLite';
 export default class EntryAbility extends UIAbility {
     private storage: LocalStorage = new LocalStorage();
     private uiContext?: UIContext;
-    // 设备断点获取
+    private mainWindow?: window.Window;
+    // 窗口尺寸变化监听（合并断点与窗口尺寸双写，持有引用供解绑）
     private onWindowSizeChange: (windowSize: window.Size) => void = (windowSize: window.Size) => {
-        let widthBp: WidthBreakpoint = this.uiContext!.getWindowWidthBreakpoint();
+        if (!this.uiContext) {
+            return;
+        }
+        const widthBp: WidthBreakpoint = this.uiContext.getWindowWidthBreakpoint();
+        const width: number = this.uiContext.px2vp(windowSize.width);
+        const height: number = this.uiContext.px2vp(windowSize.height);
+        // V2 全局状态
+        AnimeState.widthBp = widthBp;
+        AnimeState.windowWidth = width;
+        AnimeState.windowHeight = height;
+        // V1 桥接（Phase 5 移除）
         AppStorage.setOrCreate('currentWidthBreakpoint', widthBp);
-        console.log(`断点测试 widthBp: ${widthBp}`)
+        AppStorage.setOrCreate('windowWidth', width);
+        AppStorage.setOrCreate('windowHeight', height);
+        // 高度断点（双写）
+        const heightBp: HeightBreakpoint = this.getHeightBreakpoint(height, width);
+        AnimeState.heightBp = heightBp;
+        AppStorage.setOrCreate('currentHeightBreakpoint', heightBp);
+        hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}f vp 宽度：%{public}f vp', height, width);
+    };
+    // 避让区域变化监听（持有引用供解绑）
+    private onAvoidAreaChange: (data: window.AvoidAreaOptions) => void = (data: window.AvoidAreaOptions) => {
+        if (!this.uiContext) {
+            return;
+        }
+        if (data.type === window.AvoidAreaType.TYPE_SYSTEM) {
+            const topRectHeight: number = this.uiContext.px2vp(data.area.topRect.height);
+            AnimeState.topRectHeight = topRectHeight;
+            AppStorage.setOrCreate('topRectHeight', topRectHeight);
+        } else if (data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
+            const bottomRectHeight: number = this.uiContext.px2vp(data.area.bottomRect.height);
+            AnimeState.bottomRectHeight = bottomRectHeight;
+            AppStorage.setOrCreate('bottomRectHeight', bottomRectHeight);
+        }
     };
 
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
@@ -32,6 +67,7 @@ export default class EntryAbility extends UIAbility {
         // 初始化 源管理器、数据库 上下文
         await dataSourceManager.init(this.context)
         // 检查设备形式
+        _AnimeState.DeviceProductModel = deviceInfo.productModel
         AppStorage.setOrCreate<string>('DeviceProductModel', deviceInfo.productModel)
         // 构建RedPlayer
         const redPlayerConfigBuilder = new RedPlayerConfigBuilder()
@@ -83,55 +119,168 @@ export default class EntryAbility extends UIAbility {
         this.stageLoadPage(windowStage);
     }
 
-    private stageLoadPage(windowStage: window.WindowStage) {
-        windowStage.loadContent('pages/Index', async (err, data) => {
-            if (err.code) {
-                hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s',
-                    JSON.stringify(err) ?? '');
-                return;
-            }
-            // 初始化应用设置
-            await AppSettings.init();
-            hilog.info(0x0000, 'testTag', 'Succeeded in loading the content. Data: %{public}s',
-                JSON.stringify(data) ?? '');
-        });
-
-        windowStage.getMainWindow(async (err, data) => {
-            // 全屏
-            data.setWindowLayoutFullScreen(true)
-                .then(() => {
-                    console.info('已成功将窗口布局设置为全屏模式');
-                })
-                .catch((err: BusinessError) => {
-                    console.error('无法将窗口布局设置为全屏模式 Cause:' + JSON.stringify(err));
-                });
-
+    /**
+     * 启动链路：preferences → 应用设置加载 → 版本号 → 颜色模式 → 加载首页 → 窗口初始化
+     * 保证设置先于首帧就绪，避免首帧使用默认配置
+     */
+    private async stageLoadPage(windowStage: window.WindowStage): Promise<void> {
+        try {
+            // 1. 初始化 preferences
             try {
-                const UIContext = data.getUIContext();
-                this.uiContext = UIContext;
-                AppStorage.setOrCreate('UIContext', UIContext);
-                AppStorage.setOrCreate<window.Window>('WindowClass', data);
-                // 初始化通知
-                ToastUtil.initContext(UIContext);
-                // 设备宽度断点获取
-                const widthBp: WidthBreakpoint = UIContext.getWindowWidthBreakpoint();
-                AppStorage.setOrCreate('currentWidthBreakpoint', widthBp);
-                data.on('windowSizeChange', this.onWindowSizeChange);
-                // 初始化窗口
-                this.intRectWindow(windowStage);
-
-                // 初始化权限
-                permissionManage.requestPermission(this.uiContext.getHostContext() as Context);
-            } catch (error) {
-                console.error(`UI上下文获取失败，code: ${error.code} message: ${error.messsage}`);
+                await preferenceUtil.init(this.context)
+            } catch (e) {
+                const err = e as BusinessError
+                hilog.error(0x0000, 'testTag', 'preferences 初始化失败，设置将使用默认值。Cause: %{public}s',
+                    JSON.stringify(err) ?? '');
             }
+            // 2. 加载应用设置（含旧版 PersistentStorage 数据一次性迁移）
+            await appSettings.load()
+            // 3. 初始化应用版本名
+            try {
+                await AppSettings.initVersion()
+            } catch (e) {
+                hilog.error(0x0000, 'testTag', '应用版本号初始化失败。Cause: %{public}s', JSON.stringify(e) ?? '');
+            }
+            // 4. 初始化颜色模式（首帧前生效）
+            ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
+            // 5. 加载首页
+            await windowStage.loadContent('pages/Index')
+            hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
+            // 6. 主窗口初始化（UIContext、避让高度、断点、监听器注册）
+            await this.initMainWindow(windowStage)
+        } catch (e) {
+            const err = e as BusinessError
+            hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s',
+                JSON.stringify(err) ?? '');
+            // 兜底：确保首页加载，避免白屏
+            windowStage.loadContent('pages/Index')
+            try {
+                await this.initMainWindow(windowStage)
+            } catch (error) {
+                hilog.error(0x0000, 'testTag', 'Failed to init main window. Cause: %{public}s',
+                    JSON.stringify(error) ?? '');
+            }
+        }
+    }
 
-        });
+    /**
+     * 主窗口初始化：全屏、UIContext、权限、避让高度、断点、监听器注册（双写 AnimeState 与 AppStorage）
+     */
+    private async initMainWindow(windowStage: window.WindowStage): Promise<void> {
+        const mainWindow = await windowStage.getMainWindow()
+        this.mainWindow = mainWindow
+
+        // 设置窗口全屏
+        mainWindow.setWindowLayoutFullScreen(true)
+            .then(() => {
+                console.info('已成功将窗口布局设置为全屏模式');
+            })
+            .catch((err: BusinessError) => {
+                console.error('无法将窗口布局设置为全屏模式 Cause:' + JSON.stringify(err));
+            });
+
+        try {
+            const uiContext = mainWindow.getUIContext();
+            this.uiContext = uiContext;
+            // V2 全局状态
+            _AnimeState.UIContext = uiContext
+            _AnimeState.Context = this.context
+            _AnimeState.window = mainWindow
+            // V1 桥接（Phase 5 移除）
+            AppStorage.setOrCreate('UIContext', uiContext);
+            AppStorage.setOrCreate<window.Window>('WindowClass', mainWindow);
+
+            // 初始化通知
+            ToastUtil.initContext(uiContext);
+            // 初始化权限
+            permissionManage.requestPermission(uiContext.getHostContext() as Context);
+
+            // 宽度断点初始值（双写）
+            const widthBp: WidthBreakpoint = uiContext.getWindowWidthBreakpoint();
+            AnimeState.widthBp = widthBp
+            AppStorage.setOrCreate('currentWidthBreakpoint', widthBp)
+
+            // 避让高度初始值（双写）
+            this.readAvoidAreas(mainWindow)
+            // 窗口尺寸初始值（双写）
+            this.readWindowRect(mainWindow)
+
+            // 注册监听器
+            mainWindow.on('windowSizeChange', this.onWindowSizeChange)
+            mainWindow.on('avoidAreaChange', this.onAvoidAreaChange)
+        } catch (error) {
+            const err = error as BusinessError
+            console.error(`UI上下文获取失败，code: ${err.code} message: ${err.message}`);
+        }
+    }
+
+    /**
+     * 读取避让高度初始值
+     */
+    private readAvoidAreas(mainWindow: window.Window): void {
+        // 导航栏遮挡区域
+        try {
+            const avoidArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
+            const bottomRectHeight = this.uiContext?.px2vp(avoidArea.bottomRect.height) ?? 0
+            AnimeState.bottomRectHeight = bottomRectHeight
+            AppStorage.setOrCreate('bottomRectHeight', bottomRectHeight)
+        } catch (error) {
+            console.error(`导航栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
+        }
+        // 状态栏遮挡区域
+        try {
+            const topAvoidArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
+            const topRectHeight = this.uiContext?.px2vp(topAvoidArea.topRect.height) ?? 0
+            AnimeState.topRectHeight = topRectHeight
+            AppStorage.setOrCreate('topRectHeight', topRectHeight)
+        } catch (error) {
+            console.error(`状态栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
+        }
+    }
+
+    /**
+     * 读取窗口尺寸初始值并计算高度断点
+     */
+    private readWindowRect(mainWindow: window.Window): void {
+        try {
+            const properties = mainWindow.getWindowProperties()
+            const rect = properties.windowRect
+            const windowWidth = this.uiContext?.px2vp(rect.width) ?? 0
+            const windowHeight = this.uiContext?.px2vp(rect.height) ?? 0
+            AnimeState.windowWidth = windowWidth
+            AnimeState.windowHeight = windowHeight
+            AppStorage.setOrCreate('windowWidth', windowWidth)
+            AppStorage.setOrCreate('windowHeight', windowHeight)
+            const heightBp = this.getHeightBreakpoint(windowHeight, windowWidth)
+            AnimeState.heightBp = heightBp
+            AppStorage.setOrCreate('currentHeightBreakpoint', heightBp)
+            hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', windowHeight, windowWidth)
+        } catch (error) {
+            console.error(`窗口大小获取失败，code: ${error.code} message: ${error.messsage}`)
+        }
+    }
+
+    /**
+     * 根据窗口高宽比计算高度断点
+     */
+    private getHeightBreakpoint(height: number, width: number): HeightBreakpoint {
+        const aspectRatio = height / width
+        if (aspectRatio < 0.79) {
+            return HeightBreakpoint.HEIGHT_SM
+        } else if (aspectRatio < 1.2) {
+            return HeightBreakpoint.HEIGHT_MD
+        }
+        return HeightBreakpoint.HEIGHT_LG
     }
 
     onWindowStageDestroy() {
         // Main window is destroyed, release UI related resources
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
+        // 解绑窗口监听器
+        this.mainWindow?.off('windowSizeChange', this.onWindowSizeChange)
+        this.mainWindow?.off('avoidAreaChange', this.onAvoidAreaChange)
+        this.mainWindow = undefined
+        this.uiContext = undefined
     }
 
 
@@ -174,110 +323,6 @@ export default class EntryAbility extends UIAbility {
     onWindowStageRestore(windowStage: window.WindowStage) {
         // 恢复页面 -> 使用 navigation 路由需通过 want 参数自行恢复
         this.stageLoadPage(windowStage);
-    }
-
-    private intRectWindow(windowStage: window.WindowStage) {
-        // 获取应用主窗口
-        try {
-            const windowClass: window.Window = windowStage.getMainWindowSync()
-            // 设置窗口全屏
-            windowClass.setWindowLayoutFullScreen(true).then(() => {
-                console.info('Succeeded in setting the window layout to full-screen mode.');
-            }).catch((err: BusinessError) => {
-                console.error('Failed to set the window layout to full-screen mode. Cause:' + JSON.stringify(err));
-            });
-
-            // 缓存window窗口对象
-            AppStorage.setOrCreate('WindowClass', windowClass)
-            console.info('Succeeded in 保存窗口对象.');
-
-            // 获取布局避让遮挡的区域
-            // 获取导航栏遮挡区域
-            const bottomType = window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR
-            try {
-                const avoidArea = windowClass.getWindowAvoidArea(bottomType)
-                const bottomRectHeight = avoidArea.bottomRect.height
-                AppStorage.setOrCreate('bottomRectHeight', px2vp(bottomRectHeight))
-                hilog.info(0x0000, 'EntryAbility', '导航栏初始避让高度 Top：%{public}d Bottom: %{public}i', bottomRectHeight);
-            } catch (error) {
-                console.error(`导航栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
-            }
-
-            // 获取状态栏避让遮挡的区域
-            const topType = window.AvoidAreaType.TYPE_SYSTEM // 状态栏
-            try {
-                const topAvoidArea = windowClass.getWindowAvoidArea(topType)
-                const topRectHeight = topAvoidArea.topRect.height
-                AppStorage.setOrCreate('topRectHeight', px2vp(topRectHeight))
-                hilog.info(0x0000, 'EntryAbility', '状态栏初始避让高度 Top：%{public}d Bottom: %{public}i', topRectHeight)
-            } catch (error) {
-                console.error(`状态栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
-            }
-
-            // 注册监听函数，动态获取避让区域数据
-            windowClass.on('avoidAreaChange', (data) => {
-                let topRectActiveHeight = 0
-                let bottomRectActiveHeight = 0
-                if (data.type === window.AvoidAreaType.TYPE_SYSTEM) {
-                    topRectActiveHeight = data.area.topRect.height;
-                    AppStorage.setOrCreate('topRectHeight', this.uiContext?.px2vp(topRectActiveHeight));
-                } else if (data.type == window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
-                    bottomRectActiveHeight = this.uiContext?.px2vp(data.area.bottomRect.height)!;
-                    AppStorage.setOrCreate('bottomRectHeight', bottomRectActiveHeight);
-                }
-                hilog.info(0x0000, 'EntryAbility', '动态避让高度 Top：%{public}d Bottom: %{public}i', topRectActiveHeight, bottomRectActiveHeight);
-            });
-
-            // 应用窗口初始高度和宽度
-            try {
-                const properties = windowClass.getWindowProperties()
-                const rect = properties.windowRect
-                let WindowHeight = this.uiContext?.px2vp(rect.height)
-                let WindowWidth = this.uiContext?.px2vp(rect.width)
-                hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', rect.height, rect.width)
-                AppStorage.setOrCreate('windowHeight', WindowHeight)
-                AppStorage.setOrCreate('windowWidth', WindowWidth)
-                // 监听窗口大小变化
-                try {
-                    windowClass.on('windowSizeChange', async (data) => {
-                        console.info('#WindowChange Succeeded in enabling the listener for window size changes. Data: ' +
-                        JSON.stringify(data))
-                        WindowWidth = this.uiContext?.px2vp(data.width)!
-                        WindowHeight = this.uiContext?.px2vp(data.height)!
-                        AppStorage.setOrCreate('windowWidth', WindowWidth)
-                        AppStorage.setOrCreate('windowHeight', WindowHeight) // 980px 约等于 512vp
-                        hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', WindowHeight, WindowWidth)
-                        // 动态监听高度断点
-                        this.onHeightBpChange(WindowHeight, WindowWidth)
-                    })
-                } catch (exception) {
-                    console.error(`#EntryAbility Failed to enable the listener for window size changes. Cause code: ${exception.code}, message: ${exception.message}`)
-                }
-            } catch (error) {
-                console.error(`窗口大小获取失败，code: ${error.code} message: ${error.messsage}`)
-            }
-        } catch (error) {
-            console.error(`窗口对象获取失败，code: ${error.code} message: ${error.messsage}`)
-        }
-
-    }
-
-    private onHeightBpChange(WindowHeight: number, WindowWidth: number) {
-        let heightBp = 0
-        const WindowAspectRatio = WindowHeight / WindowWidth // 重写高度断点
-        if (WindowAspectRatio < 0.79) {
-            heightBp = 0
-            AppStorage.setOrCreate('currentHeightBreakpoint', heightBp)
-            console.log(`断点测试 heightBp: ${heightBp} 高宽比：${WindowAspectRatio}`)
-        } else if (WindowAspectRatio >= 0.79 && WindowAspectRatio < 1.2) {
-            heightBp = 1
-            AppStorage.setOrCreate('currentHeightBreakpoint', heightBp)
-            console.log(`断点测试 heightBp: ${heightBp} 高宽比：${WindowAspectRatio}`)
-        } else if (WindowAspectRatio >= 1.2) {
-            heightBp = 2
-            AppStorage.setOrCreate('currentHeightBreakpoint', heightBp)
-            console.log(`断点测试 heightBp: ${heightBp} 高宽比：${WindowAspectRatio}`)
-        }
     }
 
 }

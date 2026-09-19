@@ -3,7 +3,7 @@ import { More } from '../components/MoreContainer';
 import { common } from '@kit.AbilityKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
-import { AppConfigs } from '../entryability/Settings';
+import { appSettings } from '../entryability/Settings';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
@@ -23,8 +23,6 @@ export struct MyPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @Consume onShow: boolean
   @Consume DarkModeImage: boolean
   @StorageLink('HistoryList') historyList: VideoHistoryInfo[] = []
@@ -163,17 +161,17 @@ export struct MyPage {
         .borderRadius(10)
         .objectFit(ImageFit.Contain)
         .onClick(() => {
-          if (this.appSettings.color_mode ===  ThemeColorMode.LIGHT) {
+          if (appSettings.color_mode ===  ThemeColorMode.LIGHT) {
             // 设置为 黑暗
-            this.appSettings.color_mode = ThemeColorMode.DARK
-          } else if (this.appSettings.color_mode === ThemeColorMode.DARK) {
+            appSettings.color_mode = ThemeColorMode.DARK
+          } else if (appSettings.color_mode === ThemeColorMode.DARK) {
             // 设置为 日间
-            this.appSettings.color_mode = ThemeColorMode.LIGHT
+            appSettings.color_mode = ThemeColorMode.LIGHT
           } else {
             ToastUtil.showToast({ message: '当前设置为跟随系统捏' })
             return
           }
-          ColorModeManager.switchColorMode(this.getUIContext().getHostContext()! as common.UIAbilityContext, this.appSettings.color_mode)
+          ColorModeManager.switchColorMode(this.getUIContext().getHostContext()! as common.UIAbilityContext, appSettings.color_mode)
         })
     }
     .margin({ left: 16, right: 16, top: 56, bottom: 16 })

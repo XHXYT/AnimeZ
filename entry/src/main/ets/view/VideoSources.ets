@@ -4,7 +4,7 @@ import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { ButtonBuilder, ButtonConfig, MenuItem } from "../components/common/Button"
 import { LengthMetrics, SymbolGlyphModifier } from "@kit.ArkUI"
-import { AppConfigs } from "../entryability/Settings"
+import { appSettings } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
 import { ToastUtil } from "../utils/ToastUtils"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
@@ -22,8 +22,6 @@ export function VideoSourcesBuilder(name: string, param: string) {
 struct VideoSources {
 
   @State selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @State viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
   // 添加搜索控制器
   private searchController: SearchController = new SearchController()
@@ -63,7 +61,7 @@ struct VideoSources {
     this.selectionManager.addObserver(this.selectionObserver)
     this.onShow = false
     this.viewModel.pageStack = this.pageStack
-    this.viewModel.appSettings = this.appSettings
+    this.viewModel.appSettings = appSettings
     // 数据初始化
     this.viewModel.loadCustomGroups()
     // 注册数据源加载事件
@@ -335,7 +333,7 @@ struct VideoSources {
         symbolSrc: 'mobiledata_circle', // Symbol 图标
         iconSize: 24,
         needCheckmark: true,
-        menuSelected: this.appSettings.video_sources_order,
+        menuSelected: appSettings.video_sources_order,
         menuTitle: '排列顺序',
         fontColor: $r('app.color.color_text_major'),
         menuItems: [
@@ -375,7 +373,7 @@ struct VideoSources {
         needCheckmark: true,
         menuTitle: '分组筛选',
         prohibitValue: 'group_manage',
-        menuSelected: this.appSettings.video_sources_group_filter,
+        menuSelected: appSettings.video_sources_group_filter,
         fontColor: $r('app.color.color_text_major'),
         menuItems: [
           {
@@ -428,7 +426,7 @@ struct VideoSources {
             value: 'import_file',
             symbolStart: 'doc_text_fill',
             action: async () => {
-              this.viewModel.importFromFile(this.getUIContext().getHostContext()!, this.appSettings.video_source_import_overwrite)
+              this.viewModel.importFromFile(this.getUIContext().getHostContext()!, appSettings.video_source_import_overwrite)
             }
           },
           {
@@ -436,7 +434,7 @@ struct VideoSources {
             value: 'import_url',
             symbolStart: 'paperclip',
             action: () => {
-              this.viewModel.importFromNetwork(this.appSettings.video_source_import_overwrite)
+              this.viewModel.importFromNetwork(appSettings.video_source_import_overwrite)
             }
           },
           {
@@ -444,7 +442,7 @@ struct VideoSources {
             value: 'import_json',
             symbolStart: 'clipboard_sharing',
             action: () => {
-              this.viewModel.importFromClipboard(this.appSettings.video_source_import_overwrite)
+              this.viewModel.importFromClipboard(appSettings.video_source_import_overwrite)
             }
           },
           {

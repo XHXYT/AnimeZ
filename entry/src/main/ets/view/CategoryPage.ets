@@ -7,7 +7,7 @@ import StateView, { ViewState } from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { VideoList } from "../components/VideoList"
 import { VideoCategoryColumnsTemplate } from "../utils/breakpoint/BreakPoint"
-import { AppConfigs } from "../entryability/Settings"
+import { appSettings } from "../entryability/Settings"
 import { CategoryDataSource } from "../entity/CategoryData"
 
 
@@ -37,8 +37,6 @@ export struct CategoryPage {
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
   // 高度断点
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @State categoryDataSource: CategoryDataSource = new CategoryDataSource([])
 
   build() {
@@ -51,7 +49,7 @@ export struct CategoryPage {
           state: this.state,
           errorMessage: $errorMessage,
           content: () => {
-            this.Content(this.appSettings.category_UI_type)
+            this.Content(appSettings.category_UI_type)
           },
           custom: undefined,
           onRetry: () => {

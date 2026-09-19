@@ -9,7 +9,7 @@ import { webview } from '@kit.ArkWeb';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
-import { AppConfigs } from '../entryability/Settings';
+import { appSettings } from '../entryability/Settings';
 import {
   VideoDetailGridColHeight,
   VideoDetailGridColSpan,
@@ -56,17 +56,15 @@ struct VideoDetailPage {
 
   @State @Watch('onViewModelChange') viewModel: VideoDetailViewModel = new VideoDetailViewModel(
     new PlayerManagerImpl(),
-    new AppConfigs(),
+    appSettings,
     this.getUIContext().getHostContext()!
   )
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
   @State panelController: PanelController = new PanelController()
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   private webviewController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear() {
-    this.viewModel = new VideoDetailViewModel(this.playerManager, this.appSettings, this.getUIContext().getHostContext()!)
+    this.viewModel = new VideoDetailViewModel(this.playerManager, appSettings, this.getUIContext().getHostContext()!)
     this.viewModel.setOnStatusChangedCallback((status: number) => {
       // 处理状态变化
       if (status == PlayerStatus.ERROR) {
@@ -446,7 +444,7 @@ struct VideoDetailPage {
       Column() {
         Header(episodeList.title)
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(sortEpisodesByNumber(episodeList.episodes, this.appSettings.episodes_order), (item: EpisodeInfo, episodeIndex: number) => {
+          ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo, episodeIndex: number) => {
             Text(item.title)
               .textAlign(TextAlign.Center)
               .backgroundColor(

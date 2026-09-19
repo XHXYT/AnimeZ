@@ -5,7 +5,7 @@ import VideoTimeUtils from '../utils/VideoTimeUtils';
 import Logger from '../utils/Logger';
 import { ToastUtil } from '../utils/ToastUtils';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
-import { AppConfigs } from '../entryability/Settings';
+import { appSettings } from '../entryability/Settings';
 import { AVVolumePanel } from '@kit.AudioKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit'
@@ -81,8 +81,6 @@ export struct VideoPlayerController {
   @Consume('pageStack') pageStack: NavPathStack
   @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
   @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @StorageProp('windowHeight') windowHeight: number = 0
   @StorageProp('windowWidth') windowWidth: number = 0
   /** @description 默认系统音量 */
@@ -644,21 +642,21 @@ export struct VideoPlayerController {
           Text('选集')
             .fontSize(this.isFullScreen ? 16 : 14)
             .fontColor(Color.White)
-          Text(this.appSettings.episodes_order === 'desc' ? '倒序' : '正序')
+          Text(appSettings.episodes_order === 'desc' ? '倒序' : '正序')
             .margin({ left: 24 })
             .fontSize(this.isFullScreen ? 12 : 10)
             .fontColor(Color.White)
             .onClick(() => {
-              if (this.appSettings.episodes_order === 'desc') {
-                this.appSettings.episodes_order = 'asc'
+              if (appSettings.episodes_order === 'desc') {
+                appSettings.episodes_order = 'asc'
               } else {
-                this.appSettings.episodes_order = 'desc'
+                appSettings.episodes_order = 'desc'
               }
             })
         }
         .width('100%')
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(sortEpisodesByNumber(this.episodeList, this.appSettings.episodes_order), (episode: EpisodeInfo, index: number) => {
+          ForEach(sortEpisodesByNumber(this.episodeList, appSettings.episodes_order), (episode: EpisodeInfo, index: number) => {
             Text(episode.title)
               .padding(8)
               .fontSize(this.isFullScreen ? 14 : 12)
@@ -675,7 +673,7 @@ export struct VideoPlayerController {
                 if (this.episodeIndex == index) {
                   return
                 }
-                this.playerManager.playEpisodeList(sortEpisodesByNumber(this.episodeList, this.appSettings.episodes_order), index)
+                this.playerManager.playEpisodeList(sortEpisodesByNumber(this.episodeList, appSettings.episodes_order), index)
                 this.hideRightPanel()
               })
           })

@@ -5,7 +5,7 @@ import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/Sett
 import { ColorModeManager } from '../utils/ColorModeManager'
 import { common } from '@kit.AbilityKit'
 import { deviceInfo } from '@kit.BasicServicesKit'
-import { AppConfigs } from '../entryability/Settings'
+import { appSettings } from '../entryability/Settings'
 import { dataSourceManager } from '../api/DataSourceManager'
 import Logger from '../utils/Logger'
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
@@ -24,8 +24,6 @@ struct SettingsPage {
   @StorageProp('topRectHeight') topHeight: number = 0
   // 底部避让高度
   @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
 
   build() {
@@ -143,7 +141,7 @@ struct SettingsPage {
             settings_key: 'color_mode',
             preference: {
               type: 'menu',
-              defaultValue: this.appSettings.color_mode.toString(),
+              defaultValue: appSettings.color_mode.toString(),
               menu: [
                 {
                   view: '自动',
@@ -159,8 +157,8 @@ struct SettingsPage {
                 }
               ],
               onValueChange: (value) => {
-                this.appSettings.color_mode = Number(value)
-                ColorModeManager.switchColorMode(this.context, this.appSettings.color_mode)
+                appSettings.color_mode = Number(value)
+                ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
               }
             }
           }
@@ -204,9 +202,9 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.video_source_import_overwrite,
+              defaultValue: appSettings.video_source_import_overwrite,
               onValueChange: (value) => {
-                this.appSettings.video_source_import_overwrite = value as boolean
+                appSettings.video_source_import_overwrite = value as boolean
               }
             }
           },
@@ -220,7 +218,7 @@ struct SettingsPage {
             settings_key: 'default_player',
             preference: {
               type: 'menu',
-              defaultValue: this.appSettings.default_player,
+              defaultValue: appSettings.default_player,
               menu: [
                 {
                   view: 'VideoPlayer',
@@ -240,7 +238,7 @@ struct SettingsPage {
                 }
               ],
               onValueChange: (value) => {
-                this.appSettings.default_player = value as string
+                appSettings.default_player = value as string
               }
             }
           },
@@ -248,7 +246,7 @@ struct SettingsPage {
             settings_key: 'episodes_order',
             preference: {
               type: 'menu',
-              defaultValue: this.appSettings.episodes_order as string,
+              defaultValue: appSettings.episodes_order as string,
               menu: [
                 {
                   view: '正序',
@@ -260,7 +258,7 @@ struct SettingsPage {
                 }
               ],
               onValueChange: (value) => {
-                this.appSettings.episodes_order = value as "asc" | "desc"
+                appSettings.episodes_order = value as "asc" | "desc"
               }
             }
           },
@@ -271,9 +269,9 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_sensor_rotate,
+              defaultValue: appSettings.auto_sensor_rotate,
               onValueChange: (value) => {
-                this.appSettings.auto_sensor_rotate = value as boolean
+                appSettings.auto_sensor_rotate = value as boolean
               }
             }
           },
@@ -284,9 +282,9 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_play_next_episode,
+              defaultValue: appSettings.auto_play_next_episode,
               onValueChange: (value) => {
-                this.appSettings.auto_play_next_episode = value as boolean
+                appSettings.auto_play_next_episode = value as boolean
               }
             }
           },
@@ -297,9 +295,9 @@ struct SettingsPage {
             preference: {
               type: 'switch',
               menu: [],
-              defaultValue: this.appSettings.auto_play_on_no_wifi,
+              defaultValue: appSettings.auto_play_on_no_wifi,
               onValueChange: (value) => {
-                this.appSettings.auto_play_on_no_wifi = value as boolean
+                appSettings.auto_play_on_no_wifi = value as boolean
               }
             }
           }

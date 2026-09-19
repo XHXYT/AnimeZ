@@ -2,7 +2,7 @@ import IPlayerManager from './model/IPlayerManager';
 import { IjkVideoPlayer } from './IJK/IjkVideoPlayer';
 import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
-import { AppConfigs } from '../entryability/Settings';
+import { appSettings } from '../entryability/Settings';
 import { RedVideoPlayer } from './REDPlayer/RedPlayer';
 import { AbilityConstant, common } from '@kit.AbilityKit';
 
@@ -13,8 +13,6 @@ import { AbilityConstant, common } from '@kit.AbilityKit';
 @Component
 export struct MultiVideoPlayer {
 
-  // 应用设置
-  @StorageLink('AppSettings') appSettings: AppConfigs = new AppConfigs()
   @Link playerManager: IPlayerManager
   @Link isFullScreen: boolean
 
@@ -40,13 +38,13 @@ export struct MultiVideoPlayer {
 
   build() {
     Stack() {
-      if (this.appSettings.default_player === 'video') {
+      if (appSettings.default_player === 'video') {
         // 系统Video组件
         SystemVideoPlayer({ playerManager: this.playerManager })
-      } else if (this.appSettings.default_player === 'av') {
+      } else if (appSettings.default_player === 'av') {
         // AVPlayer
         AVideoPlayer({ playerManager: this.playerManager })
-      } else if (this.appSettings.default_player === 'red') {
+      } else if (appSettings.default_player === 'red') {
         // 红薯播放器
         RedVideoPlayer({ playerManager: this.playerManager })
       } else {
