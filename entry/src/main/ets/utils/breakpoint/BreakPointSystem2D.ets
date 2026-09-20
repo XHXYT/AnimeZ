@@ -71,11 +71,8 @@ export function BreakpointFunction2D<T>(config: BreakpointConfig<T>) {
   // 返回可直接访问矩阵的函数
   return (widthBp: number, heightBp: number): T => {
 
-    // const defaultWidthBp: number = AppStorage.get<number>('currentWidthBreakpoint') as number
-    // const defaultHeightBp: number = AppStorage.get<number>('currentHeightBreakpoint') as number
-
-    const effectiveWidthBp = widthBp /*?? defaultWidthBp*/
-    const effectiveHeightBp = heightBp /*?? defaultHeightBp*/
+    const effectiveWidthBp = widthBp
+    const effectiveHeightBp = heightBp
 
     const widthIndex = Math.min(
       Math.max(effectiveWidthBp - 1, 0),

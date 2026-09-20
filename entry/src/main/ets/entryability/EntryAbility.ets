@@ -20,7 +20,7 @@ export default class EntryAbility extends UIAbility {
     private storage: LocalStorage = new LocalStorage();
     private uiContext?: UIContext;
     private mainWindow?: window.Window;
-    // 窗口尺寸变化监听（合并断点与窗口尺寸双写，持有引用供解绑）
+    // 窗口尺寸变化监听（合并断点与窗口尺寸更新，持有引用供解绑）
     private onWindowSizeChange: (windowSize: window.Size) => void = (windowSize: window.Size) => {
         if (!this.uiContext) {
             return;
@@ -32,14 +32,9 @@ export default class EntryAbility extends UIAbility {
         AnimeState.widthBp = widthBp;
         AnimeState.windowWidth = width;
         AnimeState.windowHeight = height;
-        // V1 桥接（Phase 5 移除）
-        AppStorage.setOrCreate('currentWidthBreakpoint', widthBp);
-        AppStorage.setOrCreate('windowWidth', width);
-        AppStorage.setOrCreate('windowHeight', height);
-        // 高度断点（双写）
+        // 高度断点
         const heightBp: HeightBreakpoint = this.getHeightBreakpoint(height, width);
         AnimeState.heightBp = heightBp;
-        AppStorage.setOrCreate('currentHeightBreakpoint', heightBp);
         hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}f vp 宽度：%{public}f vp', height, width);
     };
     // 避让区域变化监听（持有引用供解绑）
@@ -50,11 +45,9 @@ export default class EntryAbility extends UIAbility {
         if (data.type === window.AvoidAreaType.TYPE_SYSTEM) {
             const topRectHeight: number = this.uiContext.px2vp(data.area.topRect.height);
             AnimeState.topRectHeight = topRectHeight;
-            AppStorage.setOrCreate('topRectHeight', topRectHeight);
         } else if (data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
             const bottomRectHeight: number = this.uiContext.px2vp(data.area.bottomRect.height);
             AnimeState.bottomRectHeight = bottomRectHeight;
-            AppStorage.setOrCreate('bottomRectHeight', bottomRectHeight);
         }
     };
 
@@ -68,7 +61,6 @@ export default class EntryAbility extends UIAbility {
         await dataSourceManager.init(this.context)
         // 检查设备形式
         _AnimeState.DeviceProductModel = deviceInfo.productModel
-        AppStorage.setOrCreate<string>('DeviceProductModel', deviceInfo.productModel)
         // 构建RedPlayer
         const redPlayerConfigBuilder = new RedPlayerConfigBuilder()
         // redPlayerConfigBuilder.cachePath = 'your player cache path'
@@ -168,7 +160,7 @@ export default class EntryAbility extends UIAbility {
     }
 
     /**
-     * 主窗口初始化：全屏、UIContext、权限、避让高度、断点、监听器注册（双写 AnimeState 与 AppStorage）
+     * 主窗口初始化：全屏、UIContext、权限、避让高度、断点、监听器注册（写入 AnimeState）
      */
     private async initMainWindow(windowStage: window.WindowStage): Promise<void> {
         const mainWindow = await windowStage.getMainWindow()
@@ -190,23 +182,19 @@ export default class EntryAbility extends UIAbility {
             _AnimeState.UIContext = uiContext
             _AnimeState.Context = this.context
             _AnimeState.window = mainWindow
-            // V1 桥接（Phase 5 移除）
-            AppStorage.setOrCreate('UIContext', uiContext);
-            AppStorage.setOrCreate<window.Window>('WindowClass', mainWindow);
 
             // 初始化通知
             ToastUtil.initContext(uiContext);
             // 初始化权限
             permissionManage.requestPermission(uiContext.getHostContext() as Context);
 
-            // 宽度断点初始值（双写）
+            // 宽度断点初始值
             const widthBp: WidthBreakpoint = uiContext.getWindowWidthBreakpoint();
             AnimeState.widthBp = widthBp
-            AppStorage.setOrCreate('currentWidthBreakpoint', widthBp)
 
-            // 避让高度初始值（双写）
+            // 避让高度初始值
             this.readAvoidAreas(mainWindow)
-            // 窗口尺寸初始值（双写）
+            // 窗口尺寸初始值
             this.readWindowRect(mainWindow)
 
             // 注册监听器
@@ -227,7 +215,6 @@ export default class EntryAbility extends UIAbility {
             const avoidArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
             const bottomRectHeight = this.uiContext?.px2vp(avoidArea.bottomRect.height) ?? 0
             AnimeState.bottomRectHeight = bottomRectHeight
-            AppStorage.setOrCreate('bottomRectHeight', bottomRectHeight)
         } catch (error) {
             console.error(`导航栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
         }
@@ -236,7 +223,6 @@ export default class EntryAbility extends UIAbility {
             const topAvoidArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
             const topRectHeight = this.uiContext?.px2vp(topAvoidArea.topRect.height) ?? 0
             AnimeState.topRectHeight = topRectHeight
-            AppStorage.setOrCreate('topRectHeight', topRectHeight)
         } catch (error) {
             console.error(`状态栏避让获取失败，code: ${error.code} message: ${error.messsage}`)
         }
@@ -253,11 +239,8 @@ export default class EntryAbility extends UIAbility {
             const windowHeight = this.uiContext?.px2vp(rect.height) ?? 0
             AnimeState.windowWidth = windowWidth
             AnimeState.windowHeight = windowHeight
-            AppStorage.setOrCreate('windowWidth', windowWidth)
-            AppStorage.setOrCreate('windowHeight', windowHeight)
             const heightBp = this.getHeightBreakpoint(windowHeight, windowWidth)
             AnimeState.heightBp = heightBp
-            AppStorage.setOrCreate('currentHeightBreakpoint', heightBp)
             hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}d vp 宽度：%{public}i vp', windowHeight, windowWidth)
         } catch (error) {
             console.error(`窗口大小获取失败，code: ${error.code} message: ${error.messsage}`)
