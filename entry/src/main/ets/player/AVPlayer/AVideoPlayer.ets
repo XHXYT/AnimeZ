@@ -9,6 +9,7 @@ import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ToastUtil } from '../../utils/ToastUtils';
 import { AVPlayerWrapper } from './AVPlayerWrapper';
+import { AnimeState } from '../../entryability/AnimeState';
 
 const DEFAULT_ASPECT = 1.9
 
@@ -25,7 +26,7 @@ export struct AVideoPlayer {
 
   @Local aspRatio: number = DEFAULT_ASPECT
   @Local videoAspRatio: number = DEFAULT_ASPECT
-  private originalVideoAspRatio: number = DEFAULT_ASPECT
+  @Local videoFit: VideoFit = VideoFit.Contain
   @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
 
   private readonly componentController: XComponentController = new XComponentController()
@@ -46,29 +47,7 @@ export struct AVideoPlayer {
       this.videoSpeed = videoSpeed;
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
-      switch (videoFit) {
-        case VideoFit.Contain:
-          this.videoAspRatio = this.originalVideoAspRatio;
-          break;
-        case VideoFit.Cover:
-          this.videoAspRatio = this.aspRatio;
-          break;
-        case VideoFit.Fill:
-          this.videoAspRatio = this.originalVideoAspRatio;
-          break;
-        case VideoFit.Fit_16_9:
-          this.videoAspRatio = 16 / 9;
-          break;
-        case VideoFit.Fit_4_3:
-          this.videoAspRatio = 4 / 3;
-          break;
-        case VideoFit.Fit_1_1:
-          this.videoAspRatio = 1;
-          break;
-        default:
-          this.videoAspRatio = 16 / 9; // DEFAULT_ASPECT
-          break;
-      }
+      this.videoFit = videoFit;
     },
     onFullScreenChanged: (isFullScreen: boolean) => {
       console.log('AVideoPlayer #onFullScreenChanged isFullScreen：', isFullScreen)
@@ -88,7 +67,6 @@ export struct AVideoPlayer {
     },
     onVideoSizeChange: (w: number, h: number) => {
       Logger.e('tips', `onVideoSizeChange w=${w} h=${h}`);
-      this.originalVideoAspRatio = w / h;
       ToastUtil.animateTo({
         duration: DEFAULT_DURATION,
         curve: Curve.Smooth,
@@ -154,9 +132,9 @@ export struct AVideoPlayer {
         .onDestroy(() => {
           Logger.e('tips', 'AVPlayer XComponent onDestroy')
         })
-        .width('100%')
-        .aspectRatio(this.videoAspRatio)
-        .height(this.isFullScreen ? '100%' : undefined)
+        .width(this.isSurfaceHeightDriven() ? undefined : '100%')
+        .aspectRatio(this.getSurfaceRatio())
+        .height(this.isSurfaceHeightDriven() ? '100%' : undefined)
 
       VideoPlayerController({ playerManager: this.playerManager })
         .width('100%')
@@ -164,7 +142,52 @@ export struct AVideoPlayer {
     }
     .height(this.isFullScreen ? '100%' : undefined)
     .backgroundColor(Color.Black)
-    .aspectRatio(this.aspRatio)
+    .clip(true)
+    .aspectRatio(this.getOuterAspRatio())
     .width('100%')
+  }
+
+  /** 当前画面尺寸模式对应的渲染表面宽高比 */
+  private getSurfaceRatio(): number {
+    switch (this.videoFit) {
+      case VideoFit.Fill:
+        return this.getOuterAspRatio();
+      case VideoFit.Fit_16_9:
+        return 16 / 9;
+      case VideoFit.Fit_4_3:
+        return 4 / 3;
+      case VideoFit.Fit_1_1:
+        return 1;
+      case VideoFit.Cover:
+      case VideoFit.Contain:
+      default:
+        return this.videoAspRatio;
+    }
+  }
+
+  /**
+   * 渲染表面是否以高度为基准（高度撑满、宽度按比例收缩/溢出）：
+   * 适应/拉伸/固定比例时在容器内适配（宽高比小于容器则两侧留黑边），
+   * 铺满裁剪（Cover）时反向驱动，超出部分由外层裁剪
+   */
+  private isSurfaceHeightDriven(): boolean {
+    const surfaceRatio = this.getSurfaceRatio();
+    const outerRatio = this.getOuterAspRatio();
+    if (this.videoFit === VideoFit.Cover) {
+      return surfaceRatio > outerRatio;
+    }
+    return surfaceRatio < outerRatio;
+  }
+
+  /**
+   * 视频区外框比例：横屏窗口（宽 > 高）时钳制到可用窗口比例，
+   * 避免按视频比例计算出的高度超出屏幕（如手机 2.17 屏幕比 + 16:9 视频会上下溢出）
+   */
+  private getOuterAspRatio(): number {
+    if (AnimeState.windowWidth <= AnimeState.windowHeight) {
+      return this.aspRatio
+    }
+    const availableHeight = this.isFullScreen ? AnimeState.windowHeight : AnimeState.windowHeight - AnimeState.topRectHeight
+    return Math.max(this.aspRatio, AnimeState.windowWidth / availableHeight)
   }
 }

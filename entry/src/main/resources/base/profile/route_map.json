@@ -2,7 +2,7 @@
   "routerMap": [
     {
       "name": "HomePage",
-      "pageSourceFile": "src/main/ets/pages/Homepage.ets",
+      "pageSourceFile": "src/main/ets/pages/HomePage.ets",
       "buildFunction": "HomePageBuilder"
     },
     {

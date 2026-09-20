@@ -1,5 +1,5 @@
 import Task, { TaskStatus, TaskStatusObserver } from './Task';
-import Logger from '../../utils/Logger';
+import Logger from '../../Logger';
 
 /**
  * 任务状态管理

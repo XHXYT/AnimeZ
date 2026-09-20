@@ -1,5 +1,5 @@
-import Logger from '../utils/Logger';
-import SQLite from '../db/SQLite';
+import Logger from '../Logger';
+import SQLite from '../../db/SQLite';
 import DownloadTaskInfo from './DownloadTaskInfo';
 import {FileDownloadTable} from './FileDownloadDao';
 import TaskInfoRepository from './core/TaskInfoRepository';

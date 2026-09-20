@@ -16,7 +16,6 @@ export struct HomePage {
 
   aboutToAppear() {
     homeViewModel.loadHomepageData()
-    // SOURCE_CHANGED_EVENT 已由 homeViewModel 常驻订阅
   }
 
   build() {

@@ -96,7 +96,7 @@ export default interface IPlayerManager {
 
   isFullScreen: () => boolean
 
-  enterFullScreen: () => void
+  enterFullScreen: (sensorDriven?: boolean) => void
 
   exitFullScreen: () => void
 

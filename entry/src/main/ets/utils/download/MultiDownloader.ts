@@ -6,7 +6,7 @@ import DownloadTaskInfo from './DownloadTaskInfo';
 import { FileDownloadTask, GroupDownloadTask } from './FileDownloadTask';
 import fs from '@ohos.file.fs';
 import http from '@ohos.net.http';
-import Logger from '../utils/Logger';
+import Logger from '../Logger';
 import TaskManager from './core/TaskManager';
 import { Downloader } from './Downloader';
 

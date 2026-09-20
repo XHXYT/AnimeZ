@@ -1,4 +1,3 @@
-// VideoDetailPage.ets
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
 import IPlayerManager from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
@@ -11,11 +10,7 @@ import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { appSettings } from '../entryability/Settings';
 import {
-  VideoDetailGridColHeight,
-  VideoDetailGridColSpan,
-  VideoDetailNewGridColSpan,
-  VideoPlayerGridColSpan,
-  VideoPlayerNewGridColSpan
+  VideoDetailGridColHeight
 } from '../utils/breakpoint/BreakPoint';
 import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
 import { VideoDetailViewModel } from '../viewmodel/VideoDetailViewModel';
@@ -87,6 +82,8 @@ struct VideoDetailPage {
     .onReady(async (ctx: NavDestinationContext) => {
       const params: VideoNavigateInfo = ctx?.pathInfo?.param as VideoNavigateInfo;
       await this.viewModel.initialize(params);
+      // 进入页面时若手机已处于横屏，直接全屏（受"自动旋屏"设置控制）
+      this.viewModel.onPhoneLandscape(AnimeState.isPhoneLandscape);
     })
     .onShown(() => {
       this.viewModel.onPageShow();
@@ -139,11 +136,37 @@ struct VideoDetailPage {
       })
   }
 
+  /**
+   * 是否使用左右分栏布局
+   * 1. 宽度不足 md 或手机横屏窗口（宽 > 高且高度不足）时不分栏；
+   * 2. 平板/折叠屏横屏（矮宽窗口，宽度达到 lg）保持左右分栏；
+   * 3. 平板竖屏/折叠屏展开（高窗口）按视频方向选择：
+   *    竖向视频左右分栏可在非全屏时显示更多画面，横向视频上下布局更和谐
+   */
+  private isSideBySide(): boolean {
+    if (this.viewModel.isFullScreen) {
+      return false
+    }
+    if (AnimeState.widthBp < WidthBreakpoint.WIDTH_MD) {
+      return false
+    }
+    // 手机横屏窗口：宽 > 高且高度过小，不分栏
+    if (AnimeState.windowWidth > AnimeState.windowHeight && AnimeState.windowHeight <= 500) {
+      return false
+    }
+    // 矮宽窗口（平板/折叠屏横屏）：宽度达到 lg 时保持左右分栏
+    if (AnimeState.heightBp === HeightBreakpoint.HEIGHT_SM) {
+      return AnimeState.widthBp >= WidthBreakpoint.WIDTH_LG
+    }
+    // 高窗口（平板竖屏/折叠屏展开）：竖向视频分栏，横向视频上下布局
+    return this.viewModel.isVerticalVideo()
+  }
+
   @Builder Content() {
     GridRow({ columns: 12 }) {
       // 播放器区
       GridCol({
-        span: this.viewModel.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
+        span: this.viewModel.isFullScreen ? 12 : (this.isSideBySide() ? 8 : 12),
         order: 1
       }) {
         Stack() {
@@ -152,13 +175,14 @@ struct VideoDetailPage {
         .width('100%')
         .backgroundColor(Color.Black)
         .alignContent(Alignment.Center)
-        .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight - 10 })
-        .height(this.viewModel.isFullScreen ? '100%' : VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp))
+        .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight })
+        .height(this.viewModel.isFullScreen || this.isSideBySide() ? '100%'
+          : VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp))
       }
 
       // 视频详情区
       GridCol({
-        span: this.viewModel.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
+        span: this.viewModel.isFullScreen ? 0 : (this.isSideBySide() ? 4 : 12),
         order: 2
       }) {
         if (this.viewModel.videoDetailInfo) {
@@ -176,7 +200,7 @@ struct VideoDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
-          .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight - 10 })
+          .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight })
         }
       }.layoutWeight(1)
 
@@ -403,7 +427,37 @@ struct VideoDetailPage {
   @Builder EpisodeList() {
     ForEach(this.viewModel.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
       Column() {
-        Header(episodeList.title)
+        Row() {
+          Row()
+            .height(14)
+            .width(6)
+            .margin({ right: 2 })
+            .borderRadius(4)
+            .backgroundColor($r('app.color.primary_color'))
+          Text(episodeList.title)
+            .fontColor($r('app.color.color_text_major'))
+            .fontSize(16)
+            .fontWeight(500)
+          Blank()
+          // 剧集排序快捷开关：点击切换正序/倒序，列表实时重排
+          Row({ space: 4 }) {
+            SymbolGlyph(appSettings.episodes_order === 'asc'
+              ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+              .fontSize(12)
+              .fontColor([$r('app.color.color_text_normal')])
+            Text(appSettings.episodes_order === 'asc' ? '正序' : '倒序')
+              .fontColor($r('app.color.color_text_normal'))
+              .fontSize(12)
+          }
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(14)
+          .backgroundColor($r('app.color.background_color_accent'))
+          .onClick(() => {
+            appSettings.episodes_order = appSettings.episodes_order === 'asc' ? 'desc' : 'asc'
+          })
+        }
+        .width('100%')
+        .padding({ left: 16, top: 16, right: 16, bottom: 4 })
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
           ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo, episodeIndex: number) => {
             Text(item.title)

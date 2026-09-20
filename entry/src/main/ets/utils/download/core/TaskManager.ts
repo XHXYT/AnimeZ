@@ -4,7 +4,7 @@ import TaskIdGenerator from './TaskIdGenerator';
 import TaskInfo from './TaskInfo';
 import TaskInfoRepository from './TaskInfoRepository';
 import Task from './Task';
-import Logger from '../../utils/Logger'
+import Logger from '../../Logger'
 
 /**
  * 任务管理器监听者

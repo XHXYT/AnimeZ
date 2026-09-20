@@ -6,6 +6,7 @@ import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
+import { AnimeState } from '../../entryability/AnimeState';
 
 const DEFAULT_ASPECT = 1.9
 
@@ -185,7 +186,7 @@ export struct SystemVideoPlayer {
         .autoPlay(true)
         .controls(false)
         .objectFit(this.videoFit)
-        .aspectRatio(this.videoAspRatio)
+        .aspectRatio(Math.max(this.videoAspRatio, this.getOuterAspRatio()))
         .height(this.isFullScreen ? '100%' : undefined)
         .onStart(() => {
           Logger.e('tips', 'onStart')
@@ -240,8 +241,20 @@ export struct SystemVideoPlayer {
     }
     .height(this.isFullScreen ? '100%' : undefined)
     .backgroundColor(Color.Black)
-    .aspectRatio(this.aspRatio)
+    .aspectRatio(this.getOuterAspRatio())
     .width('100%')
+  }
+
+  /**
+   * 视频区外框比例：横屏窗口（宽 > 高）时钳制到可用窗口比例，
+   * 避免按视频比例计算出的高度超出屏幕（如手机 2.17 屏幕比 + 16:9 视频会上下溢出）
+   */
+  private getOuterAspRatio(): number {
+    if (AnimeState.windowWidth <= AnimeState.windowHeight) {
+      return this.aspRatio
+    }
+    const availableHeight = this.isFullScreen ? AnimeState.windowHeight : AnimeState.windowHeight - AnimeState.topRectHeight
+    return Math.max(this.aspRatio, AnimeState.windowWidth / availableHeight)
   }
 
   /**

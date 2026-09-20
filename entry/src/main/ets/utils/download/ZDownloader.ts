@@ -1,6 +1,6 @@
 import { Downloader } from './Downloader';
-import Logger from '../utils/Logger'
-import Globals from '../utils/Globals'
+import Logger from '../Logger'
+import Globals from '../Globals'
 
 /**
  * ZDownloader，管理所有下载器

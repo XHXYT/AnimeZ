@@ -1,15 +1,15 @@
 import { dataSourceManager } from '../../api/DataSourceManager';
 import M3U8VideoInfo from '../../entity/m3u8/M3U8VideoInfo';
-import DownloadTaskBuilder from '../../download/DownloadTaskBuilder';
-import DownloadTaskInfoRepository from '../../download/DownloadTaskInfoRepository';
+import DownloadTaskBuilder from '../download/DownloadTaskBuilder';
+import DownloadTaskInfoRepository from '../download/DownloadTaskInfoRepository';
 import M3U8Utils from './M3U8Utils';
-import DownloadTaskInfo from '../../download/DownloadTaskInfo';
-import { FileDownloadTask, GroupDownloadTask } from '../../download/FileDownloadTask';
+import DownloadTaskInfo from '../download/DownloadTaskInfo';
+import { FileDownloadTask, GroupDownloadTask } from '../download/FileDownloadTask';
 import fs from '@ohos.file.fs';
 import fio from '@ohos/fileio-extra';
 import Logger from '../Logger';
-import TaskManager from '../../download/core/TaskManager';
-import { Downloader } from '../../download/Downloader';
+import TaskManager from '../download/core/TaskManager';
+import { Downloader } from '../download/Downloader';
 import { CryptoJS } from '@ohos/crypto-js'
 
 class M3U8DownloadTaskBuilder extends DownloadTaskBuilder<M3U8DownloadTask> {

@@ -1,7 +1,7 @@
 import EpisodeInfo from '../entity/EpisodeInfo';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import { TaskStatus, TaskStatusObserver } from '../download/core/Task';
-import TaskObserver from '../download/core/TaskObserver';
+import { TaskStatus, TaskStatusObserver } from '../utils/download/core/Task';
+import TaskObserver from '../utils/download/core/TaskObserver';
 import { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import Logger from '../utils/Logger';
 import { downloadViewModel } from '../viewmodel/DownloadViewModel';

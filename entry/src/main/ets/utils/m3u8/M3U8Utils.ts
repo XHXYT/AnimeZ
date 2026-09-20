@@ -1,4 +1,4 @@
-import { DownloadUtils } from '../../download/DownloadUtils';
+import { DownloadUtils } from '../download/DownloadUtils';
 import Logger from '../Logger';
 import M3u8, { M3u8Segment } from '../../entity/m3u8/M3U8';
 import HttpUtils from '../HttpUtils';

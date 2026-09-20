@@ -1,8 +1,8 @@
 import DownloadTaskInfo from './DownloadTaskInfo';
-import Logger from '../utils/Logger';
-import { ValueType } from '../db/AbsTable';
-import AutoTable from '../db/AutoTable';
-import { Table } from '../db/decorator/Decorators';
+import Logger from '../Logger';
+import { ValueType } from '../../db/AbsTable';
+import AutoTable from '../../db/AutoTable';
+import { Table } from '../../db/decorator/Decorators';
 import { Context } from '@kit.AbilityKit';
 
 /**

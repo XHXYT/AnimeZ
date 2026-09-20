@@ -34,8 +34,8 @@ const VIDEO_SPEED_LIST: KeyValue[] = [
 ]
 
 const VIDEO_FIT_LIST: KeyValue[] = [
-  { name: '适应', value: VideoFit.Contain }, { name: '拉伸', value: VideoFit.Cover },
-  { name: '填充', value: VideoFit.Fill }, { name: '16:9', value: VideoFit.Fit_16_9 },
+  { name: '适应', value: VideoFit.Contain }, { name: '填充', value: VideoFit.Cover },
+  { name: '拉伸', value: VideoFit.Fill }, { name: '16:9', value: VideoFit.Fit_16_9 },
   { name: '4:3', value: VideoFit.Fit_4_3 }, { name: '1:1', value: VideoFit.Fit_1_1 },
 ]
 
@@ -740,6 +740,28 @@ export struct VideoPlayerController {
         }
         .width('100%')
 
+        Row() {
+          Column() {
+            Text('自动全屏')
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Text('手机横屏时自动进入全屏')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 2 })
+          }
+          .alignItems(HorizontalAlign.Start)
+
+          Blank()
+
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.auto_sensor_rotate })
+            .onChange((isOn: boolean) => {
+              appSettings.auto_sensor_rotate = isOn
+              this.applyAutoRotateOrientation(isOn)
+            })
+        }
+        .width('100%')
+
       }
       .padding(this.isFullScreen ? 16 : 8)
       .width('100%')
@@ -752,6 +774,27 @@ export struct VideoPlayerController {
     .width(this.isFullScreen ? '30%' : '45%')
     .scale({ x: this.rightPanelScale, centerX: '100%' })
     .backgroundColor('#80000000')
+  }
+
+  /**
+   * 自动全屏开关联动窗口方向：
+   * 开启 → 跟随传感器旋转（横屏时由媒体查询自动触发全屏）；
+   * 关闭 → 视频页锁定竖屏，旋转手机不再改变布局
+   */
+  private applyAutoRotateOrientation(isOn: boolean): void {
+    if (this.playerManager.isFullScreen()) {
+      return
+    }
+    const windowClass = _AnimeState.window
+    if (!windowClass) {
+      return
+    }
+    const orientation: window.Orientation = isOn
+      ? window.Orientation.AUTO_ROTATION_RESTRICTED
+      : window.Orientation.PORTRAIT
+    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
+      Logger.e('fail', `applyAutoRotateOrientation 设置窗口方向 code=${err.code}`, err)
+    })
   }
 
   private closeController() {

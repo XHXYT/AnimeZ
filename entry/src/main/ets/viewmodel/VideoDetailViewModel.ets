@@ -14,6 +14,7 @@ import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
+import { window } from '@kit.ArkUI';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
@@ -40,6 +41,9 @@ export class VideoDetailViewModel {
   @Trace public state: number = 0;
   @Trace public errorMessage: string = '';
   @Trace public panelContentType: number = 0;
+  /** 视频宽高（用于布局判断视频横竖方向） */
+  @Trace public videoWidth: number = 0;
+  @Trace public videoHeight: number = 0;
   public isFirstPlay: boolean = true;
   public isFreeWindow: boolean = false;
 
@@ -111,6 +115,8 @@ export class VideoDetailViewModel {
             }).catch((err: BusinessError) => {
               console.error(`VideoDetailViewModel..onFullScreenChanged Failed to 退出 multi-window become landscape. Cause code: ${err.code}, message: ${err.message}`);
             });
+            // 退出全屏后按设置恢复方向锁定，防止关闭自动旋屏时旋转窗口导致"伪全屏"
+            this.applyOrientationLock();
           } else {
             // 进入横屏小窗
             const promise = windowClass.enableLandscapeMultiWindow().catch(() => {
@@ -125,8 +131,11 @@ export class VideoDetailViewModel {
           console.error(`VideoDetailViewModel..onFullScreenChanged 未获取WindowClass`)
         }
       },
-      onVideoFitChanged: (videoFit) => videoFit,
-      onVideoSizeChange: () => {},
+    onVideoFitChanged: (videoFit) => videoFit,
+    onVideoSizeChange: (w: number, h: number): void => {
+      this.videoWidth = w;
+      this.videoHeight = h;
+    },
       onProgressChange: (totalTime: number, currentTime: number) => {
         if (this.historyInfo) {
           this.historyInfo.totalTime = totalTime;
@@ -379,6 +388,8 @@ export class VideoDetailViewModel {
 
   // 处理页面显示
   public onPageShow() {
+    // 关闭"自动旋屏"时在视频页锁定竖屏，旋转手机不再改变窗口方向
+    this.applyOrientationLock();
     if (this.pausedOnHide) {
       if (!this.playerManager.isPlaying()) {
         this.playerManager.start();
@@ -389,6 +400,7 @@ export class VideoDetailViewModel {
 
   // 处理页面隐藏
   public async onPageHide() {
+    this.restoreOrientation();
     await this.saveHistoryInfo(true);
     ToastUtil.showToast({ message: '历史记录已保存' });
     // 触发历史记录更新事件
@@ -402,8 +414,38 @@ export class VideoDetailViewModel {
     }
   }
 
+  /**
+   * 按设置应用窗口方向：
+   * 开启"自动旋屏"→ 跟随系统（受锁定限制的自动旋转）；
+   * 关闭"自动旋屏"→ 视频页锁定竖屏，旋转手机不改变布局
+   */
+  private applyOrientationLock(): void {
+    const windowClass = _AnimeState.window
+    if (!windowClass) {
+      return
+    }
+    const orientation: window.Orientation = this.appSettings.auto_sensor_rotate
+      ? window.Orientation.AUTO_ROTATION_RESTRICTED
+      : window.Orientation.PORTRAIT
+    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
+      Logger.e('fail', `applyOrientationLock 设置窗口方向 code=${err.code}`, err)
+    })
+  }
+
+  /** 恢复窗口方向为跟随系统旋转 */
+  private restoreOrientation(): void {
+    const windowClass = _AnimeState.window
+    if (!windowClass) {
+      return
+    }
+    windowClass.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED).catch((err: BusinessError) => {
+      Logger.e('fail', `restoreOrientation 恢复窗口方向 code=${err.code}`, err)
+    })
+  }
+
   // 销毁资源
   public onDestroy() {
+    this.restoreOrientation();
     this.playerManager.destroy();
   }
 
@@ -422,10 +464,20 @@ export class VideoDetailViewModel {
     return false;
   }
 
+  /** 当前视频是否为竖向视频（宽 < 高） */
+  public isVerticalVideo(): boolean {
+    return this.videoWidth > 0 && this.videoHeight > 0 && this.videoHeight > this.videoWidth;
+  }
+
   // 处理手机横屏变化
   public onPhoneLandscape(isPhoneLandscape: boolean) {
+    // 仅在开启"自动旋屏"设置时响应传感器横竖屏切换
+    if (!this.appSettings.auto_sensor_rotate) {
+      return
+    }
     if (isPhoneLandscape) {
-      this.playerManager.enterFullScreen();
+      // 传感器触发的全屏保持跟随传感器，转回竖屏时可自动退出
+      this.playerManager.enterFullScreen(true);
     } else {
       this.playerManager.exitFullScreen();
     }

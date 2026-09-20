@@ -146,6 +146,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
       if (this.status == PlayerStatus.PAUSE) {
         await this.player.start()
       } else if (this.status == PlayerStatus.INITIALIZED) {
+        // 标记待播，保证 prepare 完成进入 PREPARED 后能自动续播
+        // （同步置 INITIALIZED 的后端如 ijk/mpv 会走到这里，AVPlayer 因异步时序走 IDLE 分支）
+        this.playAfterInit = true
         await this.player.prepare()
       } else if (this.status == PlayerStatus.ERROR) {
         //        await this.stop()
@@ -317,7 +320,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     return this.fullScreenMode
   }
 
-  enterFullScreen() {
+  enterFullScreen(sensorDriven: boolean = false) {
     if (this.fullScreenMode) {
       return
     }
@@ -325,8 +328,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
       win.setWindowLayoutFullScreen(true)
       // 隐藏状态栏
       win.setWindowSystemBarEnable([])
-      // 设置窗口方向为自动但横屏
-      win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_LANDSCAPE)
+      // 手动全屏锁定横屏；传感器触发的全屏保持跟随传感器旋转，
+      // 保证手机转回竖屏时窗口随之转回竖屏，从而自动退出全屏
+      const orientation = sensorDriven
+        ? window.Orientation.AUTO_ROTATION_RESTRICTED
+        : window.Orientation.AUTO_ROTATION_LANDSCAPE
+      win.setPreferredOrientation(orientation)
       this.fullScreenMode = true
       this.listeners.forEach((listener) => {
         console.log('PlayerManagerlmpl #enterFullScreen isFullScreen：', this.isFullScreen())

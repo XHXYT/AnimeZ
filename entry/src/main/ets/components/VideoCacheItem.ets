@@ -1,7 +1,7 @@
 import VideoDetailInfo from '../entity/VideoDetailInfo';
-import { TaskStatus, TaskStatusObserver } from '../download/core/Task';
-import { TaskManagerObserver } from '../download/core/TaskManager'
-import { ZDownloader } from '../download/ZDownloader'
+import { TaskStatus, TaskStatusObserver } from '../utils/download/core/Task';
+import { TaskManagerObserver } from '../utils/download/core/TaskManager'
+import { ZDownloader } from '../utils/download/ZDownloader'
 import EpisodeInfo from '../entity/EpisodeInfo'
 import Logger from '../utils/Logger'
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';

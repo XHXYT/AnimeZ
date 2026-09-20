@@ -6,7 +6,7 @@ import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
-import { _AnimeState } from '../../entryability/AnimeState';
+import { _AnimeState, AnimeState } from '../../entryability/AnimeState';
 
 // --- 导入 RedPlayer 相关模块 ---
 import {
@@ -31,6 +31,7 @@ export struct RedVideoPlayer {
   private player: IMediaPlayer | null = null;
   @Local videoAspRatio: number = DEFAULT_ASPECT;
   @Local aspRatio: number = DEFAULT_ASPECT;
+  @Local videoFit: VideoFit = VideoFit.Contain;
   @Local playStatus: number = PlayerStatus.IDLE;
   @Local playerStatus: number = PlayerStatus.IDLE;
   @Local isFullScreen: boolean = false;
@@ -261,9 +262,9 @@ export struct RedVideoPlayer {
         .onDestroy(() => {
           Logger.i('RedVideoPlayer', 'XComponent onDestroy');
         })
-        .width('100%')
-        .aspectRatio(this.videoAspRatio)
-        .height(this.isFullScreen ? '100%' : undefined)
+        .width(this.isSurfaceHeightDriven() ? undefined : '100%')
+        .aspectRatio(this.getSurfaceRatio())
+        .height(this.isSurfaceHeightDriven() ? '100%' : undefined)
 
       VideoPlayerController({ playerManager: this.playerManager })
         .width('100%')
@@ -271,8 +272,53 @@ export struct RedVideoPlayer {
     }
     .height(this.isFullScreen ? '100%' : undefined)
     .backgroundColor(Color.Black)
-    .aspectRatio(this.aspRatio)
+    .clip(true)
+    .aspectRatio(this.getOuterAspRatio())
     .width('100%')
+  }
+
+  /** 当前画面尺寸模式对应的渲染表面宽高比 */
+  private getSurfaceRatio(): number {
+    switch (this.videoFit) {
+      case VideoFit.Fill:
+        return this.getOuterAspRatio();
+      case VideoFit.Fit_16_9:
+        return 16 / 9;
+      case VideoFit.Fit_4_3:
+        return 4 / 3;
+      case VideoFit.Fit_1_1:
+        return 1;
+      case VideoFit.Cover:
+      case VideoFit.Contain:
+      default:
+        return this.videoAspRatio;
+    }
+  }
+
+  /**
+   * 渲染表面是否以高度为基准（高度撑满、宽度按比例收缩/溢出）：
+   * 适应/拉伸/固定比例时在容器内适配（宽高比小于容器则两侧留黑边），
+   * 铺满裁剪（Cover）时反向驱动，超出部分由外层裁剪
+   */
+  private isSurfaceHeightDriven(): boolean {
+    const surfaceRatio = this.getSurfaceRatio();
+    const outerRatio = this.getOuterAspRatio();
+    if (this.videoFit === VideoFit.Cover) {
+      return surfaceRatio > outerRatio;
+    }
+    return surfaceRatio < outerRatio;
+  }
+
+  /**
+   * 视频区外框比例：横屏窗口（宽 > 高）时钳制到可用窗口比例，
+   * 避免按视频比例计算出的高度超出屏幕（如手机 2.17 屏幕比 + 16:9 视频会上下溢出）
+   */
+  private getOuterAspRatio(): number {
+    if (AnimeState.windowWidth <= AnimeState.windowHeight) {
+      return this.aspRatio
+    }
+    const availableHeight = this.isFullScreen ? AnimeState.windowHeight : AnimeState.windowHeight - AnimeState.topRectHeight
+    return Math.max(this.aspRatio, AnimeState.windowWidth / availableHeight)
   }
 
   /** 业务监听器 */
@@ -285,6 +331,7 @@ export struct RedVideoPlayer {
     onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
+      this.videoFit = videoFit;
     },
     onFullScreenChanged: (isFullScreen: boolean) => {
       this.isFullScreen = isFullScreen;
@@ -298,7 +345,7 @@ export struct RedVideoPlayer {
     onBuffering: (type: media.BufferingInfoType, value: number) => {
     },
     onVideoSizeChange: (w: number, h: number): void => {
-      throw new Error('Function not implemented.');
+      // RedPlayer 暂无视频尺寸回调，保持默认比例
     }
   };
 }

@@ -96,7 +96,8 @@ struct SettingsPage {
           new MenuOption('video', 'VideoPlayer'),
           new MenuOption('av', 'AVPlayer'),
           new MenuOption('red', 'RedPlayer'),
-          new MenuOption('ijk', 'IjkPlayer')
+          new MenuOption('ijk', 'IjkPlayer'),
+          new MenuOption('mpv', 'MpvPlayer')
         ],
         onChange: (value) => {
           appSettings.default_player = value as string

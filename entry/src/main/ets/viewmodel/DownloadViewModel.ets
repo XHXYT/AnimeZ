@@ -1,8 +1,8 @@
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import { TaskStatus, TaskStatusObserver } from '../download/core/Task';
-import { TaskManagerObserver } from '../download/core/TaskManager';
+import { TaskStatus, TaskStatusObserver } from '../utils/download/core/Task';
+import { TaskManagerObserver } from '../utils/download/core/TaskManager';
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
-import { ZDownloader } from '../download/ZDownloader';
+import { ZDownloader } from '../utils/download/ZDownloader';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 

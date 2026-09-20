@@ -4,6 +4,7 @@ import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
 import { appSettings } from '../entryability/Settings';
 import { RedVideoPlayer } from './REDPlayer/RedPlayer';
+import { MpvVideoPlayer } from './MPV/MpvVideoPlayer';
 import { AbilityConstant, common } from '@kit.AbilityKit';
 
 
@@ -43,6 +44,9 @@ export struct MultiVideoPlayer {
       } else if (appSettings.default_player === 'red') {
         // 红薯播放器
         RedVideoPlayer({ playerManager: this.playerManager })
+      } else if (appSettings.default_player === 'mpv') {
+        // MPV播放器
+        MpvVideoPlayer({ playerManager: this.playerManager })
       } else {
         // IJK播放器
         IjkVideoPlayer({ playerManager: this.playerManager })

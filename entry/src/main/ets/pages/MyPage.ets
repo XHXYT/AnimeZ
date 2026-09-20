@@ -9,18 +9,13 @@ import { AnimeState } from '../entryability/AnimeState';
 import { historyViewModel } from '../viewmodel/HistoryViewModel';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 
-
 const TAG: string = 'MyPage'
 
 /**
- * 我的页面 （Stack布局 背景 + 功能）
+ * 我的页面（单 List 结构：条目级懒加载与独立测量，横向历史栏重排不牵动整页）
  */
 @ComponentV2
 export struct MyPage {
-
-  @Local bgHeight: number = 0
-
-  private readonly scroller = new Scroller()
 
   aboutToAppear() {
     // HISTORY_CHANGED_EVENT 已由 historyViewModel 常驻订阅，进入页面时显式刷新一次
@@ -28,66 +23,55 @@ export struct MyPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
-      // 我的页面整体背景图
-      Stack() {
-        Image($r('app.media.bg_main_nav'))
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Cover)
-        Row()
-          .width('100%')
-          .height('100%')
-          .backgroundColor($r('app.color.image_mask_color'))
+    List({ space: 16 }) {
+      // 应用标题栏
+      ListItem() {
+        this.Header()
       }
-      .width('100%')
-      .height(this.bgHeight)
-
-      Scroll(this.scroller) {
-        Column({ space: 16 }) {
-          // 应用标题栏
-          this.Header()
-          // 快捷工具栏Start（收藏、缓存）
-          Flex({ justifyContent: FlexAlign.SpaceAround }) {
-            this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
-              AnimeState.pageStack.pushPathByName("VideoCollectionPage", '', true)
-            })
-            this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
-              AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
-            })
-          }
-          .padding(8)
-          .backgroundColor($r('app.color.background_color'))
-          .borderRadius(16)
-          .onAreaChange((_, newArea) => {
-
+      // 快捷工具栏Start（收藏、缓存）
+      ListItem() {
+        Flex({ justifyContent: FlexAlign.SpaceAround }) {
+          this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
+            AnimeState.pageStack.pushPathByName("VideoCollectionPage", '', true)
           })
-          // 快捷工具栏End
-
-          // 观看历史列表
-          this.HistoryList()
-
-          // 更多设置项
-          this.MoreBuilder()
-
-          Text('本应用仅供学习交流！')
-            .fontSize(16)
-            .fontColor($r('app.color.color_text_major'))
-            .margin({ bottom: 16 })
-
+          this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
+            AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
+          })
         }
-        .padding({ left: 16, right: 16 })
-        .width('100%')
-        .constraintSize({
-          minHeight: '100%'
-        })
+        .padding(8)
+        .backgroundColor($r('app.color.background_color'))
+        .borderRadius(16)
       }
-      .edgeEffect(EdgeEffect.Spring)
-      .scrollBar(BarState.Off)
-      .width('100%')
-      .height('100%')
+      // 快捷工具栏End
+
+      // 观看历史列表
+      ListItem() {
+        this.HistoryList()
+      }
+
+      // 更多设置项
+      ListItem() {
+        this.MoreBuilder()
+      }
+
+      ListItem() {
+        Text('本应用仅供学习交流！')
+          .fontSize(16)
+          .fontColor($r('app.color.color_text_major'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ bottom: 16 })
+      }
     }
-    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
+    .contentEndOffset(57)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+    .padding({
+      left: 16,
+      right: 16,
+      top: AnimeState.topRectHeight,
+      bottom: AnimeState.bottomRectHeight - 20
+    })
     .backgroundColor($r('app.color.background_color_accent'))
     .width('100%')
     .height('100%')
@@ -185,14 +169,14 @@ export struct MyPage {
               ListItem() {
                 this.HistoryItem(item)
               }
-              .constraintSize({ maxHeight: 137 })
-              .height('100%')
+              .height(137)
               .aspectRatio(1)
             })
           }
-          .constraintSize({ maxHeight: 139 })
+          .height(139)
           .listDirection(Axis.Horizontal)
           .width('100%')
+          .scrollBar(BarState.Off)
         } else {
           Column() {
             Image($r('app.media.ic_empty'))

@@ -1,4 +1,4 @@
-import { Column } from '../../db/decorator/Decorators';
+import { Column } from '../../../db/decorator/Decorators';
 import { TaskStatus } from './Task';
 
 

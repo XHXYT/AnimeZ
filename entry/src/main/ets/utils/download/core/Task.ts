@@ -1,4 +1,4 @@
-import Logger from '../../utils/Logger';
+import Logger from '../../Logger';
 import TaskInfo from './TaskInfo';
 import TaskObserverDispatcher from './TaskObserverDispatcher';
 import TaskStatusManager from './TaskStatusManager';

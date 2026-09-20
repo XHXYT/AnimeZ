@@ -1,12 +1,12 @@
-import { TaskStatus } from '../download/core/Task';
-import { ZDownloader } from '../download/ZDownloader';
+import { TaskStatus } from '../utils/download/core/Task';
+import { ZDownloader } from '../utils/download/ZDownloader';
 import { VideoCacheItem } from './VideoCacheItem';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import EpisodeList from '../entity/EpisodeList';
 import VideoDetailInfo from '../entity/VideoDetailInfo';
 import Logger from '../utils/Logger';
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
-import { TaskManagerObserver } from '../download/core/TaskManager';
+import { TaskManagerObserver } from '../utils/download/core/TaskManager';
 import { AnimeState } from '../entryability/AnimeState';
 
 @ComponentV2

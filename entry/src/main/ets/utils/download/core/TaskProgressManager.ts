@@ -1,5 +1,5 @@
 import Task from './Task'
-import Logger from '../../utils/Logger'
+import Logger from '../../Logger'
 
 /**
  * 任务进度管理

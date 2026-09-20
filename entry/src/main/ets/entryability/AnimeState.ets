@@ -2,9 +2,8 @@ import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 
 /**
- * 全局应用状态单例（V2）
- * 参考 Pixark AppState.ets 模式：@ObservedV2 + @Trace 实现跨组件响应式，
- * 替代 V1 的 AppStorage/@StorageLink/@StorageProp/@Provide/@Consume 体系。
+ * 全局应用状态单例
+ * 模式：@ObservedV2 + @Trace 实现跨组件响应式
  */
 @ObservedV2
 export class _AnimeState {
@@ -37,8 +36,9 @@ export class _AnimeState {
   @Trace darkModeImage: boolean = false
   /** 手机横屏状态 */
   @Trace isPhoneLandscape: boolean = false
-
-  /** 当前生效颜色模式（EntryAbility 启动链与 onConfigurationUpdate 写入，替代幽灵 key currentColorMode） */
+  /** 窗口模式 true为PC窗口模式 false为普通窗口模式 */
+  @Trace windowMode: boolean = false
+  /** 当前生效颜色模式 */
   @Trace currentColorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
 
   /** WebView JS 解析通道：是否显示隐藏 WebView */

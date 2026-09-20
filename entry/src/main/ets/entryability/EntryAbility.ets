@@ -12,7 +12,6 @@ import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
 import { permissionManage } from '../utils/PermissionManage';
 import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
-import AbsTable from '../db/AbsTable';
 import SQLite from '../db/SQLite';
 
 
@@ -36,6 +35,11 @@ export default class EntryAbility extends UIAbility {
         const heightBp: HeightBreakpoint = this.getHeightBreakpoint(height, width);
         AnimeState.heightBp = heightBp;
         hilog.info(0x0000, 'WindowLog', '窗口高度：%{public}f vp 宽度：%{public}f vp', height, width);
+    };
+    // 自由窗口模式变化监听（true 为 PC 窗口模式，false 为普通窗口模式，持有引用供解绑）
+    private onFreeWindowModeChange: (data: boolean) => void = (data: boolean) => {
+        AnimeState.windowMode = data;
+        hilog.info(0x0000, 'WindowLog', '当前窗口模式 freeWindowMode：%{public}s', JSON.stringify(data));
     };
     // 避让区域变化监听（持有引用供解绑）
     private onAvoidAreaChange: (data: window.AvoidAreaOptions) => void = (data: window.AvoidAreaOptions) => {
@@ -192,6 +196,14 @@ export default class EntryAbility extends UIAbility {
             const widthBp: WidthBreakpoint = uiContext.getWindowWidthBreakpoint();
             AnimeState.widthBp = widthBp
 
+            // 窗口模式初始值（PC 自由窗口模式）
+            try {
+                AnimeState.windowMode = mainWindow.isInFreeWindowMode()
+            } catch (error) {
+                const err = error as BusinessError
+                console.error(`窗口模式获取失败，code: ${err.code} message: ${err.message}`);
+            }
+
             // 避让高度初始值
             this.readAvoidAreas(mainWindow)
             // 窗口尺寸初始值
@@ -200,6 +212,12 @@ export default class EntryAbility extends UIAbility {
             // 注册监听器
             mainWindow.on('windowSizeChange', this.onWindowSizeChange)
             mainWindow.on('avoidAreaChange', this.onAvoidAreaChange)
+            try {
+                mainWindow.on('freeWindowModeChange', this.onFreeWindowModeChange)
+            } catch (error) {
+                const err = error as BusinessError
+                console.error(`窗口模式监听注册失败，code: ${err.code} message: ${err.message}`);
+            }
         } catch (error) {
             const err = error as BusinessError
             console.error(`UI上下文获取失败，code: ${err.code} message: ${err.message}`);
@@ -266,6 +284,7 @@ export default class EntryAbility extends UIAbility {
         // 解绑窗口监听器
         this.mainWindow?.off('windowSizeChange', this.onWindowSizeChange)
         this.mainWindow?.off('avoidAreaChange', this.onAvoidAreaChange)
+        this.mainWindow?.off('freeWindowModeChange', this.onFreeWindowModeChange)
         this.mainWindow = undefined
         this.uiContext = undefined
     }

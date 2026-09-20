@@ -1,5 +1,5 @@
-import Logger from '../../utils/Logger';
-import DataStore from '../../utils/DataStore';
+import Logger from '../../Logger';
+import DataStore from '../../DataStore';
 
 
 const KEY_TASK_ID = 'key_task_id'

@@ -1,5 +1,5 @@
 import { MyPage } from './MyPage';
-import { HomePage } from './Homepage';
+import { HomePage } from './HomePage';
 import mediaQuery from '@ohos.mediaquery'
 import { appSettings } from '../entryability/Settings';
 import { AnimeState } from '../entryability/AnimeState';
@@ -23,12 +23,14 @@ struct Index {
     this.DarkModeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
       AnimeState.darkModeImage = mediaQueryResult.matches as boolean
     })
-    // 当开启自动旋屏和设备类型为手机时启用手机横屏监听
-    if (appSettings.auto_sensor_rotate && deviceInfo.deviceType === 'phone') {
+    // 当设备类型为手机时启用手机横屏监听（是否响应由 VideoDetailViewModel 结合"自动旋屏"设置判断，改设置无需重启）
+    if (deviceInfo.deviceType === 'phone') {
       this.PhoneLandscapeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
         AnimeState.isPhoneLandscape = mediaQueryResult.matches
         console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)
       })
+      // 读取初始状态，覆盖应用启动时已处于横屏的场景
+      AnimeState.isPhoneLandscape = this.PhoneLandscapeListener.matches
     }
   }
 
@@ -79,6 +81,7 @@ struct Index {
         AnimeState.currentIndex = index
       })
     }.hideToolBar(true)
+    .backgroundColor($r('app.color.background_color_accent'))
     .mode(NavigationMode.Stack)
     .width('100%').height('100%')
     .foregroundBlurStyle(appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,

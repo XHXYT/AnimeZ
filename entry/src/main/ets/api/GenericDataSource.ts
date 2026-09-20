@@ -14,8 +14,8 @@ import {
   selectFirst,
   selectTextContent,
   textContent,
-} from '../thirdpart/htmlsoup';
-import { AnyNode, HtmlTag } from '../thirdpart/htmlsoup/parse';
+} from '../utils/thirdpart/htmlsoup';
+import { AnyNode, HtmlTag } from '../utils/thirdpart/htmlsoup/parse';
 import {
   CategoryConfig, EpisodeConfig, ParserConfig, RecommendConfig,
   SelectorConfig, VideoConfig, ProcessConfig } from './DataSourceConfig';
