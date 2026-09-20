@@ -1,14 +1,14 @@
 
 import TitleBar from '../components/TitleBar'
-import { MenuItem, Preference, SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData'
-import { MenuSettingRow, SettingRow, ToggleSettingRow } from '../components/SettingsItem'
+import { CustomListItem } from '../components/CustomListItem'
+import { CustomItemInfo, ItemActionType, ItemGroupData, MenuOption, makeItemGroups } from '../entity/CusItemInfo'
 import { ColorModeManager } from '../utils/ColorModeManager'
 import { common } from '@kit.AbilityKit'
-import { deviceInfo } from '@kit.BasicServicesKit'
 import { appSettings } from '../entryability/Settings'
 import { dataSourceManager } from '../api/DataSourceManager'
 import Logger from '../utils/Logger'
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
+import { AnimeState } from '../entryability/AnimeState'
 
 // 系统路由
 @Builder
@@ -16,15 +16,163 @@ export function SettingsPageBuilder(name: string, param: Object) {
   SettingsPage()
 }
 
-@Component
+@ComponentV2
 struct SettingsPage {
 
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
+
+  /**
+   * 设置项数据（getter 每次求值，读 appSettings 最新值保证选中态同步）
+   */
+  private get itemList(): CustomItemInfo[] {
+    const sourceViews: ResourceStr[] = dataSourceManager.getTotalSourceTitle()
+    const sourceValues: string[] = dataSourceManager.getTotalKey()
+    return [
+      // 界面组
+      new CustomItemInfo({ id: 'group_appearance', title: '界面', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'color_mode',
+        title: '颜色主题',
+        type: ItemActionType.MENU,
+        value: appSettings.color_mode.toString(),
+        menuOptions: [
+          new MenuOption('0', '自动'),
+          new MenuOption('1', '白天'),
+          new MenuOption('2', '夜晚')
+        ],
+        onChange: (value) => {
+          appSettings.color_mode = Number(value)
+          ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
+        }
+      }),
+
+      // 数据组
+      new CustomItemInfo({ id: 'group_source', title: '数据', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'video_sources',
+        title: '视频源',
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("VideoSources", '', true)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'homepage_source',
+        title: '首页数据源',
+        type: ItemActionType.MENU,
+        value: dataSourceManager.getKey(),
+        menuOptions: sourceValues.map((key, index) => new MenuOption(key, sourceViews[index])),
+        onChange: (value) => {
+          if (typeof value === 'string') {
+            // 设置主页数据源
+            dataSourceManager.setDataSourceAsDefault(value).then(() => {
+              SOURCE_CHANGED_EVENT.emit()
+              console.log('主页数据源设置成功' + value)
+            }).catch((err: Error) => {
+              Logger.e('fail', '设置主页数据源', err)
+            })
+          }
+        }
+      }),
+      new CustomItemInfo({
+        id: 'video_source_import_overwrite',
+        title: '视频源覆盖更新',
+        subtitle: '导入配置自动覆盖更新',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.video_source_import_overwrite,
+        onChange: (value) => {
+          appSettings.video_source_import_overwrite = value as boolean
+        }
+      }),
+
+      // 播放组
+      new CustomItemInfo({ id: 'group_play', title: '播放', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'default_player',
+        title: '默认播放器',
+        type: ItemActionType.MENU,
+        value: appSettings.default_player,
+        menuOptions: [
+          new MenuOption('video', 'VideoPlayer'),
+          new MenuOption('av', 'AVPlayer'),
+          new MenuOption('red', 'RedPlayer'),
+          new MenuOption('ijk', 'IjkPlayer')
+        ],
+        onChange: (value) => {
+          appSettings.default_player = value as string
+        }
+      }),
+      new CustomItemInfo({
+        id: 'episodes_order',
+        title: '剧集列表排序',
+        type: ItemActionType.MENU,
+        value: appSettings.episodes_order as string,
+        menuOptions: [
+          new MenuOption('asc', '正序'),
+          new MenuOption('desc', '倒序')
+        ],
+        onChange: (value) => {
+          appSettings.episodes_order = value as "asc" | "desc"
+        }
+      }),
+      new CustomItemInfo({
+        id: 'auto_sensor_rotate',
+        title: '启用自动旋屏',
+        subtitle: '跟随传感器自动切换半屏/全屏播放',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_sensor_rotate,
+        onChange: (value) => {
+          appSettings.auto_sensor_rotate = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'auto_play_next_episode',
+        title: '自动播放下一集',
+        subtitle: '视频结束后自动播放下一集',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_next_episode,
+        onChange: (value) => {
+          appSettings.auto_play_next_episode = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'auto_play_on_no_wifi',
+        title: '非Wifi下自动播放',
+        subtitle: '非Wifi环境下不再提醒，自动播放视频',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_on_no_wifi,
+        onChange: (value) => {
+          appSettings.auto_play_on_no_wifi = value as boolean
+        }
+      }),
+
+      // 更多组
+      new CustomItemInfo({ id: 'group_more', title: '更多', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'app_info',
+        title: '应用信息',
+        subtitle: $r('app.string.module_desc'),
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("AppInfoPage", '')
+        }
+      }),
+      new CustomItemInfo({
+        id: 'author_info',
+        title: '关于作者',
+        subtitle: '这人很懒，什么都没有写！',
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("AboutMePage", '')
+        }
+      })
+    ]
+  }
+
+  /** 分组结果（供 ForEach 与间距判断复用） */
+  private get groups(): ItemGroupData[] {
+    return makeItemGroups(this.itemList)
+  }
 
   build() {
     NavDestination() {
@@ -35,77 +183,33 @@ struct SettingsPage {
         Scroll() {
           Column() {
             ForEach(
-              this.getSettings(),
-              (group: SettingGroup<SettingGroupType>, index) => {
+              this.groups,
+              (group: ItemGroupData, index) => {
                 Column() {
-                  if (group.title) {
-                    // 标题行
-                    Row() {
-                      Row()
-                        .backgroundColor($r('app.color.primary_color'))
-                        .height(14)
-                        .width(6)
-                        .margin({ right: 2 })
-                        .borderRadius(4)
-                      Text(group.title)
-                        .fontColor($r('app.color.color_text_major'))
-                        .fontSize(16)
-                        .fontWeight(FontWeight.Bold)
-                    }
-                    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-                    .width('100%')
+                  if (group.group) {
+                    this.GroupHeader(group.group.title)
                   }
                   // 设置项
                   ForEach(
-                    group.settings,
-                    (setting: SettingItem<SettingGroupType>) => {
-                      if (setting.preference?.type === 'switch') {
-                        ToggleSettingRow({
-                          isOn: setting.preference.defaultValue as boolean,
-                          title: setting.title,
-                          subtitle: setting.info,
-                          preference: setting.preference as Preference<boolean>
-                        })
-                      } else if (setting.preference?.type === 'radio') {
-
-                      } else if (setting.preference?.type === 'menu') {
-                        MenuSettingRow({
-                          selected: setting.preference.defaultValue as string,
-                          title: setting.title,
-                          icons: setting.icon,
-                          info: setting.info as string,
-                          preference: setting.preference as Preference<string>
-                        })
-                      } else {
-                        SettingRow({
-                          icons: setting.icon,
-                          title: setting.title,
-                          subtitle: setting.info,
-                          onCheck: () => {
-                            if (setting.onClick) {
-                              setting.onClick(
-                                setting,
-                                () => { },
-                              )
-                            }
-                          }
-                        })
-                      }
+                    group.items,
+                    (item: CustomItemInfo) => {
+                      CustomListItem({
+                        item: item,
+                        itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
+                      })
                     },
-                    (setting: SettingItem<SettingGroupType>) => setting.settings_key
+                    (item: CustomItemInfo) => item.id
                   )
                 }
                 .backgroundColor($r('app.color.background_color'))
                 .borderRadius(16)
 
-                if (index < this.getSettings().length - 1) {
+                if (index < this.groups.length - 1) {
                   Blank().height(16)
                 }
               },
               // 唯一键生成
-              (group: SettingGroup<SettingGroupType>) => {
-                return group.key || String(group.settings.length)
-              }
+              (group: ItemGroupData) => group.group?.id ?? String(group.items.length)
             )
           }
           .padding(16)
@@ -123,7 +227,7 @@ struct SettingsPage {
         .padding(8)
 
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -131,261 +235,25 @@ struct SettingsPage {
     .height('100%')
   }
 
-  getSettings(): SettingGroup<SettingGroupType>[] {
-    return [
-      {
-        title: '界面',
-        key: 'appearance',
-        settings: [
-          { title: '颜色主题', info: '自动',
-            settings_key: 'color_mode',
-            preference: {
-              type: 'menu',
-              defaultValue: appSettings.color_mode.toString(),
-              menu: [
-                {
-                  view: '自动',
-                  value: '0'
-                },
-                {
-                  view: '白天',
-                  value: '1'
-                },
-                {
-                  view: '夜晚',
-                  value: '2'
-                }
-              ],
-              onValueChange: (value) => {
-                appSettings.color_mode = Number(value)
-                ColorModeManager.switchColorMode(this.context, appSettings.color_mode)
-              }
-            }
-          }
-        ]
-      },
-      {
-        title: '数据',
-        key: 'source',
-        settings: [
-          {
-            title: '视频源',
-            settings_key: 'video_sources',
-            onClick: () => {
-              this.pageStack.pushPathByName("VideoSources", '', true)
-            }
-          },
-          {
-            title: '首页数据源',
-            settings_key: 'homepage_source',
-            preference: {
-              type: 'menu',
-              defaultValue: dataSourceManager.getKey(),
-              menu: this.getSourcesMenu(dataSourceManager.getTotalSourceTitle(), dataSourceManager.getTotalKey()),
-              onValueChange: (value) => {
-                if (typeof value === 'string') {
-                  // 设置主页数据源
-                  dataSourceManager.setDataSourceAsDefault(value).then(() => {
-                    SOURCE_CHANGED_EVENT.emit()
-                    console.log('主页数据源设置成功' + value)
-                  }).catch((err: Error) => {
-                    Logger.e('fail', '设置主页数据源', err)
-                  })
-                }
-              }
-            }
-          },
-          {
-            title: '视频源覆盖更新',
-            info: '导入配置自动覆盖更新',
-            settings_key: 'video_source_import_overwrite',
-            preference: {
-              type: 'switch',
-              menu: [],
-              defaultValue: appSettings.video_source_import_overwrite,
-              onValueChange: (value) => {
-                appSettings.video_source_import_overwrite = value as boolean
-              }
-            }
-          },
-        ]
-      },
-      {
-        title: '播放',
-        key: 'play',
-        settings: [
-          { title: '默认播放器', info: 'AVPlayer',
-            settings_key: 'default_player',
-            preference: {
-              type: 'menu',
-              defaultValue: appSettings.default_player,
-              menu: [
-                {
-                  view: 'VideoPlayer',
-                  value: 'video'
-                },
-                {
-                  view: 'AVPlayer',
-                  value: 'av'
-                },
-                {
-                  view: 'RedPlayer',
-                  value: 'red'
-                },
-                {
-                  view: 'IjkPlayer',
-                  value: 'ijk'
-                }
-              ],
-              onValueChange: (value) => {
-                appSettings.default_player = value as string
-              }
-            }
-          },
-          { title: '剧集列表排序', info: '正序',
-            settings_key: 'episodes_order',
-            preference: {
-              type: 'menu',
-              defaultValue: appSettings.episodes_order as string,
-              menu: [
-                {
-                  view: '正序',
-                  value: 'asc'
-                },
-                {
-                  view: '倒序',
-                  value: 'desc'
-                }
-              ],
-              onValueChange: (value) => {
-                appSettings.episodes_order = value as "asc" | "desc"
-              }
-            }
-          },
-          {
-            title: '启用自动旋屏',
-            info: '跟随传感器自动切换半屏/全屏播放',
-            settings_key: 'auto_sensor_rotate',
-            preference: {
-              type: 'switch',
-              menu: [],
-              defaultValue: appSettings.auto_sensor_rotate,
-              onValueChange: (value) => {
-                appSettings.auto_sensor_rotate = value as boolean
-              }
-            }
-          },
-          {
-            title: '自动播放下一集',
-            info: '视频结束后自动播放下一集',
-            settings_key: 'auto_play_next_episode',
-            preference: {
-              type: 'switch',
-              menu: [],
-              defaultValue: appSettings.auto_play_next_episode,
-              onValueChange: (value) => {
-                appSettings.auto_play_next_episode = value as boolean
-              }
-            }
-          },
-          {
-            title: '非Wifi下自动播放',
-            info: '非Wifi环境下不再提醒，自动播放视频',
-            settings_key: 'auto_play_on_no_wifi',
-            preference: {
-              type: 'switch',
-              menu: [],
-              defaultValue: appSettings.auto_play_on_no_wifi,
-              onValueChange: (value) => {
-                appSettings.auto_play_on_no_wifi = value as boolean
-              }
-            }
-          }
-        ]
-      },
-      /* {
-         title: '下载',
-         settings: [
-           {
-             title: '自动恢复下载',
-             info: 'Wifi环境下软件启动后自动恢复未完成的下载任务',
-             preference: {
-               key: Settings.KEY_AUTO_RESUME_DOWNLOAD_ON_WIFI,
-               type: 'switch',
-               defaultValue: false
-             }
-           },
-           { title: '最大同时下载任务数', info: '' + Settings.getMaxDownloadingCount(),
-             onClick: (item, callback) => {
-               let controller = new CustomDialogController({
-                 builder: SliderDialog({
-                   select: (value) => {
-                     if (callback) {
-                       item.info = '' + value
-                       callback()
-                     }
-                   },
-                   onClose: () => {
-                     controller.close()
-                   }
-                 }),
-                 cancel: () => {
-                   console.log("cancel")
-                 },
-                 autoCancel: true,
-                 customStyle: true
-               });
-               controller.open()
-             }
-           }
-         ]
-       },*/
-      {
-        title: '更多',
-        key:'more',
-        settings: [
-          /* { TODO 检查更新
-             title: '检查更新',
-             info: '1.0.1',
-             settings_key: 'update',
-             iconBlendColor: Color.Black,
-             onClick: () => {
-
-             }
-           },*/
-          {
-            title: '应用信息',
-            info: $r('app.string.module_desc'),
-            settings_key: 'app_info',
-            onClick: () => {
-              this.pageStack.pushPathByName("AppInfoPage", '')
-            }
-          },
-          {
-            title: '关于作者',
-            info: '这人很懒，什么都没有写！',
-            settings_key: 'author_info',
-            onClick: () => {
-              this.pageStack.pushPathByName("AboutMePage", '')
-            }
-          }
-        ]
-      }
-    ]
-  }
-
   /**
-   * 获取Source菜单
-   * @param views name 数组
-   * @param values key 数组
-   * @returns 合并后的 MenuItem 数组
+   * 分组标题（保持原色条视觉）
    */
-  getSourcesMenu(views: ResourceStr[], values: string[]): MenuItem[] {
-    // 使用 map 遍历 views 数组，同时获取 index
-    return views.map((view, index) => {
-      const value = values[index];
-      return { view: view, value: value } as MenuItem
-    })
+  @Builder
+  GroupHeader(title: ResourceStr) {
+    Row() {
+      Row()
+        .backgroundColor($r('app.color.primary_color'))
+        .height(14)
+        .width(6)
+        .margin({ right: 2 })
+        .borderRadius(4)
+      Text(title)
+        .fontColor($r('app.color.color_text_major'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+    }
+    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
+    .width('100%')
   }
 
 }
