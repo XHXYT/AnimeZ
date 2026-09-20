@@ -20,6 +20,10 @@ export default abstract class AbsTable<T> implements ITable {
   protected futureDb: Promise<rdb.RdbStore>
 
   constructor(dbName: string, tableName: string, context: Context) {
+    if (!dbName.toLowerCase().endsWith('.db')) {
+      dbName = dbName + '.db';
+      console.debug(`Auto append .db suffix: ${dbName}`);
+    }
     this.dbName = dbName
     this.tableName = tableName
     this.futureDb = this.initDb(context)

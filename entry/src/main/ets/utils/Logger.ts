@@ -66,4 +66,5 @@ export default class Logger {
         }
         return args;
     }
+
 }
