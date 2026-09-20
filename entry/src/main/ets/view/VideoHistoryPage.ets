@@ -9,7 +9,8 @@ import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
-import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
+import { AnimeState } from '../entryability/AnimeState';
+import { historyViewModel } from '../viewmodel/HistoryViewModel';
 
 // 系统路由
 @Builder
@@ -18,24 +19,19 @@ export function VideoHistoryPageBuilder(name: string, param: Object) {
 }
 
 
-@Component
+@ComponentV2
 struct VideoHistoryPage {
-  @Consume onShow: boolean
-  @State state: number = 0
-  @State errorMessage: string = ''
-  @State selectMode: boolean = false
-  @State selectCount: number = 0
-  @State hasSelectAll: boolean = false
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageLink('HistoryList') items: VideoHistoryInfo[] = []
+  @Local selectMode: boolean = false
+  @Local selectCount: number = 0
+  @Local hasSelectAll: boolean = false
 
-  @State selectionManager: SelectionManager<VideoHistoryInfo> = new SelectionManager<VideoHistoryInfo>()
+  @Local selectionManager: SelectionManager<VideoHistoryInfo> = new SelectionManager<VideoHistoryInfo>()
 
-  private videoHistoryInfoDB = new VideoHistoryTable(this.getUIContext().getHostContext()!)
+  /** 页面展示态由 VM 数据推导（原 state 镜像的 EMPTY/CONTENT 逻辑） */
+  private get viewState(): number {
+    return historyViewModel.historyList.length == 0 ? ViewState.EMPTY : ViewState.CONTENT
+  }
+
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
@@ -45,21 +41,21 @@ struct VideoHistoryPage {
     },
     onSelectChange: (item: VideoHistoryInfo, isSelected) => {
       this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == this.items.length
+      this.hasSelectAll = this.selectCount == historyViewModel.historyList.length
     }
   }
 
   aboutToAppear() {
-    this.onShow = false
-    this.state = ViewState.CONTENT
+    AnimeState.onShow = false
     this.selectionManager.addObserver(this.selectionObserver)
     this.selectMode = this.selectionManager.isSelectionMode()
+    // 幂等刷新，保证进入页面数据新鲜（VM 常驻订阅事件，跨页存活）
+    historyViewModel.loadHistoryList()
   }
 
   aboutToDisappear() {
     this.selectionManager.removeObserver(this.selectionObserver)
-    this.state = ViewState.CONTENT
-    this.onShow = true
+    AnimeState.onShow = true
   }
 
 
@@ -74,13 +70,13 @@ struct VideoHistoryPage {
       })
 
       StateView({
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.viewState,
+          errorMessage: '',
           content: () => {
             this.HistoryList()
           },
           onRetry: () => {
-            this.loadHistoryList()
+            historyViewModel.loadHistoryList()
             return true;
           }
         })
@@ -104,7 +100,7 @@ struct VideoHistoryPage {
             if (this.hasSelectAll) {
               this.selectionManager.clearSelections()
             } else {
-              this.selectionManager.selectItems(this.items)
+              this.selectionManager.selectItems(historyViewModel.historyList)
             }
           })
 
@@ -136,7 +132,7 @@ struct VideoHistoryPage {
                       await Promise.all(
                         data.map(async (item) => {
                           if (item.id) {
-                            await this.deleteHistoryListItem(item.id);
+                            await historyViewModel.deleteHistoryListItem(item.id);
                             completed++;
                             ToastUtil.showToast({
                               message: `删除进度: ${completed}/${total}`
@@ -160,7 +156,7 @@ struct VideoHistoryPage {
       }
 
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -177,7 +173,7 @@ struct VideoHistoryPage {
 
   @Builder
   EditButton() {
-    if (this.state == ViewState.CONTENT) {
+    if (this.viewState == ViewState.CONTENT) {
       Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
         .width(24)
         .height(24)
@@ -192,7 +188,7 @@ struct VideoHistoryPage {
   @Builder
   HistoryList() {
     List({space: 16}) {
-      ForEach(this.items, (item: VideoHistoryInfo) => {
+      ForEach(historyViewModel.historyList, (item: VideoHistoryInfo) => {
         ListItem() {
           HistoryItem({selectionManager: this.selectionManager, item: item})
         }
@@ -209,7 +205,7 @@ struct VideoHistoryPage {
             cover: item.coverUrl as string
           }
           console.log('VideoTest 历史记录页传递的params：', JSON.stringify(params))
-          this.pageStack.pushPathByName("VideoDetailPage", params)
+          AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
         })
         .swipeAction({
           end: {
@@ -218,8 +214,7 @@ struct VideoHistoryPage {
             onAction: () => {
               ToastUtil.animateTo({ duration: 1000 }, () => {
                 // 侧滑删除
-                this.deleteHistoryListItem(item.id)
-                this.loadHistoryList()
+                historyViewModel.deleteHistoryListItem(item.id)
               })
             },
             // onAction 侧滑距离
@@ -256,37 +251,11 @@ struct VideoHistoryPage {
         .backgroundColor('#FF5E5D')
         .onClick(() => {
           // 删除列表行
-          this.deleteHistoryListItem(id)
-          this.loadHistoryList()
+          historyViewModel.deleteHistoryListItem(id)
         })
     }
     .height('100%')
     .justifyContent(FlexAlign.SpaceEvenly)
-  }
-
-  private async loadHistoryList() {
-    // 查询全部历史记录
-    const list = await this.videoHistoryInfoDB.queryAllByAccessTimeDesc()
-    // 如果有历史记录，回显到页面中
-    if (list) {
-      // 倒序查询入组
-      this.items = list
-      console.log('VideoHistoryTest 历史记录页数据：', JSON.stringify(this.items))
-      if (this.items.length == 0) {
-        this.state = ViewState.EMPTY
-      } else {
-        this.state = ViewState.CONTENT
-      }
-    }
-  }
-
-  async deleteHistoryListItem(id: number) {
-    try {
-      await this.videoHistoryInfoDB.deleteById(id)
-      this.items = this.items.filter(value => { value.id != id })
-    } catch (err) {
-      Logger.e('fail', `videoHistoryInfoDB 删除 ${id} `, err)
-    }
   }
 
 }
@@ -294,16 +263,15 @@ struct VideoHistoryPage {
 /**
  * 历史记录项
  */
-@Component
+@ComponentV2
 struct HistoryItem {
 
-  @Prop item: VideoHistoryInfo
-  @State isSelected: boolean = false
-  @State selectionMode: boolean = false
-  @Link selectionManager: SelectionManager<VideoHistoryInfo>
-  @State selectionIconMargin: number = 0
-  @State selectionIconSize: number = 0
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+  @Require @Param item: VideoHistoryInfo
+  @Require @Param selectionManager: SelectionManager<VideoHistoryInfo>
+  @Local isSelected: boolean = false
+  @Local selectionMode: boolean = false
+  @Local selectionIconMargin: number = 0
+  @Local selectionIconSize: number = 0
 
   private readonly selectionObserver: OnSelectChangeObserver<VideoHistoryInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
@@ -370,7 +338,7 @@ struct HistoryItem {
         .borderRadius(8)
         .shadow({
           radius: 12,
-          color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa',
+          color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa',
           offsetX: 6, offsetY: 6 })
 
       Column() {

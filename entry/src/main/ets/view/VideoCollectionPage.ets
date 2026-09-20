@@ -7,8 +7,9 @@ import TitleBar from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
-import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
+import { AnimeState } from '../entryability/AnimeState';
+import { collectionViewModel } from '../viewmodel/CollectionViewModel';
 
 // 系统路由
 @Builder
@@ -16,27 +17,19 @@ export function VideoCollectionPageBuilder(name: string, param: Object) {
   VideoCollectionPage()
 }
 
-@Component
+@ComponentV2
 struct VideoCollectionPage {
-  @Consume onShow: boolean
-  @State state: number = 0
-  @State errorMessage: string = ''
-  @State items: VideoCollectionInfo[] = []
-  @State selectMode: boolean = false
-  @State selectCount: number = 0
-  @State hasSelectAll: boolean = false
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 当前颜色模式
-  @StorageLink('currentColorMode') currentMode: number = 1
-  @StorageProp('UIContext') UIContext: UIContext = this.getUIContext()
+  @Local selectMode: boolean = false
+  @Local selectCount: number = 0
+  @Local hasSelectAll: boolean = false
 
-  @State selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
+  @Local selectionManager: SelectionManager<VideoCollectionInfo> = new SelectionManager<VideoCollectionInfo>()
 
-  private videoCollectionInfoDB = new VideoCollectionTable(this.getUIContext().getHostContext()!)
+  /** 页面展示态由 VM 数据推导（原 state 镜像的 EMPTY/CONTENT 逻辑） */
+  private get viewState(): number {
+    return collectionViewModel.collectionList.length == 0 ? ViewState.EMPTY : ViewState.CONTENT
+  }
+
   private readonly selectionObserver: OnSelectChangeObserver<VideoCollectionInfo> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
@@ -46,30 +39,20 @@ struct VideoCollectionPage {
     },
     onSelectChange: (item: VideoCollectionInfo, isSelected) => {
       this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == this.items.length
+      this.hasSelectAll = this.selectCount == collectionViewModel.collectionList.length
     }
   }
 
   aboutToAppear() {
-    this.onShow = false
-    this.loadCollectionList()
-    this.state = ViewState.CONTENT
+    AnimeState.onShow = false
+    collectionViewModel.loadCollectionList()
     this.selectionManager.addObserver(this.selectionObserver)
     this.selectMode = this.selectionManager.isSelectionMode()
   }
 
   aboutToDisappear() {
     this.selectionManager.removeObserver(this.selectionObserver)
-    this.state = ViewState.CONTENT
-    this.onShow = true
-  }
-
-  onBackPress() {
-    if (this.selectionManager.isSelectionMode()) {
-      this.selectionManager.toggleSelectionMode()
-      return true
-    }
-    return false
+    AnimeState.onShow = true
   }
 
   build() {
@@ -84,13 +67,13 @@ struct VideoCollectionPage {
 
       StateView(
         {
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.viewState,
+          errorMessage: '',
           content: () => {
             this.CollectionList()
           },
           onRetry: () => {
-            this.loadCollectionList()
+            collectionViewModel.loadCollectionList()
             return true;
           }
         }
@@ -114,7 +97,7 @@ struct VideoCollectionPage {
             if (this.hasSelectAll) {
               this.selectionManager.clearSelections()
             } else {
-              this.selectionManager.selectItems(this.items)
+              this.selectionManager.selectItems(collectionViewModel.collectionList)
             }
           })
 
@@ -128,7 +111,7 @@ struct VideoCollectionPage {
                 return
               }
 
-              this.UIContext.showAlertDialog(
+              this.getUIContext().showAlertDialog(
                 {
                   title: '移除收藏动漫',
                   message: `确认移除选中的${this.selectCount}项收藏动漫？`,
@@ -143,11 +126,10 @@ struct VideoCollectionPage {
                     action: () => {
                       const data = Array.from(this.selectionManager.getSelections())
                       data.forEach((item: VideoCollectionInfo) => {
-                        this.deleteCollectionList(item.id)
+                        collectionViewModel.deleteCollectionListItem(item.id)
                       })
                       ToastUtil.showToast({ message: "删除成功" })
                       this.selectionManager.toggleSelectionMode()
-                      this.loadCollectionList()
                     }
                   }
                 }
@@ -160,17 +142,25 @@ struct VideoCollectionPage {
       }
 
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
     .width('100%')
     .height('100%')
+    .onBackPressed(() => {
+      // 选择模式返回时优先退出选择模式
+      if (this.selectionManager.isSelectionMode()) {
+        this.selectionManager.toggleSelectionMode()
+        return true
+      }
+      return false
+    })
   }
 
   @Builder
   EditButton() {
-    if (this.state == ViewState.CONTENT) {
+    if (this.viewState == ViewState.CONTENT) {
       Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
         .width(24)
         .height(24)
@@ -184,7 +174,7 @@ struct VideoCollectionPage {
 
   @Builder CollectionList() {
     List({space: 16}) {
-      ForEach(this.items, (item: VideoCollectionInfo) => {
+      ForEach(collectionViewModel.collectionList, (item: VideoCollectionInfo) => {
         ListItem() {
           CollectionItem({selectionManager: this.selectionManager, item: item})
         }
@@ -201,7 +191,7 @@ struct VideoCollectionPage {
             cover: item.coverUrl as string
           }
           console.log('VideoTest 视频收藏页传递的params：', JSON.stringify(params))
-          this.pageStack.pushPathByName("VideoDetailPage", params)
+          AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
         })
         .swipeAction({
           end: {
@@ -210,8 +200,7 @@ struct VideoCollectionPage {
             onAction: () => {
               animateTo({ duration: 1000 }, () => {
                 // 侧滑删除
-                this.deleteCollectionList(item.id)
-                this.loadCollectionList()
+                collectionViewModel.deleteCollectionListItem(item.id)
               })
             },
             // onAction 侧滑距离
@@ -248,34 +237,11 @@ struct VideoCollectionPage {
         .backgroundColor('#FF5E5D')
         .onClick(() => {
           // 删除列表行
-          this.deleteCollectionList(id)
-          this.loadCollectionList()
+          collectionViewModel.deleteCollectionListItem(id)
         })
     }
     .height('100%')
     .justifyContent(FlexAlign.SpaceEvenly)
-  }
-
-  private async loadCollectionList() {
-    const list = await this.videoCollectionInfoDB.queryAll()
-    // 如果有历史记录，回显到页面中
-    // 查询入组
-    this.items = list
-    console.log('VideoCollectionTest 收藏页数据：', JSON.stringify(this.items))
-    if (this.items.length == 0) {
-      this.state = ViewState.EMPTY
-    } else {
-      this.state = ViewState.CONTENT
-    }
-  }
-
-  async deleteCollectionList(id: number) {
-    try {
-      await this.videoCollectionInfoDB.deleteById(id)
-      this.items = this.items.filter(value => { value.id != id })
-    } catch (err) {
-      Logger.e('fail', `videoCollectionInfoDB 删除 ${id} `, err)
-    }
   }
 
 }
@@ -283,16 +249,15 @@ struct VideoCollectionPage {
 /**
  * 收藏项
  */
-@Component
+@ComponentV2
 struct CollectionItem {
 
-  @State selectionMode: boolean = false
-  @State isSelected: boolean = false
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-  @Link selectionManager: SelectionManager<VideoCollectionInfo>
-  @State selectionIconMargin: number = 0
-  @State selectionIconSize: number = 0
-  @Prop item: VideoCollectionInfo
+  @Require @Param item: VideoCollectionInfo
+  @Require @Param selectionManager: SelectionManager<VideoCollectionInfo>
+  @Local isSelected: boolean = false
+  @Local selectionMode: boolean = false
+  @Local selectionIconMargin: number = 0
+  @Local selectionIconSize: number = 0
 
   build() {
     Row() {
@@ -309,7 +274,7 @@ struct CollectionItem {
         .margin({left: 16})
         .aspectRatio(1.5)
         .borderRadius(8)
-        .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+        .shadow({ radius: 12, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
       Column() {
         Text(this.item.title)
           .alignSelf(ItemAlign.Start)
