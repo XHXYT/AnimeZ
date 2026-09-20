@@ -2,9 +2,8 @@
 import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { DEFAULT_DURATION } from '../utils/TransitionHelper';
 import { ToastUtil } from '../utils/ToastUtils';
-import { AppConfigs } from '../entryability/Settings';
+import { AppConfigs, appSettings } from '../entryability/Settings';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { PanelController } from '../components/CustomPanel';
@@ -14,17 +13,17 @@ import SystemBarUtils from '../utils/SystemBarUtils';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { StringUtils } from '../utils/StringUtils';
-import { window } from '@kit.ArkUI';
+import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 
 
-@Observed
+@ObservedV2
 export class VideoDetailViewModel {
   // 视频详情信息
-  public videoDetailInfo: VideoDetailInfo = {
+  @Trace public videoDetailInfo: VideoDetailInfo = {
     title: '',
     sourceKey: '',
     coverUrl: '',
@@ -33,14 +32,14 @@ export class VideoDetailViewModel {
   };
 
   // 播放状态
-  public isCollect: boolean = false;
-  public episodeIndex: number = 0;
-  public episodeListIndex: number = 0;
-  public isFullScreen: boolean = false;
-  public isBackgroundLoaded: boolean = false;
-  public state: number = 0;
-  public errorMessage: string = '';
-  public panelContentType: number = 0;
+  @Trace public isCollect: boolean = false;
+  @Trace public episodeIndex: number = 0;
+  @Trace public episodeListIndex: number = 0;
+  @Trace public isFullScreen: boolean = false;
+  @Trace public isBackgroundLoaded: boolean = false;
+  @Trace public state: number = 0;
+  @Trace public errorMessage: string = '';
+  @Trace public panelContentType: number = 0;
   public isFirstPlay: boolean = true;
   public isFreeWindow: boolean = false;
 
@@ -52,7 +51,7 @@ export class VideoDetailViewModel {
   public url: string = ''; // 剧集链接
 
   // 历史和收藏信息
-  public historyInfo: VideoHistoryInfo = HistoryInfo;
+  @Trace public historyInfo: VideoHistoryInfo = HistoryInfo;
   public collectionInfo: VideoCollectionInfo = {
     id: null,
     link: '',
@@ -67,8 +66,8 @@ export class VideoDetailViewModel {
   // 播放器管理
   public playerManager: IPlayerManager;
 
-  // 应用设置
-  public appSettings: AppConfigs;
+  // 应用设置（模块级单例）
+  public readonly appSettings: AppConfigs = appSettings;
 
   // 私有变量
   private saveCount: number = 0
@@ -77,11 +76,10 @@ export class VideoDetailViewModel {
   private onFullScreenChangedCallback?: (isFullScreen: boolean) => void;
   private onProgressChangeCallback?: (totalTime: number, currentTime: number) => void;
 
-  constructor(playerManager: IPlayerManager, appSettings: AppConfigs, context: Context) {
+  constructor(playerManager: IPlayerManager, context: Context) {
     this.videoCollectionInfoDB = new VideoCollectionTable(context)
     this.videoHistoryInfoDB = new VideoHistoryTable(context)
     this.playerManager = playerManager;
-    this.appSettings = appSettings;
     this.initPlayerListener();
   }
 
@@ -107,7 +105,7 @@ export class VideoDetailViewModel {
       onFullScreenChanged: (isFullScreen: boolean) => {
         this.isFullScreen = isFullScreen;
         this.onFullScreenChangedCallback?.(isFullScreen);
-        const windowClass = AppStorage.get<window.Window>('WindowClass')
+        const windowClass = _AnimeState.window
         if (windowClass) {
           if (!isFullScreen) {
             // 退出横屏小窗
@@ -258,10 +256,10 @@ export class VideoDetailViewModel {
 
       // 准备并激活WebView
       // *** 在开始轮询前，先清空上一次的结果，防止读到旧数据 ***
-      AppStorage.setOrCreate<string>('web_js_video_link', '');
-      AppStorage.setOrCreate<string>('webview_url', rawLink);
-      AppStorage.setOrCreate<string>('run_js', js);
-      AppStorage.setOrCreate<boolean>('showWebView', true)
+      AnimeState.webJsVideoLink = ''
+      AnimeState.webviewUrl = rawLink
+      AnimeState.runJs = js
+      AnimeState.showWebView = true
       console.info(`checkParesVideoLink: 已激活WebView，目标URL: ${url}, JS:${js}`);
 
       // 开始轮询等待结果
@@ -273,19 +271,19 @@ export class VideoDetailViewModel {
         // 检查是否超时
         if (Date.now() - startTime > timeoutMs) {
           // 超时后，隐藏WebView并抛出错误
-          AppStorage.setOrCreate<boolean>('showWebView', false);
+          AnimeState.showWebView = false
           console.error('checkParesVideoLink: 轮询超时，未能获取JS结果。');
           return Promise.reject(new Error('JS execution timed out.'));
         }
 
-        // 从AppStorage获取JS执行结果
-        const jsLink = AppStorage.get<string>('web_js_video_link');
+        // 从全局状态获取JS执行结果
+        const jsLink = AnimeState.webJsVideoLink;
 
         // 如果结果存在且不为空，说明JS已执行并返回了值
         if (jsLink && jsLink !== '' && jsLink.includes('http')) {
           console.info(`checkParesVideoLink: 成功获取JS链接: ${jsLink}`);
           // 隐藏WebView
-          AppStorage.setOrCreate<boolean>('showWebView', false);
+          AnimeState.showWebView = false
           // 返回结果
           return jsLink;
         }

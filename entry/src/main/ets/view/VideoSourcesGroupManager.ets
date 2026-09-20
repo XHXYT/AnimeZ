@@ -1,12 +1,14 @@
 import TitleBar from '../components/TitleBar'
 import { VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
+import { SelectionManager } from '../utils/SelectionManager'
+import { DataSourceConfig } from '../api/DataSourceConfig'
 import { CustomContentDialog } from '@kit.ArkUI'
 import { BusinessError } from '@kit.BasicServicesKit'
 
 @Component
 export struct GroupManager {
 
-  @Link viewModel: VideoSourcesViewModel
+  viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(new SelectionManager<DataSourceConfig>())
   @State groupName: string = ''
   @State isNewGroup: boolean = false
   @State editingGroupName: string = ''

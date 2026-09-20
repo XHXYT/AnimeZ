@@ -1,10 +1,11 @@
 import { DataSourceConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
-import { AppConfigs } from "../entryability/Settings"
+import { AppConfigs, appSettings } from "../entryability/Settings"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import Logger from "../utils/Logger"
 import { SelectionManager } from "../utils/SelectionManager"
 import { ToastUtil } from "../utils/ToastUtils"
+import { ViewState } from "../components/StateView"
 
 // 排序类型枚举
 export enum SortType {
@@ -14,43 +15,34 @@ export enum SortType {
   CUSTOM = 'custom'
 }
 
-// 视图状态枚举
-export enum ViewState {
-  LOADING = 0,
-  CONTENT = 1,
-  ERROR = 2,
-  EMPTY = 3
-}
-
-@Observed
+@ObservedV2
 export class VideoSourcesViewModel {
   // 视图状态
-  public state: ViewState
-  public errorMessage: string
+  @Trace public state: ViewState
+  @Trace public errorMessage: string
 
   // 弹窗输入文本
-  public dialogInputTextValue: string = ''
+  @Trace public dialogInputTextValue: string = ''
 
   // 选择相关状态
-  public selectCount: number
-  public selectMode: boolean
-  public hasSelectAll: boolean
+  @Trace public selectCount: number
+  @Trace public selectMode: boolean
+  @Trace public hasSelectAll: boolean
 
   // 排序和分组控制
-  public sortType: SortType
-  public searchText: string
+  @Trace public sortType: SortType
+  @Trace public searchText: string
 
   // 分组管理相关状态
-  public groupManagerVisible: boolean
-  public groupType: string
-  public customGroups: string[]
-  public newGroupName: string
+  @Trace public groupManagerVisible: boolean
+  @Trace public groupType: string
+  @Trace public customGroups: string[]
+  @Trace public newGroupName: string
 
   // 数据源列表
-  public videoSources: DataSourceConfig[]
-  // 持久化配置
-  public appSettings: AppConfigs = new AppConfigs()
-  public pageStack: NavPathStack = new NavPathStack()
+  @Trace public videoSources: DataSourceConfig[]
+  // 持久化配置（模块级单例）
+  public readonly appSettings: AppConfigs = appSettings
 
   // 业务逻辑对象
   public selectionManager: SelectionManager<DataSourceConfig>

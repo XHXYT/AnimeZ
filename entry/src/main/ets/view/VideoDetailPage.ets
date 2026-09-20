@@ -54,9 +54,8 @@ struct VideoDetailPage {
   @Consume @Watch('onPhoneLandscape') isPhoneLandscape: boolean;
   @StorageLink('currentColorMode') currentMode: number = ThemeColorMode.SYSTEM
 
-  @State @Watch('onViewModelChange') viewModel: VideoDetailViewModel = new VideoDetailViewModel(
+  viewModel: VideoDetailViewModel = new VideoDetailViewModel(
     new PlayerManagerImpl(),
-    appSettings,
     this.getUIContext().getHostContext()!
   )
   @State playerManager: IPlayerManager = new PlayerManagerImpl()
@@ -64,7 +63,7 @@ struct VideoDetailPage {
   private webviewController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear() {
-    this.viewModel = new VideoDetailViewModel(this.playerManager, appSettings, this.getUIContext().getHostContext()!)
+    this.viewModel = new VideoDetailViewModel(this.playerManager, this.getUIContext().getHostContext()!)
     this.viewModel.setOnStatusChangedCallback((status: number) => {
       // 处理状态变化
       if (status == PlayerStatus.ERROR) {
@@ -88,11 +87,6 @@ struct VideoDetailPage {
 
   onPhoneLandscape() {
     this.viewModel.onPhoneLandscape(this.isPhoneLandscape);
-  }
-
-  onViewModelChange() {
-    this.state = this.viewModel.state
-    this.playerManager = this.viewModel.playerManager
   }
 
   build() {

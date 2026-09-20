@@ -22,7 +22,7 @@ export function VideoSourcesBuilder(name: string, param: string) {
 struct VideoSources {
 
   @State selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
-  @State viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
+  viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
   // 添加搜索控制器
   private searchController: SearchController = new SearchController()
   @State errorMessage: string = this.viewModel.errorMessage
@@ -60,8 +60,6 @@ struct VideoSources {
   aboutToAppear() {
     this.selectionManager.addObserver(this.selectionObserver)
     this.onShow = false
-    this.viewModel.pageStack = this.pageStack
-    this.viewModel.appSettings = appSettings
     // 数据初始化
     this.viewModel.loadCustomGroups()
     // 注册数据源加载事件
@@ -515,7 +513,7 @@ struct SourceItem {
   @Prop item: DataSourceConfig
   @State isSelected: boolean = false
   @State isShowMenu: boolean = false
-  @Link viewModel: VideoSourcesViewModel
+  viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(new SelectionManager<DataSourceConfig>())
   @Link selectionManager: SelectionManager<DataSourceConfig>
   private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
