@@ -1,20 +1,18 @@
 import { TaskStatus } from '../download/core/Task';
 import { ZDownloader } from '../download/ZDownloader';
 import { VideoCacheItem } from './VideoCacheItem';
-import router from '@ohos.router';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import EpisodeList from '../entity/EpisodeList';
 import VideoDetailInfo from '../entity/VideoDetailInfo';
 import Logger from '../utils/Logger';
-import { FileDownloadTask } from '../download/FileDownloadTask';
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import { TaskManagerObserver } from '../download/core/TaskManager';
+import { AnimeState } from '../entryability/AnimeState';
 
-@Component
+@ComponentV2
 export struct VideoCacheList {
 
-  @Consume('pageStack') pageStack: NavPathStack
-  @Prop videoDetailInfo: VideoDetailInfo
+  @Require @Param videoDetailInfo: VideoDetailInfo
 
   aboutToAppear() {
     Logger.d(this, 'aboutToAppear')
@@ -32,7 +30,6 @@ export struct VideoCacheList {
             ForEach(this.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
               Column() {
                 // TODO 展开和折叠、单个下载列表缓存全部
-                // this.Header(episodeList.title)
                 Row() {
                   Row()
                     .height(14)
@@ -89,7 +86,7 @@ export struct VideoCacheList {
           .borderRadius(21)
           .layoutWeight(1)
           .onClick(() => {
-            this.pageStack.pushPathByName("DownloadManagerPage", '', true)
+            AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
           })
           .height(42)
           .width('100%')
@@ -105,7 +102,7 @@ export struct VideoCacheList {
    */
   private downloadAll(episodeList: EpisodeList) {
     const observer: TaskManagerObserver<M3U8DownloadTask> = {
-      onTaskLoaded: (tasks: FileDownloadTask[]) => {
+      onTaskLoaded: (tasks: M3U8DownloadTask[]) => {
         ZDownloader.get(M3U8Downloader).removeObserver(observer)
         for (let episode of episodeList.episodes) {
           let task = tasks.find((task) => {
@@ -121,20 +118,20 @@ export struct VideoCacheList {
             .setCoverUrl(this.videoDetailInfo.coverUrl)
             .setTaskName(episode.desc)
             .setFileName('index.m3u8')
-            .setDownloadDir(getContext(this).filesDir + "/download/")
+            .setDownloadDir(this.getUIContext().getHostContext()!.filesDir + "/download/")
             .build()
           task.start()
         }
       },
-      onTaskCreateFailed: (task: FileDownloadTask, error: Error) => {
+      onTaskCreateFailed: (task: M3U8DownloadTask, error: Error) => {
       },
-      onTaskAdd: (task: FileDownloadTask) => {
+      onTaskAdd: (task: M3U8DownloadTask) => {
       },
-      onTaskRemove: (task: FileDownloadTask) => {
+      onTaskRemove: (task: M3U8DownloadTask) => {
       },
-      onTaskComplete: (task: FileDownloadTask) => {
+      onTaskComplete: (task: M3U8DownloadTask) => {
       },
-      onTaskStatusChanged: (task: FileDownloadTask, oldStatus: TaskStatus, newStatus: TaskStatus) => {
+      onTaskStatusChanged: (task: M3U8DownloadTask, oldStatus: TaskStatus, newStatus: TaskStatus) => {
       }
     }
     ZDownloader.get(M3U8Downloader).addObserver(observer)

@@ -1,6 +1,5 @@
 import VideoDetailInfo from '../entity/VideoDetailInfo';
-import { TaskStatus } from '../download/core/Task';
-import { TaskStatusObserver } from '../download/core/Task';
+import { TaskStatus, TaskStatusObserver } from '../download/core/Task';
 import { TaskManagerObserver } from '../download/core/TaskManager'
 import { ZDownloader } from '../download/ZDownloader'
 import EpisodeInfo from '../entity/EpisodeInfo'
@@ -8,13 +7,13 @@ import Logger from '../utils/Logger'
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import { ToastUtil } from '../utils/ToastUtils';
 
-@Component
+@ComponentV2
 export struct VideoCacheItem {
 
-  @Prop videoDetailInfo: VideoDetailInfo
-  @Prop episodeInfo: EpisodeInfo
-  @State downloadTask: M3U8DownloadTask | null = null
-  @State status: number = -1
+  @Require @Param videoDetailInfo: VideoDetailInfo
+  @Require @Param episodeInfo: EpisodeInfo
+  @Local downloadTask: M3U8DownloadTask | null = null
+  @Local status: number = -1
   private statusObserver: TaskStatusObserver = {
     onStatusChanged: (task, oldStatus, status) => {
       Logger.d(this, "download onStatusChanged status=" + status)
