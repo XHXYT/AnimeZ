@@ -98,7 +98,6 @@ struct VideoDetailPage {
           content: () => {
             this.Content()
           },
-          custom: undefined,
           onRetry: () => {
             this.viewModel.getDetailInfo();
             return true;

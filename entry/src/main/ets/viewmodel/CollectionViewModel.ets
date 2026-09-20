@@ -1,7 +1,7 @@
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import Logger from '../utils/Logger';
-import { AnimeState } from '../entryability/AnimeState';
+import { _AnimeState } from '../entryability/AnimeState';
 
 /**
  * 我的收藏 ViewModel（单例）
@@ -16,7 +16,7 @@ export class CollectionViewModel {
 
   private getDB(): VideoCollectionTable {
     if (!this.db) {
-      this.db = new VideoCollectionTable(AnimeState.Context!)
+      this.db = new VideoCollectionTable(_AnimeState.Context!)
     }
     return this.db
   }

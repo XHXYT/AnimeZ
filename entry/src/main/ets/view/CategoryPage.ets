@@ -47,11 +47,10 @@ export struct CategoryPage {
       StateView(
         {
           state: this.state,
-          errorMessage: $errorMessage,
+          errorMessage: this.errorMessage,
           content: () => {
             this.Content(appSettings.category_UI_type)
           },
-          custom: undefined,
           onRetry: () => {
             this.loadFirstPage()
             return true

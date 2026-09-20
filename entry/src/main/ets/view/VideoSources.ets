@@ -94,7 +94,6 @@ struct VideoSources {
           content: () => {
             this.VideoSourcesContent()
           },
-          custom: undefined,
           onRetry: () => {
             VIDEO_SOURCE_EVENT.emit()
             return true

@@ -1,4 +1,3 @@
-import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import { More } from '../components/MoreContainer';
 import { common } from '@kit.AbilityKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
@@ -6,8 +5,9 @@ import { ToastUtil } from '../utils/ToastUtils';
 import { appSettings } from '../entryability/Settings';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { Header } from '../components/common/Header';
+import { AnimeState } from '../entryability/AnimeState';
+import { historyViewModel } from '../viewmodel/HistoryViewModel';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
-import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 
 
 const TAG: string = 'MyPage'
@@ -15,45 +15,16 @@ const TAG: string = 'MyPage'
 /**
  * 我的页面 （Stack布局 背景 + 功能）
  */
-@Component
+@ComponentV2
 export struct MyPage {
 
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @Consume onShow: boolean
-  @Consume DarkModeImage: boolean
-  @StorageLink('HistoryList') historyList: VideoHistoryInfo[] = []
-  @State bgHeight: number = 0
+  @Local bgHeight: number = 0
 
   private readonly scroller = new Scroller()
-  private videoHistoryInfoDB = new VideoHistoryTable(this.getUIContext().getHostContext()!)
-
 
   aboutToAppear() {
-    this.loadHistoryList()
-    HISTORY_CHANGED_EVENT.on(() => {
-      if (this.onShow) {
-        this.loadHistoryList()
-      } else {
-      }
-    })
-  }
-
-  aboutToDisappear() {
-    HISTORY_CHANGED_EVENT.off()
-  }
-
-  private async loadHistoryList() {
-    // 查询全部历史记录
-    const list = await this.videoHistoryInfoDB.queryAllByAccessTimeDesc()
-    // 如果有历史记录，回显到页面中
-    if (list) {
-      this.historyList = list
-      console.log(`${TAG} VideoTest #loadHistoryList 历史记录项：${JSON.stringify( this.historyList)}`)
-    }
+    // HISTORY_CHANGED_EVENT 已由 historyViewModel 常驻订阅，进入页面时显式刷新一次
+    historyViewModel.loadHistoryList()
   }
 
   build() {
@@ -79,10 +50,10 @@ export struct MyPage {
           // 快捷工具栏Start（收藏、缓存）
           Flex({ justifyContent: FlexAlign.SpaceAround }) {
             this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
-              this.pageStack.pushPathByName("VideoCollectionPage", '', true)
+              AnimeState.pageStack.pushPathByName("VideoCollectionPage", '', true)
             })
             this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
-              this.pageStack.pushPathByName("DownloadManagerPage", '', true)
+              AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
             })
           }
           .padding(8)
@@ -116,7 +87,7 @@ export struct MyPage {
       .width('100%')
       .height('100%')
     }
-    .padding({top: this.topHeight, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .width('100%')
     .height('100%')
@@ -154,7 +125,7 @@ export struct MyPage {
       .margin({ left: 16, right: 16 })
       .layoutWeight(1)
 
-      Image(this.DarkModeImage ? $r("app.media.ic_theme_night") : $r("app.media.ic_theme_day"))
+      Image(AnimeState.darkModeImage ? $r("app.media.ic_theme_night") : $r("app.media.ic_theme_day"))
         .width(54)
         .height(42)
         .padding({ left: 12, top: 6, right: 12, bottom: 6 })
@@ -164,7 +135,7 @@ export struct MyPage {
           if (appSettings.color_mode ===  ThemeColorMode.LIGHT) {
             // 设置为 黑暗
             appSettings.color_mode = ThemeColorMode.DARK
-          } else if (appSettings.color_mode === ThemeColorMode.DARK) {
+          } else if (appSettings.color_mode ===  ThemeColorMode.DARK) {
             // 设置为 日间
             appSettings.color_mode = ThemeColorMode.LIGHT
           } else {
@@ -205,12 +176,12 @@ export struct MyPage {
   HistoryList() {
     Column() {
       Header('观看历史', () => {
-        this.pageStack.pushPathByName("VideoHistoryPage", '')
+        AnimeState.pageStack.pushPathByName("VideoHistoryPage", '')
       })
       Column() {
-        if (this.historyList && this.historyList.length > 0) {
+        if (historyViewModel.historyList && historyViewModel.historyList.length > 0) {
           List() {
-            ForEach(this.historyList, (item: VideoHistoryInfo) => {
+            ForEach(historyViewModel.historyList, (item: VideoHistoryInfo) => {
               ListItem() {
                 this.HistoryItem(item)
               }
@@ -279,7 +250,7 @@ export struct MyPage {
         cover: item.coverUrl as string
       }
       console.log('VideoTest 我的页面历史栏传递的params：', JSON.stringify(params))
-      this.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
     })
   }
 

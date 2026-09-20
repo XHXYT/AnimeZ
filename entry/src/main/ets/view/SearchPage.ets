@@ -50,7 +50,7 @@ struct SearchPage {
       StateView(
         {
           state: this.state,
-          errorMessage: $errorMessage,
+          errorMessage: this.errorMessage,
           content: () => {
             this.content()
           },

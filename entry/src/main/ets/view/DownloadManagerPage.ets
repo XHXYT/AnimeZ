@@ -124,10 +124,9 @@ struct DownloadManagerPage {
           }
         } else {
           StateView({
-            state: $state,
-            errorMessage: $errorMessage,
+            state: this.state,
+            errorMessage: this.errorMessage,
             content: undefined,
-            custom: undefined,
             onRetry: () => {
               this.loadDownloadItems()
               return true;

@@ -75,11 +75,10 @@ struct VideoHistoryPage {
 
       StateView({
           state: this.state,
-          errorMessage: $errorMessage,
+          errorMessage: this.errorMessage,
           content: () => {
             this.HistoryList()
           },
-          custom: undefined,
           onRetry: () => {
             this.loadHistoryList()
             return true;

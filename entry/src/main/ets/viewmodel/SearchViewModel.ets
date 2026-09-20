@@ -1,6 +1,6 @@
 import SearchHistoryInfo from '../entity/SearchHistoryInfo';
 import { SearchHistoryTable } from '../db/impl/SearchHistoryDao';
-import { AnimeState } from '../entryability/AnimeState';
+import { _AnimeState } from '../entryability/AnimeState';
 
 /**
  * 搜索历史 ViewModel（单例，仅负责搜索历史）
@@ -15,7 +15,7 @@ export class SearchViewModel {
 
   private getDB(): SearchHistoryTable {
     if (!this.db) {
-      this.db = new SearchHistoryTable(AnimeState.Context!)
+      this.db = new SearchHistoryTable(_AnimeState.Context!)
     }
     return this.db
   }

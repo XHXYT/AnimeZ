@@ -8,14 +8,14 @@ export enum ViewState {
   CUSTOM
 }
 
-@Component
+@ComponentV2
 export default struct StateView {
 
-  @Link state: number
-  @Link errorMessage: string
-  @BuilderParam content: () => void;
-  @BuilderParam custom: (key: string) => void;
-  onRetry?: () => boolean;
+  @Param @Require state: number = 0
+  @Param errorMessage: string = ''
+  @BuilderParam content?: () => void;
+  @BuilderParam custom?: (key: string) => void;
+  @Event onRetry: () => boolean = () => true;
 
   aboutToAppear(): void {
     console.log('stateview ', this.state)
@@ -79,10 +79,8 @@ export default struct StateView {
 
     }
     .onClick(() => {
-      if (this.onRetry) {
-        this.state = ViewState.LOADING
-        this.onRetry()
-      }
+      // 重试由页面回调处理；加载态由页面的重试逻辑置位（VM 加载方法首行）
+      this.onRetry()
     })
   }
 }

@@ -1,14 +1,9 @@
 
-import router from '@ohos.router';
-import VideoInfo from '../entity/VideoInfo';
-import { DramaList } from '../entity/HomepageData';
-import { ConfigurationConstant } from '@kit.AbilityKit';
 import StateView, { ViewState } from '../components/StateView';
-import { SOURCE_CHANGED_EVENT } from '../utils/EventBus';
-import Logger from '../utils/Logger';
 import { BannerView } from '../components/home/BannerView';
 import { CategoryView } from '../components/home/CategoryView';
-import { dataSourceManager } from '../api/DataSourceManager';
+import { homeViewModel } from '../viewmodel/HomeViewModel';
+import { AnimeState } from '../entryability/AnimeState';
 
 // 系统路由
 @Builder
@@ -16,29 +11,12 @@ export function HomePageBuilder(name: string, param: Object) {
   HomePage()
 }
 
-@Component
+@ComponentV2
 export struct HomePage {
-  @State state: number = 0
-  @Consume('pageStack') pageStack: NavPathStack
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @State bannerList: VideoInfo[] = []
-  @State categoryList: DramaList[] = []
-  @State errorMessage: string = ''
 
   aboutToAppear() {
-    this.loadNextPage()
-    // 启用数据源监听
-    SOURCE_CHANGED_EVENT.on(() => {
-      this.loadNextPage()
-    })
-  }
-
-  aboutToDisappear() {
-    SOURCE_CHANGED_EVENT.off()
+    homeViewModel.loadHomepageData()
+    // SOURCE_CHANGED_EVENT 已由 homeViewModel 常驻订阅
   }
 
   build() {
@@ -64,7 +42,7 @@ export struct HomePage {
         .backgroundColor($r('app.color.background_color_accent'))
         .borderRadius(32)
         .onClick(() => {
-          this.pageStack.pushPathByName("SearchPage", '', true)
+          AnimeState.pageStack.pushPathByName("SearchPage", '', true)
         })
 
         Image($r("app.media.ic_download_manager"))
@@ -73,14 +51,14 @@ export struct HomePage {
           .fillColor('#817977')
           .objectFit(ImageFit.Contain)
           .onClick(() => {
-            this.pageStack.pushPathByName("DownloadManagerPage", '', true)
+            AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
           })
 
         SymbolGlyph($r('sys.symbol.clock'))
           .fontSize(20)
           .fontColor(['#817977'])
           .onClick(() => {
-            this.pageStack.pushPathByName("VideoHistoryPage", '', true)
+            AnimeState.pageStack.pushPathByName("VideoHistoryPage", '', true)
           })
       }
       .height(56)
@@ -89,14 +67,13 @@ export struct HomePage {
       // 视频推荐区
       StateView(
         {
-          state: this.state,
-          errorMessage: $errorMessage,
+          state: homeViewModel.state,
+          errorMessage: homeViewModel.errorMessage,
           content: () => {
             this.Content()
           },
-          custom: undefined,
           onRetry: () => {
-            this.loadNextPage()
+            homeViewModel.loadHomepageData()
             return true;
           }
         }
@@ -108,9 +85,9 @@ export struct HomePage {
     .height('100%')
     .hideToolBar(true)
     .backgroundColor($r('app.color.background_color'))
-    .padding({top: this.topHeight, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .onShown(() => {
-      this.state = ViewState.CONTENT
+      homeViewModel.state = ViewState.CONTENT
     })
   }
 
@@ -120,9 +97,9 @@ export struct HomePage {
       Scroll() {
         Column() {
           // 轮播图
-          BannerView({bannerList: this.bannerList})
+          BannerView({bannerList: homeViewModel.bannerList})
           // 视频目录
-          CategoryView({categoryList: this.categoryList})
+          CategoryView({categoryList: homeViewModel.categoryList})
         }
         .constraintSize({
           minHeight: '100%'
@@ -134,24 +111,6 @@ export struct HomePage {
     }
     .height('100%')
     .width('100%')
-  }
-
-  private loadNextPage() {
-    this.state = ViewState.LOADING
-    dataSourceManager.getHomepageData()
-      .then((data) => {
-        Logger.e('tips', 'loadNextPage list=' + JSON.stringify(data))
-        this.bannerList = data.bannerList
-        this.categoryList = data.categoryList
-        Logger.e('tips', 'categoryList=' + JSON.stringify(data.categoryList))
-        this.state = ViewState.CONTENT
-      })
-      .catch((e: Error) => {
-        this.errorMessage = e.message
-        this.state = ViewState.ERROR
-        console.log(`主页state状态：${this.state}`)
-        Logger.e('fail', '主页数据加载', e)
-      })
   }
 
 }

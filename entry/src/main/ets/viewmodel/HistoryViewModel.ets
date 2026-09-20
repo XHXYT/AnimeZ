@@ -2,7 +2,7 @@ import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
 import Logger from '../utils/Logger';
-import { AnimeState } from '../entryability/AnimeState';
+import { _AnimeState } from '../entryability/AnimeState';
 
 /**
  * 观看历史 ViewModel（单例）
@@ -25,7 +25,7 @@ export class HistoryViewModel {
 
   private getDB(): VideoHistoryTable {
     if (!this.db) {
-      this.db = new VideoHistoryTable(AnimeState.Context!)
+      this.db = new VideoHistoryTable(_AnimeState.Context!)
     }
     return this.db
   }

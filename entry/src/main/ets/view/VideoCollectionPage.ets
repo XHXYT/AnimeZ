@@ -85,11 +85,10 @@ struct VideoCollectionPage {
       StateView(
         {
           state: this.state,
-          errorMessage: $errorMessage,
+          errorMessage: this.errorMessage,
           content: () => {
             this.CollectionList()
           },
-          custom: undefined,
           onRetry: () => {
             this.loadCollectionList()
             return true;
