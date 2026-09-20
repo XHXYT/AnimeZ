@@ -1,18 +1,16 @@
 import TitleBar from '../components/TitleBar'
 import { VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
-import { SelectionManager } from '../utils/SelectionManager'
-import { DataSourceConfig } from '../api/DataSourceConfig'
 import { CustomContentDialog } from '@kit.ArkUI'
 import { BusinessError } from '@kit.BasicServicesKit'
 
-@Component
+@ComponentV2
 export struct GroupManager {
 
-  viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(new SelectionManager<DataSourceConfig>())
-  @State groupName: string = ''
-  @State isNewGroup: boolean = false
-  @State editingGroupName: string = ''
-  @State customGroups: string[] = []
+  @Require @Param viewModel: VideoSourcesViewModel
+  @Local groupName: string = ''
+  @Local isNewGroup: boolean = false
+  @Local editingGroupName: string = ''
+  @Local customGroups: string[] = []
   private dialogId: number = -1
 
   aboutToAppear(): void {

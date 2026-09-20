@@ -3,14 +3,14 @@ import { VideoSourcesViewModel, SortType } from "../viewmodel/VideoSourcesViewMo
 import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { ButtonBuilder, ButtonConfig, MenuItem } from "../components/common/Button"
-import { LengthMetrics, SymbolGlyphModifier } from "@kit.ArkUI"
+import { LengthMetrics } from "@kit.ArkUI"
 import { appSettings } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
-import { ToastUtil } from "../utils/ToastUtils"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionManager"
-import { dataSourceManager } from "../api/DataSourceManager"
 import { Copy } from "../utils/ClipBoardUtil"
+import { SymbolGlyphModifier } from "@kit.ArkUI"
+import { AnimeState } from "../entryability/AnimeState"
 
 // 系统路由 - 视频源
 @Builder
@@ -18,30 +18,16 @@ export function VideoSourcesBuilder(name: string, param: string) {
   VideoSources()
 }
 
-@Component
+@ComponentV2
 struct VideoSources {
 
-  @State selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
+  @Local selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
   viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
   // 添加搜索控制器
   private searchController: SearchController = new SearchController()
-  @State errorMessage: string = this.viewModel.errorMessage
-  @State state: number = this.viewModel.state
 
-  @Consume onShow: boolean
-  @Consume DarkModeImage: boolean
-  @State selectMode: boolean = false
-  @State showGroupManager: boolean = false
-
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 宽度断点
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
-  // 高度断点
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
+  @Local selectMode: boolean = false
+  @Local showGroupManager: boolean = false
 
   private selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
@@ -59,7 +45,7 @@ struct VideoSources {
 
   aboutToAppear() {
     this.selectionManager.addObserver(this.selectionObserver)
-    this.onShow = false
+    AnimeState.onShow = false
     // 数据初始化
     this.viewModel.loadCustomGroups()
     // 注册数据源加载事件
@@ -74,7 +60,7 @@ struct VideoSources {
     this.selectionManager.removeObserver(this.selectionObserver)
     this.viewModel.dispose()
     VIDEO_SOURCE_EVENT.off()
-    this.onShow = true
+    AnimeState.onShow = true
   }
 
   build() {
@@ -89,8 +75,8 @@ struct VideoSources {
         })
         // 内容区域
         StateView({
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.viewModel.state,
+          errorMessage: this.viewModel.errorMessage,
           content: () => {
             this.VideoSourcesContent()
           },
@@ -102,7 +88,7 @@ struct VideoSources {
           .width('100%')
           .layoutWeight(1)
       }
-      .bindSheet($$this.showGroupManager, this.GroupManager(), {
+      .bindSheet(this.showGroupManager!!, this.GroupManager(), {
         detents: [SheetSize.LARGE],
         showClose: true,
         dragBar: false,
@@ -120,7 +106,7 @@ struct VideoSources {
         }
       })
     }
-    .padding({top: this.topHeight - 12, bottom: this.bottomHeight - 12})
+    .padding({top: AnimeState.topRectHeight - 12, bottom: AnimeState.bottomRectHeight - 12})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -495,25 +481,25 @@ struct VideoSources {
         defaultSource: false,
         parserConfig: {} as ParserConfig
       }
-      this.pageStack.pushPathByName('VideoSourceDetail', newSource, true)
+      AnimeState.pageStack.pushPathByName('VideoSourceDetail', newSource, true)
     } else {
       // 编辑现有数据源
-      this.pageStack.pushPathByName('VideoSourceDetail', config, true)
+      AnimeState.pageStack.pushPathByName('VideoSourceDetail', config, true)
     }
   }
 
 }
 
 
-@Component
+@ComponentV2
 struct SourceItem {
 
-  @Link selectMode: boolean
-  @Prop item: DataSourceConfig
-  @State isSelected: boolean = false
-  @State isShowMenu: boolean = false
-  viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(new SelectionManager<DataSourceConfig>())
-  @Link selectionManager: SelectionManager<DataSourceConfig>
+  @Require @Param item: DataSourceConfig
+  @Require @Param selectionManager: SelectionManager<DataSourceConfig>
+  @Require @Param viewModel: VideoSourcesViewModel
+  @Param selectMode: boolean = false
+  @Local isSelected: boolean = false
+  @Local isShowMenu: boolean = false
   private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
     },
