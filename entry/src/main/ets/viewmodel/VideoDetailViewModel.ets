@@ -72,9 +72,6 @@ export class VideoDetailViewModel {
   // 私有变量
   private saveCount: number = 0
   private pausedOnHide = false;
-  private onStatusChangedCallback?: (status: number) => void;
-  private onFullScreenChangedCallback?: (isFullScreen: boolean) => void;
-  private onProgressChangeCallback?: (totalTime: number, currentTime: number) => void;
 
   constructor(playerManager: IPlayerManager, context: Context) {
     this.videoCollectionInfoDB = new VideoCollectionTable(context)
@@ -93,7 +90,6 @@ export class VideoDetailViewModel {
             this.playVideo(this.episodeListIndex, this.episodeIndex + 1);
           }
         }
-        this.onStatusChangedCallback?.(status);
       },
       onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
         if (this.episodeIndex !== episodeIndex) {
@@ -104,7 +100,6 @@ export class VideoDetailViewModel {
       onVideoSpeedChanged: () => {},
       onFullScreenChanged: (isFullScreen: boolean) => {
         this.isFullScreen = isFullScreen;
-        this.onFullScreenChangedCallback?.(isFullScreen);
         const windowClass = _AnimeState.window
         if (windowClass) {
           if (!isFullScreen) {
@@ -138,24 +133,10 @@ export class VideoDetailViewModel {
           this.historyInfo.currentTime = currentTime;
           this.saveHistoryInfo();
         }
-        this.onProgressChangeCallback?.(totalTime, currentTime);
       },
       onBuffering: (type, value) => value
     };
     this.playerManager.addListener(playerListener);
-  }
-
-  // 设置回调函数
-  public setOnStatusChangedCallback(callback: (status: number) => void) {
-    this.onStatusChangedCallback = callback;
-  }
-
-  public setOnFullScreenChangedCallback(callback: (isFullScreen: boolean) => void) {
-    this.onFullScreenChangedCallback = callback;
-  }
-
-  public setOnProgressChangeCallback(callback: (totalTime: number, currentTime: number) => void) {
-    this.onProgressChangeCallback = callback;
   }
 
   // 初始化数据

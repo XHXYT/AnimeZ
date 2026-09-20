@@ -69,7 +69,6 @@ export struct VideoPlayerController {
   @Local isLocked: boolean = false
   @Local videoFit: number = VideoFit.Contain
   @Local isLoading: boolean = false
-  @Local bufferingPercent: number = 0
   @Local episodeList: EpisodeInfo[] = []
   @Local episodeIndex: number = 0
   @Require @Param playerManager: IPlayerManager
@@ -129,7 +128,6 @@ export struct VideoPlayerController {
         } else {
           this.isLoading = true
         }
-        this.bufferingPercent = value
       } else if (type == media.BufferingInfoType.BUFFERING_START) {
         this.isLoading = true
       } else if (type == media.BufferingInfoType.BUFFERING_END) {

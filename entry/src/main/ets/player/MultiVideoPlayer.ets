@@ -17,10 +17,6 @@ export struct MultiVideoPlayer {
   @Require @Param isFullScreen: boolean
 
   aboutToAppear() {
-    if (!this.playerManager) {
-      throw new Error('You must set playerManager firstly!')
-    }
-
     // 开启应用接续 -> 在播放的页面才打开
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     context.setMissionContinueState(AbilityConstant.ContinueState.ACTIVE, (result) => {

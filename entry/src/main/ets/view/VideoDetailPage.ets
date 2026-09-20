@@ -40,17 +40,13 @@ struct VideoDetailPage {
   /** @description 全局状态单例（@Monitor 监听 isPhoneLandscape 路径） */
   @Local animeState: _AnimeState = AnimeState
 
+  private playerManager: IPlayerManager = new PlayerManagerImpl()
   viewModel: VideoDetailViewModel = new VideoDetailViewModel(
-    new PlayerManagerImpl(),
+    this.playerManager,
     this.getUIContext().getHostContext()!
   )
-  private playerManager: IPlayerManager = new PlayerManagerImpl()
   private panelController: PanelController = new PanelController()
   private webviewController: webview.WebviewController = new webview.WebviewController();
-
-  aboutToAppear() {
-    this.viewModel = new VideoDetailViewModel(this.playerManager, this.getUIContext().getHostContext()!)
-  }
 
   aboutToDisappear() {
     this.viewModel.onDestroy();
