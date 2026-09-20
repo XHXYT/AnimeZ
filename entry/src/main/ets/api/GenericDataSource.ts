@@ -18,9 +18,13 @@ import {
 import { AnyNode, HtmlTag } from '../thirdpart/htmlsoup/parse';
 import {
   CategoryConfig, EpisodeConfig, ParserConfig, RecommendConfig,
-  SelectorConfig, VideoConfig } from './DataSourceConfig';
+  SelectorConfig, VideoConfig, ProcessConfig } from './DataSourceConfig';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
+import { ScriptProcessor } from './ScriptProcessor';
 
+// 扩展SelectorConfig类型以支持更灵活的配置
+type SelectorValue = string | { selector: string; postProcess?: ProcessConfig };
+type ExtendedSelectorConfig = Record<string, SelectorValue>;
 
 export default class GenericDataSource implements DataSource {
   private key: string;
@@ -75,9 +79,13 @@ export default class GenericDataSource implements DataSource {
       const doc = await this.parseHtml(url);
       const list = select(doc, config.videos.listSelector);
 
-      list.forEach((li) => {
-        videos.push(this.extractVideoInfo(li, config.videos.itemSelectors, config.videos.urlNeedBaseUrl, config.videos.enabledHttps));
+      // 使用Promise.all并行处理所有视频项
+      const videoPromises = list.map(async (li) => {
+        return await this.extractVideoInfo(li, config.videos.itemSelectors as ExtendedSelectorConfig, config.videos.urlNeedBaseUrl, config.videos.enabledHttps);
       });
+
+      const resolvedVideos = await Promise.all(videoPromises);
+      videos.push(...resolvedVideos);
 
       return videos;
     } catch (e) {
@@ -92,8 +100,12 @@ export default class GenericDataSource implements DataSource {
     try {
       const doc = await this.parseHtml(this.baseUrl)
       console.log(`网页doc已获取`)
-      const bannerList = this.extractBannerList(doc, config.banner);
-      const categoryList = this.extractCategoryList(doc, config.category);
+
+      // 并行处理banner和category
+      const [bannerList, categoryList] = await Promise.all([
+        this.extractBannerList(doc, config.banner),
+        this.extractCategoryList(doc, config.category)
+      ]);
 
       return { bannerList, categoryList };
     } catch (e) {
@@ -114,7 +126,7 @@ export default class GenericDataSource implements DataSource {
         return [];
       }
 
-      return this.parseVideoList(drama, this.parserConfig.homepage.category.videos);
+      return await this.parseVideoList(drama, this.parserConfig.homepage.category.videos);
     } catch (e) {
       Logger.e('fail', `获取视频列表`, e);
       throw e
@@ -125,13 +137,13 @@ export default class GenericDataSource implements DataSource {
     const elements = select(drama, config.listSelector);
     Logger.e('tips', 'parseHtml elements=' + elements.length);
 
-    const videoList: VideoInfo[] = [];
-    elements.forEach((li) => {
+    // 并行处理所有视频项
+    const videoPromises = elements.map(async (li) => {
       Logger.e('tips', "parseHtml el=" + li);
-      videoList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
+      return await this.extractVideoInfo(li, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
     });
 
-    return videoList;
+    return await Promise.all(videoPromises);
   }
 
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
@@ -140,27 +152,53 @@ export default class GenericDataSource implements DataSource {
       const doc = await this.parseHtml(url);
       const config = this.parserConfig.detail;
 
-      const title = this.selectText(doc, config.titleSelector);
+      // 安全地分割选择器
+      const coverSelectorParts = config.coverSelector.split('@');
+      const coverSel = coverSelectorParts[0];
+      const coverAttr = coverSelectorParts[1];
+
+      // 并行处理所有字段
+      const [
+        title,
+        desc,
+        coverUrl,
+        category,
+        director,
+        updateTime,
+        protagonist,
+        recommends,
+        episodesList
+      ] = await Promise.all([
+        this.selectText(doc, config.titleSelector),
+        this.selectText(doc, config.descSelector).then(t => t.trim()),
+        this.selectAttribute(doc, coverSel, coverAttr),
+        config.categorySelector ? this.selectText(doc, config.categorySelector) : Promise.resolve(''),
+        config.directorSelector ? this.selectText(doc, config.directorSelector) : Promise.resolve(''),
+        config.updateTimeSelector ? this.selectText(doc, config.updateTimeSelector) : Promise.resolve(''),
+        config.protagonistSelector ? this.selectText(doc, config.protagonistSelector) : Promise.resolve(''),
+        this.extractRecommends(doc, config.recommends),
+        this.extractEpisodes(doc, config.episodes).then(episodes => {
+          return episodes.map(episodes => {
+            return {
+              title: episodes.title,
+              episodes: sortEpisodesByNumber(episodes.episodes, order)
+            }
+          });
+        })
+      ]);
+
       Logger.e('tips', 'getVideoDetailInfo title=' + title);
 
-      const recommends = this.extractRecommends(doc, config.recommends);
-      const episodesList = this.extractEpisodes(doc, config.episodes).map(episodes => {
-        return {
-          title: episodes.title,
-          episodes: sortEpisodesByNumber(episodes.episodes, order)
-        }
-      });
-      const [sel, attr] = config.coverSelector.split('@')
       const info: VideoDetailInfo = {
         sourceKey: this.key,
         title: title,
         url: url,
-        desc: this.selectText(doc, config.descSelector).trim(),
-        coverUrl: this.selectAttribute(doc, sel, attr),
-        category: config.categorySelector ? this.selectText(doc, config.categorySelector) : '',
-        director: config.directorSelector ? this.selectText(doc, config.directorSelector) : '',
-        updateTime: config.updateTimeSelector ? this.selectText(doc, config.updateTimeSelector) : '',
-        protagonist: config.protagonistSelector ? this.selectText(doc, config.protagonistSelector) : '',
+        desc: desc,
+        coverUrl: coverUrl,
+        category: category,
+        director: director,
+        updateTime: updateTime,
+        protagonist: protagonist,
         episodes: episodesList,
         recommends: recommends
       };
@@ -185,36 +223,23 @@ export default class GenericDataSource implements DataSource {
         const match = htmlString.match(new RegExp(config.pattern));
 
         if (match && match[1]) {
-          let url = match[1];
+          url = match[1];
 
           // 应用后处理
           if (config.postProcess) {
-            if (config.postProcess.includes("substringBetween")) {
-              const [start, end] = config.postProcess
-                .replace("substringBetween('", "")
-                .replace("')", "")
-                .split("', '");
-
-              const startIndex = url.indexOf(start) + start.length;
-              const endIndex = url.indexOf(end, startIndex);
-              url = url.substring(startIndex, endIndex);
-            }
-
-            if (config.postProcess.includes("replaceAll")) {
-              const [search, replace] = config.postProcess
-                .replace("replaceAll('", "")
-                .replace("')", "")
-                .split("', '");
-
-              url = url.replace(new RegExp(search, 'g'), replace);
-            }
+            url = await this.applyLegacyPostProcess(url, config.postProcess);
           }
         }
-      } else
-        if (config.urlSelector) {
+      } else if (config.urlSelector) {
         // 使用选择器方式提取URL
         const doc = await HttpUtils.getHtml(link);
-        url = this.selectAttribute(doc, config.urlSelector);
+
+        // 安全地分割选择器
+        const urlSelectorParts = config.urlSelector.split('@');
+        const urlSel = urlSelectorParts[0];
+        const urlAttr = urlSelectorParts[1];
+
+        url = await this.selectAttribute(doc, urlSel, urlAttr);
         Logger.e('tips', `parseVideoUrl extracted attribute value url = ${url}`);
 
         if (url == '') {
@@ -223,26 +248,7 @@ export default class GenericDataSource implements DataSource {
         }
 
         if (url && config.postProcess) {
-          // 应用后处理
-          if (config.postProcess.includes("substringBetween")) {
-            const [start, end] = config.postProcess
-              .replace("substringBetween('", "")
-              .replace("')", "")
-              .split("', '");
-
-            const startIndex = url.indexOf(start) + start.length;
-            const endIndex = url.indexOf(end, startIndex);
-            url = url.substring(startIndex, endIndex);
-          }
-
-          if (config.postProcess.includes("replaceAll")) {
-            const [search, replace] = config.postProcess
-              .replace("replaceAll('", "")
-              .replace("')", "")
-              .split("', '");
-
-            url = url.replace(new RegExp(search, 'g'), replace);
-          }
+          url = await this.applyLegacyPostProcess(url, config.postProcess);
         }
 
         Logger.e('tips', `parseVideoUrl final url = ${url}`);
@@ -264,9 +270,38 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
+   * 应用旧版后处理（向后兼容）
+   */
+  private async applyLegacyPostProcess(url: string, postProcess: string): Promise<string> {
+    let processedUrl = url;
+
+    if (postProcess.includes("substringBetween")) {
+      const [start, end] = postProcess
+        .replace("substringBetween('", "")
+        .replace("')", "")
+        .split("', '");
+
+      const startIndex = processedUrl.indexOf(start) + start.length;
+      const endIndex = processedUrl.indexOf(end, startIndex);
+      processedUrl = processedUrl.substring(startIndex, endIndex);
+    }
+
+    if (postProcess.includes("replaceAll")) {
+      const [search, replace] = postProcess
+        .replace("replaceAll('", "")
+        .replace("')", "")
+        .split("', '");
+
+      processedUrl = processedUrl.replace(new RegExp(search, 'g'), replace);
+    }
+
+    return processedUrl;
+  }
+
+  /**
    * 提取视频信息
    */
-  private extractVideoInfo(element: HtmlTag, selectors: SelectorConfig, urlNeedBaseUrl: boolean, enabledHttps: boolean = true): VideoInfo {
+  private async extractVideoInfo(element: HtmlTag, selectors: ExtendedSelectorConfig, urlNeedBaseUrl: boolean, enabledHttps: boolean = true): Promise<VideoInfo> {
     const info: VideoInfo = {
       sourceKey: this.key,
       url: '',
@@ -275,88 +310,142 @@ export default class GenericDataSource implements DataSource {
       episode: ''
     };
 
-    // 遍历选择器配置
-    for (const [key, selector] of Object.entries(selectors)) {
-      if (selector.includes('@')) {
-        // 处理带属性提取的选择器（如 "img@src"）
-        const value = this.selectAttribute(element, selector);
-        info[key as keyof VideoInfo] = value as any;
+    // 并行处理所有字段
+    const promises = Object.entries(selectors).map(async ([key, config]) => {
+      let value: string;
+
+      if (typeof config === 'string') {
+        // 简单选择器（向后兼容）
+        value = await this.extractSimpleValue(element, config);
+      } else if (config && config.selector) {
+        // 复杂配置
+        value = await this.extractSimpleValue(element, config.selector);
+
+        // 应用后处理
+        if (config.postProcess) {
+          value = await ScriptProcessor.execute<string>(value, config.postProcess);
+        }
       } else {
-        // 处理纯文本选择器（如 "h1"）
-        const value = this.selectText(element, selector);
-        info[key as keyof VideoInfo] = value as any;
+        return { key, value: '' };
       }
-      // 片源URL自动补全
-      if (key === 'url' && info[key] && !info[key]?.startsWith('http') && urlNeedBaseUrl) {
-        info[key] = this.baseUrl + info[key];
+
+      // URL处理逻辑
+      if (key === 'url' && value && !value.startsWith('http') && urlNeedBaseUrl) {
+        value = this.baseUrl + value;
       }
-      console.log(`extractVideoInfo 是否使用https ${enabledHttps}`)
-      // 把http替换成https
-      if (info[key].startsWith('http://') && enabledHttps) {
-        info[key] =  'https://' + info[key].substring(7);
+
+      if (value.startsWith('http://') && enabledHttps) {
+        value = 'https://' + value.substring(7);
       }
-      console.log(`extractVideoInfo 提取 ${key} 信息：${info[key]}`)
-    }
+
+      return { key, value };
+    });
+
+    // 等待所有处理完成
+    const results = await Promise.all(promises);
+
+    // 设置结果
+    results.forEach(({ key, value }) => {
+      (info as any)[key] = value;
+    });
 
     return info;
   }
 
-  private extractBannerList(doc: AnyNode, config: VideoConfig): VideoInfo[] {
-    if (!config) return [];
-
-    const bannerList: VideoInfo[] = [];
-    const list = select(doc, config.listSelector);
-    console.log(`解析到的BannerList数目：${list.length}`)
-    list.forEach((li) => {
-      bannerList.push(this.extractVideoInfo(li, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
-    });
-
-    return bannerList;
+  /**
+   * 提取简单值
+   */
+  private async extractSimpleValue(element: HtmlTag, selector: string): Promise<string> {
+    if (selector.includes('@')) {
+      // 处理带属性提取的选择器（如 "img@src"）
+      const [sel, attr] = selector.split('@');
+      const el = selectFirst(element, sel);
+      return el ? el.attr(attr) : '';
+    } else {
+      // 处理纯文本选择器（如 "h1"）
+      return selectTextContent(element, selector) || '';
+    }
   }
 
-  private extractCategoryList(doc: AnyNode, categoriesConfig: CategoryConfig): DramaList[] {
+  /**
+   * 提取Banner列表
+   */
+  private async extractBannerList(doc: AnyNode, config: VideoConfig): Promise<VideoInfo[]> {
+    if (!config) return [];
+
+    const list = select(doc, config.listSelector);
+    console.log(`解析到的BannerList数目：${list.length}`)
+
+    // 并行处理所有banner项
+    const bannerPromises = list.map(async (li) => {
+      return await this.extractVideoInfo(li, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+    });
+
+    return await Promise.all(bannerPromises);
+  }
+
+  /**
+   * 提取分类列表
+   */
+  private async extractCategoryList(doc: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList[]> {
     if (!categoriesConfig) return [];
 
-    const categoryList: DramaList[] = [];
     const titles = select(doc, categoriesConfig.titles);
     const videoLists = select(doc, categoriesConfig.videoLists);
     const count = Math.min(titles.length, videoLists.length);
     console.log(`GenericDataSource.extractCategoryList 解析到的标题数：${titles.length}, 番剧列表数：${videoLists.length}, 最后取值：${count}`)
+
+    const categoryPromises = [];
     for (let i = 0; i < count; i++) {
       const title = titles[i];
       const list = videoLists[i];
-      const videos: VideoInfo[] = [];
 
-      const lis = select(list, categoriesConfig.videos.listSelector);
-      console.log(`解析到第${i}项CategoryList番剧数目：${lis.length}`)
-      // 推送目录内的片源列表
-      lis.forEach((li) => {
-        videos.push(this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors, categoriesConfig.videos.urlNeedBaseUrl, categoriesConfig.videos.enabledHttps));
-      });
-
-      // 解析更多链接
-      let rawMoreUrl = this.selectAttribute(title, categoriesConfig.moreUrl);
-      if (rawMoreUrl.startsWith('http://')) {
-        rawMoreUrl =  'https://' + rawMoreUrl.substring(7);
-      }
-      // 提取原始项标题
-      const rawTitle = this.selectText(title, categoriesConfig.title);
-      console.log(`GenericDataSource.extractCategoryList 原始项标题: ${rawTitle}`)
-      // 使用更通用的正则表达式，同时处理开头和结尾的情况, 过滤掉“更多”等杂质
-      const cleanTitle = rawTitle.replace(/^\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*|\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*$/g, '').trim();
-      console.log(`GenericDataSource.extractCategoryList 过滤后项标题: ${cleanTitle}`)
-      // 推送目录列表
-      categoryList.push({
-        title: cleanTitle,
-        moreUrl: categoriesConfig.moreUrlNeedBaseUrl ? (this.baseUrl + rawMoreUrl) : rawMoreUrl,
-        videoList: videos
-      });
+      categoryPromises.push(this.processCategoryItem(title, list, categoriesConfig));
     }
 
-    return categoryList;
+    return await Promise.all(categoryPromises);
   }
 
-  private extractEpisodes(doc: AnyNode, config: EpisodeConfig): EpisodeList[] {
+  /**
+   * 处理单个分类项
+   */
+  private async processCategoryItem(title: AnyNode, list: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList> {
+    const lis = select(list, categoriesConfig.videos.listSelector);
+    console.log(`解析到CategoryList番剧数目：${lis.length}`)
+
+    // 并行处理所有视频项
+    const videoPromises = lis.map(async (li) => {
+      return await this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors as ExtendedSelectorConfig, categoriesConfig.videos.urlNeedBaseUrl, categoriesConfig.videos.enabledHttps);
+    });
+
+    const videos = await Promise.all(videoPromises);
+
+    // 解析更多链接
+    let rawMoreUrl = await this.selectAttribute(title, categoriesConfig.moreUrl);
+    if (rawMoreUrl.startsWith('http://')) {
+      rawMoreUrl = 'https://' + rawMoreUrl.substring(7);
+    }
+
+    // 提取原始项标题
+    const rawTitle = await this.selectText(title, categoriesConfig.title);
+    console.log(`GenericDataSource.extractCategoryList 原始项标题: ${rawTitle}`)
+
+    // 使用更通用的正则表达式，同时处理开头和结尾的情况, 过滤掉"更多"等杂质
+    const cleanTitle = rawTitle.replace(/^\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*|\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*$/g, '').trim();
+    console.log(`GenericDataSource.extractCategoryList 过滤后项标题: ${cleanTitle}`)
+
+    // 推送目录列表
+    return {
+      title: cleanTitle,
+      moreUrl: categoriesConfig.moreUrlNeedBaseUrl ? (this.baseUrl + rawMoreUrl) : rawMoreUrl,
+      videoList: videos
+    };
+  }
+
+  /**
+   * 提取剧集列表
+   */
+  private async extractEpisodes(doc: AnyNode, config: EpisodeConfig): Promise<EpisodeList[]> {
     const episodes: EpisodeList[] = [];
 
     if (config.routeTitlesSelector && config.routeContainersSelector) {
@@ -369,16 +458,29 @@ export default class GenericDataSource implements DataSource {
         const container = routeContainers[i];
 
         const items = select(container, config.itemSelector);
-        const episodeInfos: EpisodeInfo[] = items.map(item => {
-          const url = this.selectAttribute(item, config.itemSelectors.url);
-          const title = this.selectText(item, config.itemSelectors.title);
+        const episodeInfos = await Promise.all(items.map(async (item) => {
+          const urlSelector = config.itemSelectors.url;
+          const titleSelector = config.itemSelectors.title;
+
+          // 安全地获取URL选择器
+          const urlSelectorStr = typeof urlSelector === 'string' ? urlSelector : urlSelector.selector;
+          const urlSelectorParts = urlSelectorStr.split('@');
+          const urlSel = urlSelectorParts[0];
+          const urlAttr = urlSelectorParts[1];
+
+          const url = await this.selectAttribute(item, urlSel, urlAttr);
+
+          // 安全地获取标题选择器
+          const titleSelectorStr = typeof titleSelector === 'string' ? titleSelector : titleSelector.selector;
+          const title = await this.selectText(item, titleSelectorStr);
+
           console.log(`extractEpisodes 多路线 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
             link: url.includes('http') ? url : (this.baseUrl + url),
             title,
             desc: title
           };
-        });
+        }));
 
         episodes.push({ title, episodes: episodeInfos });
       }
@@ -387,17 +489,29 @@ export default class GenericDataSource implements DataSource {
       const container = selectFirst(doc, config.containerSelector);
       if (container) {
         const items = select(container, config.itemSelector);
-        const episodeInfos: EpisodeInfo[] = items.map(item => {
-          const [sel, attr] = config.itemSelectors.url.split('@')
-          const url = this.selectAttribute(item, sel, attr);
-          const title = this.selectText(item, config.itemSelectors.title);
+        const episodeInfos = await Promise.all(items.map(async (item) => {
+          const urlSelector = config.itemSelectors.url;
+          const titleSelector = config.itemSelectors.title;
+
+          // 安全地获取URL选择器
+          const urlSelectorStr = typeof urlSelector === 'string' ? urlSelector : urlSelector.selector;
+          const urlSelectorParts = urlSelectorStr.split('@');
+          const urlSel = urlSelectorParts[0];
+          const urlAttr = urlSelectorParts[1];
+
+          const url = await this.selectAttribute(item, urlSel, urlAttr);
+
+          // 安全地获取标题选择器
+          const titleSelectorStr = typeof titleSelector === 'string' ? titleSelector : titleSelector.selector;
+          const title = await this.selectText(item, titleSelectorStr);
+
           console.log(`extractEpisodes 单路线 视频详情链接是否拼接baseUrl：${url.includes('http') } 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
           return {
             link: url.includes('http') ? url : (this.baseUrl + url),
             title,
             desc: title
           };
-        });
+        }));
 
         episodes.push({ title: "剧集列表", episodes: episodeInfos });
       }
@@ -406,9 +520,18 @@ export default class GenericDataSource implements DataSource {
     return episodes;
   }
 
-  private extractRecommends(doc: AnyNode, config: RecommendConfig): VideoInfo[] {
+  /**
+   * 提取推荐列表
+   */
+  private async extractRecommends(doc: AnyNode, config: RecommendConfig): Promise<VideoInfo[]> {
     const items = select(doc, config.listSelector);
-    return items.map(item => this.extractVideoInfo(item, config.itemSelectors, config.urlNeedBaseUrl, config.enabledHttps));
+
+    // 并行处理所有推荐项
+    const recommendPromises = items.map(async (item) => {
+      return await this.extractVideoInfo(item, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+    });
+
+    return await Promise.all(recommendPromises);
   }
 
   private async parseHtml(url: string): Promise<AnyNode> {
@@ -427,18 +550,32 @@ export default class GenericDataSource implements DataSource {
     return null;
   }
 
-  // 选择文本
-  private selectText(context: AnyNode, selector: string): string {
-    const element = selectTextContent(context, selector);
-    return element ? element : '';
+  /**
+   * 选择文本
+   */
+  private async selectText(context: AnyNode, selector: string, postProcess?: ProcessConfig): Promise<string> {
+    let text = selectTextContent(context, selector) || '';
+
+    if (postProcess) {
+      text = await ScriptProcessor.execute<string>(text, postProcess);
+    }
+
+    return text;
   }
 
-  // 选择属性
-  private selectAttribute(context: AnyNode, selector: string, attribute?: string): string {
-    const [sel, attr] = selector.split('@');
-    console.log(`selectAttribute 属性值选择器 sel：${sel}，attribute：${attribute || attr}`)
-    const element = selectFirst(context, sel);
-    return element ? element.attr(attribute || attr) : '';
+  /**
+   * 选择属性
+   */
+  private async selectAttribute(context: AnyNode, selector: string, attribute?: string, postProcess?: ProcessConfig): Promise<string> {
+    console.log(`selectAttribute 属性值选择器 sel：${selector}，attribute：${attribute}`)
+    const element = selectFirst(context, selector);
+    let value = element ? element.attr(attribute || '') : '';
+
+    if (postProcess) {
+      value = await ScriptProcessor.execute<string>(value, postProcess);
+    }
+
+    return value;
   }
 
 }

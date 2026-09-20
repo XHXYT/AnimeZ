@@ -1,11 +1,57 @@
 
 // 定义配置接口类型
 export interface SelectorConfig {
-  title?: string
-  url?: string
-  imgUrl?: string
-  episode?: string
+  // 支持简单字符串选择器（向后兼容）
+  title?: string | { selector: string; postProcess?: ProcessConfig };
+  url?: string | { selector: string; postProcess?: ProcessConfig };
+  imgUrl?: string | { selector: string; postProcess?: ProcessConfig };
+  episode?: string | { selector: string; postProcess?: ProcessConfig };
+
+  // 支持任意字段的复杂配置
+  [key: string]: string | { selector: string; postProcess?: ProcessConfig } | undefined;
 }
+
+export interface StringProcessConfig {
+  type: 'regex' | 'replace' | 'substring' | 'split';
+  pattern?: string;
+  flags?: string;
+  group?: number;
+  search?: string;
+  replace?: string;
+  start?: string | number;
+  end?: string | number;
+  delimiter?: string;
+  index?: number;
+}
+
+export interface ProcessConfig {
+  type: 'script' | 'expression' | 'string' | 'condition' | 'transform' | 'pipeline';
+
+  // 脚本执行
+  script?: string;
+  context?: Record<string, any>;
+
+  // 表达式计算
+  expression?: string;
+
+  // 字符串处理
+  stringProcess?: StringProcessConfig;
+
+  // 条件处理
+  condition?: string;
+  trueValue?: any;
+  falseValue?: any;
+
+  // 数据转换
+  transform?: {
+    map?: Record<string, any>;
+    template?: string;
+  };
+
+  // 管道处理
+  steps?: ProcessConfig[];
+}
+
 
 /** 视频集配置接口 */
 export interface VideoConfig {
