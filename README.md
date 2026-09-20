@@ -1,7 +1,7 @@
 # AnimeZ
-<img src="entry/src/main/resources/base/media/icon.png" width="128px" style="box-shadow: 2px 2px 4px 4px #eeeeee; border-radius: 16px; margin: 16px"/>
+<img src="AppScope/resources/base/media/app_icon.png" width="128px" style="box-shadow: 2px 2px 4px 4px #eeeeee; border-radius: 16px; margin: 16px"/>
 
-### OpenHarmony开源看动漫应用
+### 鸿蒙开源看动漫应用
 ### 数据均来源于网络，仅供学习交流!
 
 
@@ -17,16 +17,15 @@
 - 视频收藏、历史记录、搜索记录
 - 支持AVPlayer、Video控件和IjkPlayer三种播放器（其中Video和IjkPlayer目前都不够完善，推荐使用AVPlayer）
 - 支持切换暗色模式
-
+- 番剧下载
+- 手势切换视频进度、视频音量和屏幕亮度
 
 ## 待实现
-- 番剧下载
 - 支持更多番剧数据源
 - 搜索时支持同时搜索多个数据源
 - 支持番剧分类、时间表等功能
 - 视频播放支持投屏、小窗播放等功能
 - 支持搜索下载列表、历史播放和收藏记录
-- 手势切换视频进度、视频音量和屏幕亮度
 
 
 ## 截图预览
@@ -62,6 +61,21 @@
 ```text
  
    Copyright 2023 Z-P-J
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+   
+   
+   Copyright 2026 XHXYT
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
