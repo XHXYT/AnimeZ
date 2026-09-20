@@ -17,19 +17,19 @@ const DEFAULT_ASPECT = 1.9
 /**
  * 封装AVPlayer实现播放器控件
  */
-@Component
+@ComponentV2
 export struct AVideoPlayer {
 
-  @State videoUrl: string = ''
-  @State isFullScreen: boolean = false
+  @Local videoUrl: string = ''
+  @Local isFullScreen: boolean = false
 
-  @State aspRatio: number = DEFAULT_ASPECT
-  @State videoAspRatio: number = DEFAULT_ASPECT
+  @Local aspRatio: number = DEFAULT_ASPECT
+  @Local videoAspRatio: number = DEFAULT_ASPECT
   private originalVideoAspRatio: number = DEFAULT_ASPECT
-  @State videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
+  @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
 
   private readonly componentController: XComponentController = new XComponentController()
-  @Link playerManager: IPlayerManager
+  @Require @Param playerManager: IPlayerManager
   private timer: number = -1;
 
   /**

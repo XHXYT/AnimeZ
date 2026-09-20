@@ -16,16 +16,16 @@ const DEFAULT_ASPECT = 1.9
  * 视频播放器，封装IjkPlayer
  * TODO 网络视频还存在加载缓慢的问题
  */
-@Component
+@ComponentV2
 export struct IjkVideoPlayer {
   private readonly ijkPlayer = IjkMediaPlayer.getInstance()
-  @State videoAspRatio: number = DEFAULT_ASPECT
-  @State aspRatio: number = DEFAULT_ASPECT
-  @State playStatus: number = PlayerStatus.IDLE
-  @State playerStatus: PlayerStatus = PlayerStatus.IDLE
-  @State isFullScreen: boolean = false
+  @Local videoAspRatio: number = DEFAULT_ASPECT
+  @Local aspRatio: number = DEFAULT_ASPECT
+  @Local playStatus: number = PlayerStatus.IDLE
+  @Local playerStatus: PlayerStatus = PlayerStatus.IDLE
+  @Local isFullScreen: boolean = false
   private readonly componentController: XComponentController = new XComponentController()
-  @Link playerManager: IPlayerManager
+  @Require @Param playerManager: IPlayerManager
   private updateProgressTimer: number = -1
   private lastTime: number = 0
   /**播放器*/

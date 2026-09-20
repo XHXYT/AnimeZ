@@ -6,6 +6,7 @@ import EpisodeInfo from '../../entity/EpisodeInfo';
 import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
+import { _AnimeState } from '../../entryability/AnimeState';
 
 // --- 导入 RedPlayer 相关模块 ---
 import {
@@ -24,18 +25,18 @@ const DEFAULT_ASPECT = 1.9;
 /**
  * 视频播放器，封装 RedPlayer (严格遵循官方文档)
  */
-@Component
+@ComponentV2
 export struct RedVideoPlayer {
   // RedPlayer 播放器实例，初始为 null
   private player: IMediaPlayer | null = null;
-  @State videoAspRatio: number = DEFAULT_ASPECT;
-  @State aspRatio: number = DEFAULT_ASPECT;
-  @State playStatus: number = PlayerStatus.IDLE;
-  @State playerStatus: number = PlayerStatus.IDLE;
-  @State isFullScreen: boolean = false;
+  @Local videoAspRatio: number = DEFAULT_ASPECT;
+  @Local aspRatio: number = DEFAULT_ASPECT;
+  @Local playStatus: number = PlayerStatus.IDLE;
+  @Local playerStatus: number = PlayerStatus.IDLE;
+  @Local isFullScreen: boolean = false;
   // XComponent 控制器
   private readonly xComponentController: RedPlayerXComponentController = new RedPlayerXComponentController();
-  @Link playerManager: IPlayerManager;
+  @Require @Param playerManager: IPlayerManager
 
   private readonly playerInterface: IPlayer = {
     setDataSource: async (url: string) => {
@@ -45,7 +46,7 @@ export struct RedVideoPlayer {
       }
       try {
         // Setup RedVideoPlayer source and config
-        const DeviceProductModel = AppStorage.get<string>('DeviceProductModel')
+        const DeviceProductModel = _AnimeState.DeviceProductModel
         Logger.i('RedVideoPlayer', `DeviceProductModel: ${DeviceProductModel}, 如果为模拟器运行，则只能软解码`);
         await this.player.setDataSource({
           url: url,

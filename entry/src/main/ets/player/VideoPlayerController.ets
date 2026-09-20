@@ -13,6 +13,7 @@ import { VolumeAndBrightnessProgress } from '../components/VolumeAndBrightnessPr
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { audio } from '@kit.AudioKit';
 import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
+import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 
 interface KeyValue {
   name: string,
@@ -22,11 +23,6 @@ interface KeyValue {
 interface IArea {
   width: number,
   height: number
-}
-
-interface IGlobalPosition {
-  x: number,
-  y: number
 }
 
 const VIDEO_SPEED_LIST: KeyValue[] = [
@@ -55,47 +51,42 @@ enum PanelType {
 /**
  * 播放器控制界面
  */
-@Component
+@ComponentV2
 export struct VideoPlayerController {
 
-  @State currentTime: string = "00:00";
-  @State totalTime: string = "00:00";
-  @State progress: number = 0;
-  @State slideEnable: boolean = true;
-  @State playerStatus: number = PlayerStatus.IDLE;
-  @State showController: boolean = true;
-  @State title: string = ''
-  @State isFullScreen: boolean = false
-  @State showPanel: boolean = false
-  @State rightPanelScale: number = 0
-  @State rightPanelType: number = PanelType.NONE
-  @State currentSpeed: string = '1.00'
-  @State isLocked: boolean = false
-  @State videoFit: number = VideoFit.Contain
-  @State isLoading: boolean = false
-  @State bufferingPercent: number = 0
-  @State episodeList: EpisodeInfo[] = []
-  @State episodeIndex: number = 0
-  @Link playerManager: IPlayerManager
+  @Local currentTime: string = "00:00";
+  @Local totalTime: string = "00:00";
+  @Local progress: number = 0;
+  @Local slideEnable: boolean = true;
+  @Local playerStatus: number = PlayerStatus.IDLE;
+  @Local showController: boolean = true;
+  @Local title: string = ''
+  @Local isFullScreen: boolean = false
+  @Local showPanel: boolean = false
+  @Local rightPanelScale: number = 0
+  @Local rightPanelType: number = PanelType.NONE
+  @Local currentSpeed: string = '1.00'
+  @Local isLocked: boolean = false
+  @Local videoFit: number = VideoFit.Contain
+  @Local isLoading: boolean = false
+  @Local bufferingPercent: number = 0
+  @Local episodeList: EpisodeInfo[] = []
+  @Local episodeIndex: number = 0
+  @Require @Param playerManager: IPlayerManager
   private showControllerTimer: number = -1;
-  @Consume('pageStack') pageStack: NavPathStack
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
-  @StorageProp('windowHeight') windowHeight: number = 0
-  @StorageProp('windowWidth') windowWidth: number = 0
   /** @description 默认系统音量 */
-  @State @Watch('showVolume') volume: number = 5
+  @Local volume: number = 5
   /** @description 是否在屏幕左侧触发手势 */
   private isLeftSideGesture: boolean = false
   /** @description 上一次手势的Y坐标 */
   private lastGestureY: number = 0
   private hidePanelTimer: number = -1;
   /** @description 屏幕亮度 */
-  @State screenBrightness: number = 0
+  @Local screenBrightness: number = 0
   /** @description 音量和亮度进度条面板是否可见 */
-  @State isVolumeAndBrightnessVisible: boolean = false
+  @Local isVolumeAndBrightnessVisible: boolean = false
   /** @description 播放器控制器的高度和宽度 */
-  @State playerControllerArea: IArea = { width: 0, height: 0 }
+  @Local playerControllerArea: IArea = { width: 0, height: 0 }
   private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager();
 
   private readonly playerListenerVC: PlayerListener = {
@@ -312,7 +303,7 @@ export struct VideoPlayerController {
               this.playerManager.exitFullScreen()
               return
             }
-            this.pageStack.pop(true)
+            AnimeState.pageStack.pop(true)
           })
         Text(this.title)
           .fontColor(Color.White)
@@ -430,7 +421,7 @@ export struct VideoPlayerController {
       }
 
       // 中部右侧控制区域
-      if (this.widthBp > 2) {
+      if (AnimeState.widthBp > 2) {
         // 退出全屏按钮（大于md时显示）
         Column() {
           SymbolGlyph(this.isFullScreen ? $r('sys.symbol.chevron_left') : $r('sys.symbol.chevron_right'))
@@ -536,7 +527,7 @@ export struct VideoPlayerController {
               this.showRightPanel(PanelType.EPISODES)
             })
         }
-        if (this.widthBp <= 2) {
+        if (AnimeState.widthBp <= 2) {
           // 全屏按钮（小于等于md时显示）
           Image(!this.isFullScreen ? $r("app.media.ic_fullscreen_enter") : $r("app.media.not_fullscreen"))
             .width(!this.isFullScreen ? 24 : 20)
@@ -869,7 +860,7 @@ export struct VideoPlayerController {
    */
   private setScreenBrightness(brightness: number) {
     try {
-      let mainWin: window.Window = AppStorage.get<window.Window>('WindowClass') as window.Window;
+      let mainWin: window.Window = _AnimeState.window!;
       mainWin.setWindowBrightness(brightness, (err: BusinessError) => {
         if (err.code) {
           Logger.e('fail', 'set the brightness', err);
@@ -884,6 +875,7 @@ export struct VideoPlayerController {
   /**
    * @description 监听显示音量面板
    */
+  @Monitor('volume')
   private showVolume() {
     this.isVolumeAndBrightnessVisible = true;
     this.setHidePanelTimer()

@@ -13,17 +13,17 @@ const DEFAULT_ASPECT = 1.9
 /**
  * 视频播放器，封装系统Video TODO 已损坏
  */
-@Component
+@ComponentV2
 export struct SystemVideoPlayer {
 
-  @State videoAspRatio: number = DEFAULT_ASPECT
-  @State aspRatio: number = DEFAULT_ASPECT
-  @State playerStatus: number = PlayerStatus.IDLE
-  @State isFullScreen: boolean = false
-  @State videoUrl: string = ''
-  @State videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
-  @State videoFit: ImageFit = ImageFit.Contain
-  @Link  playerManager: IPlayerManager
+  @Local videoAspRatio: number = DEFAULT_ASPECT
+  @Local aspRatio: number = DEFAULT_ASPECT
+  @Local playerStatus: number = PlayerStatus.IDLE
+  @Local isFullScreen: boolean = false
+  @Local videoUrl: string = ''
+  @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
+  @Local videoFit: ImageFit = ImageFit.Contain
+  @Require @Param playerManager: IPlayerManager
   private timer: number = -1;
   private originalVideoAspRatio: number = DEFAULT_ASPECT;
   private readonly controller: VideoController = new VideoController()

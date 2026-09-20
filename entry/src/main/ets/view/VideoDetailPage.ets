@@ -1,6 +1,6 @@
 // VideoDetailPage.ets
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager, { PlayerStatus } from '../player/model/IPlayerManager';
+import IPlayerManager from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
@@ -26,6 +26,7 @@ import Logger from '../utils/Logger';
 import { Header } from '../components/common/Header';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { VideoCacheList } from '../components/VideoCacheList';
+import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 
 // 系统路由
 @Builder
@@ -33,68 +34,39 @@ export function VideoDetailPageBuilder(name: string, param: Object) {
   VideoDetailPage()
 }
 
-@Entry
-@Component
+@ComponentV2
 struct VideoDetailPage {
 
-  @State state: number = 0
-  @State errorMessage: string = ''
-  @State isFullScreen: boolean = false
-
-  @Consume('pageStack') pageStack: NavPathStack;
-  @StorageLink('showWebView') showWebView: boolean = false
-  @StorageProp('webview_url') webUrl: string = ''
-  @StorageProp('run_js') runJavaScript: string = ''
-  @StorageLink('web_js_video_link') videJsLink: string = ''
-
-  @StorageProp('topRectHeight') topHeight: number = 0;
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0;
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1;
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0;
-  @Consume @Watch('onPhoneLandscape') isPhoneLandscape: boolean;
-  @StorageLink('currentColorMode') currentMode: number = ThemeColorMode.SYSTEM
+  /** @description 全局状态单例（@Monitor 监听 isPhoneLandscape 路径） */
+  @Local animeState: _AnimeState = AnimeState
 
   viewModel: VideoDetailViewModel = new VideoDetailViewModel(
     new PlayerManagerImpl(),
     this.getUIContext().getHostContext()!
   )
-  @State playerManager: IPlayerManager = new PlayerManagerImpl()
-  @State panelController: PanelController = new PanelController()
+  private playerManager: IPlayerManager = new PlayerManagerImpl()
+  private panelController: PanelController = new PanelController()
   private webviewController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear() {
     this.viewModel = new VideoDetailViewModel(this.playerManager, this.getUIContext().getHostContext()!)
-    this.viewModel.setOnStatusChangedCallback((status: number) => {
-      // 处理状态变化
-      if (status == PlayerStatus.ERROR) {
-        this.errorMessage = this.viewModel.errorMessage
-      }
-    });
-
-    this.viewModel.setOnFullScreenChangedCallback((isFullScreen: boolean) => {
-      // 处理全屏变化
-      this.isFullScreen = isFullScreen
-    });
-
-    this.viewModel.setOnProgressChangeCallback((totalTime: number, currentTime: number) => {
-      // 处理进度变化
-    });
   }
 
   aboutToDisappear() {
     this.viewModel.onDestroy();
   }
 
+  @Monitor('animeState.isPhoneLandscape')
   onPhoneLandscape() {
-    this.viewModel.onPhoneLandscape(this.isPhoneLandscape);
+    this.viewModel.onPhoneLandscape(AnimeState.isPhoneLandscape);
   }
 
   build() {
     NavDestination() {
       Stack() {
         StateView({
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.viewModel.state,
+          errorMessage: this.viewModel.errorMessage,
           content: () => {
             this.Content()
           },
@@ -106,7 +78,7 @@ struct VideoDetailPage {
           .width('100%')
           .height('100%')
         // WebView
-        if (this.showWebView) {
+        if (AnimeState.showWebView) {
           this.WebViewContent()
         }
       }
@@ -140,7 +112,7 @@ struct VideoDetailPage {
   }
 
   @Builder WebViewContent() {
-    Web({ src: this.webUrl, controller: this.webviewController })
+    Web({ src: AnimeState.webviewUrl, controller: this.webviewController })
       .backgroundColor(Color.Transparent)
       .javaScriptAccess(true)
       .width(1).height(1)
@@ -153,12 +125,12 @@ struct VideoDetailPage {
             Logger.e('tips', `URL ${e.url} 开始加载JavaScript`)
             setTimeout(() => {
               // TODO 待修复 webviewController 未绑定上或者绑定了多个 Web 组件
-              this.webviewController.runJavaScript(this.runJavaScript)
+              this.webviewController.runJavaScript(AnimeState.runJs)
                 .then((result) => {
                   console.info(`URL ${e.url} 执行 result: ${result}`)
-                  this.videJsLink = JSON.parse(result)
-                  this.showWebView = false
-                  console.info(`URL ${e.url} 显示状态: ${this.showWebView} 解析后链接：${this.videJsLink}`)
+                  AnimeState.webJsVideoLink = JSON.parse(result)
+                  AnimeState.showWebView = false
+                  console.info(`URL ${e.url} 显示状态: ${AnimeState.showWebView} 解析后链接：${AnimeState.webJsVideoLink}`)
                 })
                 .catch((error: BusinessError) => {
                   Logger.e('fail', '加载JavaScript', error)
@@ -175,22 +147,22 @@ struct VideoDetailPage {
     GridRow({ columns: 12 }) {
       // 播放器区
       GridCol({
-        span: this.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
+        span: this.viewModel.isFullScreen ? VideoPlayerNewGridColSpan : VideoPlayerGridColSpan,
         order: 1
       }) {
         Stack() {
-          MultiVideoPlayer({ playerManager: this.playerManager, isFullScreen: this.isFullScreen })
+          MultiVideoPlayer({ playerManager: this.playerManager, isFullScreen: this.viewModel.isFullScreen })
         }
         .width('100%')
         .backgroundColor(Color.Black)
         .alignContent(Alignment.Center)
-        .padding({ top: this.isFullScreen ? 0 : this.topHeight - 10 })
-        .height(this.isFullScreen ? '100%' : VideoDetailGridColHeight(this.widthBp, this.heightBp))
+        .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight - 10 })
+        .height(this.viewModel.isFullScreen ? '100%' : VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp))
       }
 
       // 视频详情区
       GridCol({
-        span: this.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
+        span: this.viewModel.isFullScreen ? VideoDetailNewGridColSpan : VideoDetailGridColSpan,
         order: 2
       }) {
         if (this.viewModel.videoDetailInfo) {
@@ -208,7 +180,7 @@ struct VideoDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
-          .padding({ top: this.isFullScreen ? 0 : this.topHeight - 10 })
+          .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight - 10 })
         }
       }.layoutWeight(1)
 
@@ -280,7 +252,7 @@ struct VideoDetailPage {
               .borderRadius(8)
               .shadow({
                 radius: 12,
-                color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
+                color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
                 offsetX: 6,
                 offsetY: 6
               })
@@ -372,7 +344,7 @@ struct VideoDetailPage {
           .borderColor('#cccccc')
           .shadow({
             radius: 12,
-            color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
+            color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
             offsetX: 6,
             offsetY: 6
           })
@@ -457,7 +429,7 @@ struct VideoDetailPage {
               )
               .borderColor($r('app.color.background_color_accent'))
               .margin({ bottom: 8, right: '2%' })
-              .width(this.isFullScreen ? '17%' : '18%')
+              .width(this.viewModel.isFullScreen ? '17%' : '18%')
               .maxLines(1)
               .onClick(() => {
                 if (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex) {

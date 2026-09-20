@@ -1,11 +1,10 @@
 import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
 import EpisodeInfo from '../entity/EpisodeInfo';
-import { IjkVideoPlayer } from '../player/IJK/IjkVideoPlayer';
 import Logger from '../utils/Logger';
-import router from '@ohos.router';
 import { media } from '@kit.MediaKit';
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
+import { AnimeState } from '../entryability/AnimeState';
 
 // 系统路由 - 本地视频播放界面
 @Builder
@@ -17,12 +16,11 @@ export function LocalVideoPlayerPageBuilder(name: string, param: Object) {
  * 本地视频播放页面
  * TODO 目前用IjkPlayer、AVPlayer、RedPlayer播放本地m3u8视频，Video控件播放不了(？)本地缓存的m3u8
  */
-@Component
+@ComponentV2
 struct LocalVideoPlayerPage {
 
-  @State isFullScreen: boolean = false
-  @Consume('pageStack') pageStack: NavPathStack
-  @State playerManager: IPlayerManager = new PlayerManagerImpl()
+  @Local isFullScreen: boolean = false
+  @Local playerManager: IPlayerManager = new PlayerManagerImpl()
 
   aboutToAppear() {
     this.playerManager.addListener({
@@ -39,7 +37,7 @@ struct LocalVideoPlayerPage {
         this.isFullScreen = isFullScreen
         // TODO 退出全屏时暂时直接退出
         if (!isFullScreen) {
-          this.pageStack.pop(true)
+          AnimeState.pageStack.pop(true)
         }
       },
       onVideoSizeChange: (w: number, h: number) => {
@@ -76,21 +74,6 @@ struct LocalVideoPlayerPage {
       let params = value.pathInfo.param as Record<string, EpisodeInfo>
       let episode: EpisodeInfo = params.episode as EpisodeInfo
       Logger.e('tips', 'aboutToAppear episode=' + JSON.stringify(episode))
-      // TODO 本地文件转fd://
-      //    if (episode.videoUrl && episode.videoUrl.startsWith('/')) {
-      //      // 本地视频文件
-      //      fs.open(episode.videoUrl, fs.OpenMode.READ_ONLY, (err, file) => {
-      //        if (err) {
-      //          this.playerManager.setStatus(PlayerStatus.ERROR)
-      //        } else {
-      //          episode.videoUrl = 'fd://' + file.fd
-      //          Logger.e(this, 'open local video, uri=' + episode.videoUrl)
-      //          this.playerManager.playEpisode(episode)
-      //        }
-      //      });
-      //    } else {
-      //      this.playerManager.playEpisode(episode)
-      //    }
       this.playerManager.playEpisodeList([episode], 0)
     })
   }

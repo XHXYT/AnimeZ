@@ -1,8 +1,18 @@
-import { DataSourceConfig, SelectorConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig, SelectorConfig, ProcessConfig } from "../api/DataSourceConfig"
 import { dataSourceManager } from "../api/DataSourceManager"
 import TitleBar from "../components/TitleBar"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
 import { ToastUtil } from "../utils/ToastUtils"
+import { AnimeState } from "../entryability/AnimeState"
+
+/** 选择器字段的复杂配置形态（与 DataSourceConfig.SelectorConfig 的对象分支结构一致） */
+interface SelectorFieldConfig {
+  selector: string
+  postProcess?: ProcessConfig
+}
+
+/** 选择器字段取值：简单字符串 或 带 postProcess 的复杂配置 */
+type SelectorValue = string | SelectorFieldConfig | undefined
 
 // 系统路由 - 视频源详情
 @Builder
@@ -10,25 +20,15 @@ export function VideoSourceDetailBuilder(name: string, param: DataSourceConfig) 
   VideoSourceDetail({ sourceConfig: param })
 }
 
-@Component
+@ComponentV2
 struct VideoSourceDetail {
-  @Prop sourceConfig: DataSourceConfig
-
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 宽度断点
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
-  // 高度断点
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
+  @Require @Param sourceConfig: DataSourceConfig
 
   // 编辑状态的配置（深拷贝避免直接修改原始数据）
-  @State editingConfig: DataSourceConfig = {} as DataSourceConfig
-  @State hasChanges: boolean = false
-  @State currentTabIndex: number = 0
-  @State isLoading: boolean = false
+  @Local editingConfig: DataSourceConfig = {} as DataSourceConfig
+  @Local hasChanges: boolean = false
+  @Local currentTabIndex: number = 0
+  @Local isLoading: boolean = false
 
   // Tab页标题
   private tabTitles: string[] = ['基本', '搜索', '主页', '详情', '视频']
@@ -91,7 +91,7 @@ struct VideoSourceDetail {
       .height('100%')
       .backgroundColor($r('app.color.background_color_accent'))
     }
-    .padding({ top: this.topHeight - 15, bottom: this.bottomHeight - 15 })
+    .padding({ top: AnimeState.topRectHeight - 15, bottom: AnimeState.bottomRectHeight - 15 })
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -111,7 +111,7 @@ struct VideoSourceDetail {
             value: '确认',
             fontColor: Color.Red,
             action: () => {
-              this.pageStack.pop()
+              AnimeState.pageStack.pop()
             }
           }
         })
@@ -230,7 +230,7 @@ struct VideoSourceDetail {
         ToastUtil.showToast({ message: "数据源更新成功" })
       }
       this.hasChanges = false
-      // this.pageStack.pop()
+      // AnimeState.pageStack.pop()
     } catch (error) {
       ToastUtil.showToast({ message: "保存失败: " + error.message })
     } finally {
@@ -396,7 +396,7 @@ struct VideoSourceDetail {
           this.markAsChanged()
         }, '搜索结果列表的CSS选择器')
         // 搜索结果配置 - 视频信息
-        this.VideoInfoSelector('搜索结果配置', this.editingConfig.parserConfig.search.videos.itemSelectors as SelectorConfig, (config: SelectorConfig) => {
+        this.VideoInfoSelector('搜索结果配置', this.editingConfig.parserConfig.search.videos.itemSelectors, (config: SelectorConfig) => {
           this.editingConfig.parserConfig.search.videos.itemSelectors = config
           this.markAsChanged()
         })
@@ -523,6 +523,29 @@ struct VideoSourceDetail {
     }
   }
 
+  /** 提取选择器字段的文本用于输入框回显 */
+  private selectorToText(value: SelectorValue): string {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (value !== undefined) {
+      return value.selector || ''
+    }
+    return ''
+  }
+
+  /** 更新选择器字段：原值为复杂配置时仅替换 selector，保留 postProcess */
+  private updateSelectorValue(value: string, old: SelectorValue): string | SelectorFieldConfig {
+    if (typeof old === 'object') {
+      const result: SelectorFieldConfig = { selector: value }
+      if (old.postProcess !== undefined) {
+        result.postProcess = old.postProcess
+      }
+      return result
+    }
+    return value
+  }
+
   // 视频信息选择器
   @Builder
   VideoInfoSelector(title: string, config: SelectorConfig, onChange: (config: SelectorConfig) => void) {
@@ -530,9 +553,9 @@ struct VideoSourceDetail {
       Text(title)
         .titleStyles(0)
       // 番剧名选择器
-      this.InputFieldWithTitle('番剧名', config.title || '', (value: string) => {
+      this.InputFieldWithTitle('番剧名', this.selectorToText(config.title), (value: string) => {
         const newConfig: SelectorConfig = {
-          title: value,
+          title: this.updateSelectorValue(value, config.title),
           url: config.url || '',
           imgUrl: config.imgUrl || '',
           episode: config.episode || ''
@@ -540,20 +563,20 @@ struct VideoSourceDetail {
         onChange(newConfig)
       }, '番剧名称的CSS选择器')
       // 封面链接选择器
-      this.InputFieldWithTitle('封面链接', config.imgUrl || '', (value: string) => {
+      this.InputFieldWithTitle('封面链接', this.selectorToText(config.imgUrl), (value: string) => {
         const newConfig: SelectorConfig = {
           title: config.title || '',
           url: config.url || '',
-          imgUrl: value,
+          imgUrl: this.updateSelectorValue(value, config.imgUrl),
           episode: config.episode || ''
         }
         onChange(newConfig)
       }, '封面图片链接的CSS选择器')
       // 番剧链接选择器
-      this.InputFieldWithTitle('番剧链接', config.url || '', (value: string) => {
+      this.InputFieldWithTitle('番剧链接', this.selectorToText(config.url), (value: string) => {
         const newConfig: SelectorConfig = {
           title: config.title || '',
-          url: value,
+          url: this.updateSelectorValue(value, config.url),
           imgUrl: config.imgUrl || '',
           episode: config.episode || ''
         }
@@ -561,12 +584,12 @@ struct VideoSourceDetail {
       }, '番剧详情链接的CSS选择器')
 
       // 剧集数选择器
-      this.InputFieldWithTitle('剧集数', config.episode || '', (value: string) => {
+      this.InputFieldWithTitle('剧集数', this.selectorToText(config.episode), (value: string) => {
         const newConfig: SelectorConfig = {
           title: config.title || '',
           url: config.url || '',
           imgUrl: config.imgUrl || '',
-          episode: value
+          episode: this.updateSelectorValue(value, config.episode)
         }
         onChange(newConfig)
       }, '剧集数量的CSS选择器')
@@ -582,18 +605,18 @@ struct VideoSourceDetail {
       Text(title)
         .titleStyles(0)
       // 标题选择器
-      this.InputFieldWithTitle('标题', config.title || '', (value: string) => {
+      this.InputFieldWithTitle('标题', this.selectorToText(config.title), (value: string) => {
         const newConfig: SelectorConfig = {
-          title: value,
+          title: this.updateSelectorValue(value, config.title),
           url: config.url || ''
         }
         onChange(newConfig)
       }, '剧集标题的CSS选择器')
       // 链接选择器
-      this.InputFieldWithTitle('链接', config.url || '', (value: string) => {
+      this.InputFieldWithTitle('链接', this.selectorToText(config.url), (value: string) => {
         const newConfig: SelectorConfig = {
           title: config.title || '',
-          url: value
+          url: this.updateSelectorValue(value, config.url)
         }
         onChange(newConfig)
       }, '剧集链接的CSS选择器')

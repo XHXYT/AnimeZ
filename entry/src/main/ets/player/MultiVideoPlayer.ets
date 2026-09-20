@@ -10,11 +10,11 @@ import { AbilityConstant, common } from '@kit.AbilityKit';
 /**
  * 支持多种视频播放器切换
  */
-@Component
+@ComponentV2
 export struct MultiVideoPlayer {
 
-  @Link playerManager: IPlayerManager
-  @Link isFullScreen: boolean
+  @Require @Param playerManager: IPlayerManager
+  @Require @Param isFullScreen: boolean
 
   aboutToAppear() {
     if (!this.playerManager) {
