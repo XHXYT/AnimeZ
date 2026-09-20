@@ -1,10 +1,10 @@
 import Logger from '../utils/Logger';
 import Webview from '@ohos.web.webview';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { GoToWeb } from '../utils/GoOutWeb';
 import TitleBar from '../components/TitleBar';
+import { AnimeState } from '../entryability/AnimeState';
 
 // 系统路由
 @Builder
@@ -18,21 +18,15 @@ const PAD_USER_AGENT: string =
 const PHONE_USER_AGENT: string =
   'Mozilla/5.0 (Linux; Android 10.0; ohos) AppleWebKit/537.36 (KHTMl, like Gecko) Chrome/99.0.4844.88 HuaweiBrowser/13.0.4.302 Mobile Safari/537.36'
 
-@Component
+@ComponentV2
 struct WebPage {
-  @State title: string = ''
-  @State info: string = ''
-  @State theUA: number = -1
-  @State defaultUserUA: string = ''
-  @State loadingProgress: number = 0
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
+  @Local title: string = ''
+  @Local info: string = ''
+  @Local theUA: number = -1
+  @Local defaultUserUA: string = ''
+  @Local loadingProgress: number = 0
   private readonly controller: Webview.WebviewController = new Webview.WebviewController()
   private url: string | Resource = ''
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
 
   build() {
     NavDestination() {
@@ -51,7 +45,7 @@ struct WebPage {
       }
       Web({ src: this.url, controller: this.controller })
         .javaScriptAccess(true)
-        .darkMode(this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? WebDarkMode.On : WebDarkMode.Off)
+        .darkMode(AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? WebDarkMode.On : WebDarkMode.Off)
         .backgroundColor($r('app.color.background_color_accent'))
         .forceDarkAccess(true)
         .onControllerAttached(() => {
@@ -82,7 +76,7 @@ struct WebPage {
         .layoutWeight(1)
 
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -93,7 +87,7 @@ struct WebPage {
       try {
         const url: string = ctx?.pathInfo?.param as string
         if (!url) {
-          this.pageStack.pop(true)
+          AnimeState.pageStack.pop(true)
           return
         }
 
@@ -107,6 +101,22 @@ struct WebPage {
       } catch (e) {
         console.log(`testTag onReady catch exception: ${JSON.stringify(e)}`)
       }
+    })
+    .onBackPressed(() => {
+      // Web 历史可返回时优先返回上一级网页，否则交还导航栈
+      try {
+        if (this.controller.accessBackward()) {
+          try {
+            this.controller.backward()
+          } catch (error) {
+            Logger.e('fail', 'Web页面返回', error)
+          }
+          return true
+        }
+      } catch (error) {
+        Logger.e('fail', '检查Web是否可以返回页面', error)
+      }
+      return false
     })
 
   }
@@ -216,22 +226,6 @@ struct WebPage {
       .margin({ left: 12 })
       .bindMenu(this.MoreMenu())
       .fontColor([$r('app.color.color_text_major')])
-  }
-
-  onBackPress() {
-    try {
-      if (this.controller.accessBackward()) {
-        try {
-          this.controller.backward()
-        } catch (error) {
-          Logger.e('fail', 'Web页面返回', error)
-        }
-        return true
-      }
-    } catch (error) {
-      Logger.e('fail', '检查Web是否可以返回页面', error)
-    }
-    return false
   }
 
 }

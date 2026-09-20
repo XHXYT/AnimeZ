@@ -5,14 +5,14 @@ import { SymbolGlyphModifier } from "@kit.ArkUI"
 /**
  * 普通设置行(可带跳转符号)
  */
-@Component
+@ComponentV2
 export struct SettingRow {
-  @State title: ResourceStr = ''
-  @State subtitle: ResourceStr = ''
-  @State icons: ResourceStr = ''
-  @State infoRes: ResourceStr = ''
-  @State isOnClick: boolean = false
-  onCheck: () => void = () => {}
+  @Param title: ResourceStr = ''
+  @Param subtitle: ResourceStr = ''
+  @Param icons: ResourceStr = ''
+  @Param infoRes: ResourceStr = ''
+  @Param isOnClick: boolean = false
+  @Event onCheck: () => void = () => {}
 
   aboutToAppear() {
   }

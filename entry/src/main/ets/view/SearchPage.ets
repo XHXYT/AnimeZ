@@ -2,12 +2,12 @@
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { VideoList } from '../components/VideoList';
-import VideoInfo from '../entity/VideoInfo';
 import StateView from '../components/StateView';
-import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
 import SearchHistoryInfo from '../entity/SearchHistoryInfo';
-import { SearchHistoryTable } from '../db/impl/SearchHistoryDao';
+import { AnimeState } from '../entryability/AnimeState';
+import { searchViewModel } from '../viewmodel/SearchViewModel';
+import { CategoryViewModel } from '../viewmodel/CategoryViewModel';
 
 const tag: string = 'SearchPage'
 
@@ -17,31 +17,17 @@ export function SearchPageBuilder(name: string, param: Object) {
   SearchPage()
 }
 
-@Component
+@ComponentV2
 struct SearchPage {
 
-  @State videoList: VideoInfo[] = []
-  @Consume('pageStack') pageStack: NavPathStack
-  @State searchHistoryList: SearchHistoryInfo[] = []
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  @StorageLink('currentColorMode') currentMode: number = 1
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @State searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
-  @State state: number = 0
-  @State errorMessage: string = ''
-  @State keyword: string = ''
-
-  private searchHistoryInfoDB = new SearchHistoryTable(this.getUIContext().getHostContext()!)
+  @Local keyword: string = ''
+  private searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '回复术士', '天降之物']
+  @Local categoryViewModel: CategoryViewModel = new CategoryViewModel()
 
   async aboutToAppear() {
-    this.state = ViewState.CUSTOM
+    this.categoryViewModel.state = ViewState.CUSTOM
     // 查询搜索历史
-    const search_list = await this.searchHistoryInfoDB.queryAll()
-    if (search_list) {
-      this.searchHistoryList = search_list
-    }
+    await searchViewModel.loadHistory()
   }
 
   build() {
@@ -49,8 +35,8 @@ struct SearchPage {
       this.SearchBar()
       StateView(
         {
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.categoryViewModel.state,
+          errorMessage: this.categoryViewModel.errorMessage,
           content: () => {
             this.content()
           },
@@ -67,7 +53,7 @@ struct SearchPage {
         .layoutWeight(1)
 
     }
-    .padding({top: this.topHeight - 15, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 15, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -76,7 +62,7 @@ struct SearchPage {
   }
 
   @Builder content() {
-    VideoList({ videoList: this.videoList }).height('100%').padding(16)
+    VideoList({ videoList: this.categoryViewModel.videoList }).height('100%').padding(16)
   }
 
   @Builder SearchBar() {
@@ -85,7 +71,7 @@ struct SearchPage {
         .fontSize(24)
         .fontColor([$r('app.color.color_text_major')])
         .onClick(() => {
-          this.pageStack.pop(true)
+          AnimeState.pageStack.pop(true)
         })
       TextInput({ placeholder: '输入关键字...', text: this.keyword })
         .placeholderFont({ size: 14, weight: 300 })
@@ -146,10 +132,10 @@ struct SearchPage {
   @Builder SearchHistory() {
     Scroll() {
       Column() {
-        if (this.searchHistoryList.length > 0) {
+        if (searchViewModel.searchHistoryList.length > 0) {
           this.Bar("搜索历史")
           Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-            ForEach(this.searchHistoryList, (item: SearchHistoryInfo) => {
+            ForEach(searchViewModel.searchHistoryList, (item: SearchHistoryInfo) => {
               Text(item.keyword)
                 .textAlign(TextAlign.Center)
                 .backgroundColor($r('app.color.background_color'))
@@ -209,40 +195,17 @@ struct SearchPage {
       ToastUtil.showToast({ message: '请输入关键词' }, `${tag}.doSearch`)
       return
     }
-    this.state = ViewState.LOADING
-    let result: SearchHistoryInfo = {
-      id: null,
-      keyword: keyword,
-      accessTime: new Date().getTime()
-    }
-    this.searchHistoryInfoDB.insert(result)
-      .then((insertId) => {
-        console.log('SearchTest #doSearch 插入成功id为：', insertId)
-      })
-      .catch((error: Error) => {
-        console.error("SearchTest #doSearch 插入操作失败: ", error)
-      })
-
-    dataSourceManager.search(keyword, 1)
-      .then((videoList) => {
-        this.videoList = videoList
-        if (this.videoList.length == 0) {
-          this.state = ViewState.EMPTY
-        } else {
-          this.state = ViewState.CONTENT
-        }
-      })
-      .catch((e: Error) => {
-        this.errorMessage = JSON.stringify(e)
-        this.state = ViewState.ERROR
-      })
+    // 记录搜索历史（VM 内插入后自动刷新历史列表）
+    searchViewModel.addHistory(this.keyword)
+    // 执行搜索（状态迁移 LOADING→CONTENT/EMPTY 由 VM 管理）
+    await this.categoryViewModel.search(this.keyword)
   }
 
   private clearHistory() {
     ToastUtil.showAlertDialog(
       {
         title: '清空搜索历史',
-        message: '确认清空搜索历史记录？',
+        message: '确认清空所有搜索历史记录？',
         primaryButton: {
           value: '取消',
           action: () => {
@@ -252,8 +215,7 @@ struct SearchPage {
           value: '确定',
           fontColor: Color.Red,
           action: async () => {
-            await this.searchHistoryInfoDB.clearAll()
-            this.searchHistoryList = []
+            await searchViewModel.clearHistory()
           }
         }
       }

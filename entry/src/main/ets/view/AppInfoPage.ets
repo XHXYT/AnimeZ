@@ -1,11 +1,12 @@
 
 import TitleBar from '../components/TitleBar'
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { SettingGroupType, SettingItem } from '../entity/SettingsData';
-import { SettingRow } from '../components/SettingsItem';
+import { CustomListItem } from '../components/CustomListItem';
+import { CustomItemInfo, ItemActionType } from '../entity/CusItemInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppSettings } from '../entryability/Settings';
 import { GoToWeb } from '../utils/GoOutWeb';
+import { AnimeState } from '../entryability/AnimeState';
 
 // 系统路由 - 应用信息
 @Builder
@@ -13,55 +14,88 @@ export function AppInfoPageBuilder(name: string, param: Object) {
   AppInfoPage()
 }
 
-@Entry
-@Component
+@ComponentV2
 struct AppInfoPage {
 
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  @StorageLink('currentColorMode') currentMode: number = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
-
-  private appInfo: SettingItem<SettingGroupType>[] = [
-    { title: '应用版本', settings_key: 'version', info: AppSettings.versionName, icon: $r('app.media.ic_version') },
-    { title: '应用原始开发者', settings_key: 'raw_author', info: 'Z-P-J', icon: $rawfile('zpj.png'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
+  private appInfo: CustomItemInfo[] = [
+    new CustomItemInfo({
+      id: 'version',
+      title: '应用版本',
+      subtitle: AppSettings.versionName,
+      icon: $r('app.media.ic_version'),
+      type: ItemActionType.NONE
+    }),
+    new CustomItemInfo({
+      id: 'raw_author',
+      title: '应用原始开发者',
+      subtitle: 'Z-P-J',
+      icon: $rawfile('zpj.png'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
       }
-    },
-    { title: '开源仓库', settings_key: 'raw_repo', info: 'https://github.com/Z-P-J/AnimeZ', icon: $r('app.media.ic_github'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J/AnimeZ")
+    }),
+    new CustomItemInfo({
+      id: 'raw_repo',
+      title: '开源仓库',
+      subtitle: 'https://github.com/Z-P-J/AnimeZ',
+      icon: $r('app.media.ic_github'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J/AnimeZ")
       }
-    },
-    { title: '应用维护者', settings_key: 'new_author', info: '小雅', icon: $rawfile('ya.png'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/")
+    }),
+    new CustomItemInfo({
+      id: 'new_author',
+      title: '应用维护者',
+      subtitle: '小雅',
+      icon: $rawfile('ya.png'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/")
       }
-    },
-    { title: '应用维护者', settings_key: 'new_author', info: 'SummerKaze', icon: $rawfile('summer_kaze.jfif'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze/")
+    }),
+    new CustomItemInfo({
+      id: 'new_author_summer',
+      title: '应用维护者',
+      subtitle: 'SummerKaze',
+      icon: $rawfile('summer_kaze.jfif'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze/")
       }
-    },
-    { title: '新开源仓库', settings_key: 'new_repo', info: 'https://github.com/XHXYT/AnimeZ', icon: $r('app.media.ic_github'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/AnimeZ")
+    }),
+    new CustomItemInfo({
+      id: 'new_repo',
+      title: '新开源仓库',
+      subtitle: 'https://github.com/XHXYT/AnimeZ',
+      icon: $r('app.media.ic_github'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT/AnimeZ")
       }
-    },
-    { title: '开源社区', settings_key: 'open_harmony', info: 'https://gitee.com/ohos-dev', icon: $r('app.media.ic_community'),
-      onClick: () => {
-        this.pageStack.pushPathByName("WebPage", "https://gitee.com/ohos-dev")
+    }),
+    new CustomItemInfo({
+      id: 'open_harmony',
+      title: '开源社区',
+      subtitle: 'https://gitee.com/ohos-dev',
+      icon: $r('app.media.ic_community'),
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://gitee.com/ohos-dev")
       }
-    },
-    { title: '鸿蒙交流群', settings_key: 'qq_group', info: '693903194', icon: $r('app.media.ic_qq'),
-      onClick: () => {
+    }),
+    new CustomItemInfo({
+      id: 'qq_group',
+      title: '鸿蒙交流群',
+      subtitle: '693903194',
+      icon: $r('app.media.ic_qq'),
+      type: ItemActionType.NONE,
+      onChange: () => {
         GoToWeb('mqqapi://card/show_pslcard?src_type=internal&version=1&uin=693903194&card_type=group&source=qrcode',
         this.getUIContext().getHostContext()! as common.UIAbilityContext)
       }
-    }
+    })
   ]
 
   build() {
@@ -75,7 +109,7 @@ struct AppInfoPage {
             .width(64)
             .margin({top: 56})
             .borderRadius(100)
-            .shadow({ radius: 12, color: this.currentMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+            .shadow({ radius: 12, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
           Text($r('app.string.EntryAbility_label'))
             .fontSize(18)
             .fontColor($r('app.color.color_text_major'))
@@ -87,20 +121,11 @@ struct AppInfoPage {
             .margin({ top: 8, bottom: 56 })
           ForEach(
             this.appInfo,
-            (setting: SettingItem<SettingGroupType>, index) => {
+            (item: CustomItemInfo, index) => {
               Column() {
-                SettingRow({
-                  icons: setting.icon,
-                  title: setting.title,
-                  subtitle: setting.info,
-                  onCheck: () => {
-                    if (setting.onClick) {
-                      setting.onClick(
-                        setting,
-                        () => {},
-                      )
-                    }
-                  }
+                CustomListItem({
+                  item: item,
+                  itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
                 })
               }
               .backgroundColor($r('app.color.background_color'))
@@ -112,7 +137,7 @@ struct AppInfoPage {
               })
             },
             // 唯一键生成
-            (setting: SettingItem<SettingGroupType>) => setting.settings_key
+            (item: CustomItemInfo) => item.id
           )
         }
         .clip(true)
@@ -126,7 +151,7 @@ struct AppInfoPage {
       .layoutWeight(1)
 
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

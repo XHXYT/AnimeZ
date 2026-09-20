@@ -1,9 +1,18 @@
 
 import TitleBar from '../components/TitleBar'
-import { SettingGroup, SettingGroupType, SettingItem } from '../entity/SettingsData';
-import { ConfigurationConstant } from '@kit.AbilityKit';
-import { SettingRow } from '../components/SettingsItem';
+import { AnimeState } from '../entryability/AnimeState';
+import { CustomListItem } from '../components/CustomListItem';
+import { CustomItemInfo, ItemActionType } from '../entity/CusItemInfo';
 import { ToastUtil } from '../utils/ToastUtils';
+
+/** 关于作者页分组（头部信息 + 通用行） */
+interface AuthorSection {
+  key: string
+  title: string
+  introduce: string
+  image: ResourceStr
+  items: CustomItemInfo[]
+}
 
 // 系统路由 - 关于作者
 @Builder
@@ -11,139 +20,125 @@ export function AboutMePageBuilder(name: string, param: string) {
   AboutMePage()
 }
 
-@Component
+@ComponentV2
 struct AboutMePage {
 
-  @Consume DarkModeImage: boolean
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-
-  private aboutMe: SettingGroup<boolean | string | number>[] = [
+  private aboutMe: AuthorSection[] = [
     {
-      title: '原作者',
-      name: 'Z-P-J',
       key: 'zpj',
+      title: '原作者',
       introduce: '开源鸿蒙应用开发爱好者，为开源鸿蒙应用生态作出微薄的贡献',
       image: $rawfile('zpj.png'),
-      settings: [
-        {
+      items: [
+        new CustomItemInfo({
+          id: 'raw_author_github',
           title: 'Github主页',
-          info: 'https://github.com/Z-P-J',
+          subtitle: 'https://github.com/Z-P-J',
           icon: $r('app.media.ic_github'),
-          settings_key: 'raw_author_github',
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/Z-P-J")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'raw_author_gitee',
           title: 'Gitee主页',
-          info: 'https://gitee.com/z-p-j',
-          settings_key: 'raw_author_gitee',
+          subtitle: 'https://gitee.com/z-p-j',
           icon: $r('app.media.ic_gitee'),
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://gitee.com/z-p-j")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://gitee.com/z-p-j")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'support_raw_author',
           title: '赞助作者',
-          info: '赞助作者一杯咖啡',
-          settings_key: 'support_raw_author',
+          subtitle: '赞助作者一杯咖啡',
           icon: $r('app.media.ic_java'),
-          onClick: (item, callback) => {
-            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            ToastUtil.showToast({ message: '该功能暂未实现，感谢您的支持！' }, 'AboutMePage')
           }
-        },
+        }),
       ]
     },
     {
-      title: '维护者',
-      name: '小雅',
       key: 'ya',
+      title: '维护者',
       introduce: '鸿蒙应用开发爱好者，一只代码小白',
       image: $rawfile('ya.png'),
-      settings: [
-        {
+      items: [
+        new CustomItemInfo({
+          id: 'new_author_github',
           title: 'Github主页',
-          settings_key: 'new_author_github',
-          info: 'https://github.com/XHXYT',
+          subtitle: 'https://github.com/XHXYT',
           icon: $r('app.media.ic_github'),
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/XHXYT")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'new_author_gitee',
           title: 'Gitee主页',
-          settings_key: 'new_author_gitee',
-          info: 'https://gitee.com/DXHXYT',
+          subtitle: 'https://gitee.com/DXHXYT',
           icon: $r('app.media.ic_gitee'),
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://gitee.com/DXHXYT")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://gitee.com/DXHXYT")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'support_new_author',
           title: '赞助作者',
-          info: '赞助作者一杯咖啡',
-          settings_key: 'support_new_author',
+          subtitle: '赞助作者一杯咖啡',
           icon: $r('app.media.ic_java'),
-          onClick: (item, callback) => {
-            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            ToastUtil.showToast({ message: '该功能暂未实现，感谢您的支持！' }, 'AboutMePage')
           }
-        },
+        }),
       ]
     },
     {
-      title: '维护者',
-      name: 'SummerKaze',
       key: 'summer',
+      title: '维护者',
       introduce: '鸿蒙应用开发爱好者',
       image: $rawfile('summer_kaze.jfif'),
-      settings: [
-        {
+      items: [
+        new CustomItemInfo({
+          id: 'summer_author_github',
           title: 'Github主页',
-          settings_key: 'new_author_github',
-          info: 'https://github.com/SummerKaze',
+          subtitle: 'https://github.com/SummerKaze',
           icon: $r('app.media.ic_github'),
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/SummerKaze")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'summer_author_gitee',
           title: 'Gitee主页',
-          settings_key: 'new_author_gitee',
-          info: 'https://gitee.com/SummerKaze',
+          subtitle: 'https://gitee.com/SummerKaze',
           icon: $r('app.media.ic_gitee'),
-          onClick: (item, callback) => {
-            this.pageStack.pushPathByName("WebPage", "https://gitee.com/SummerKaze")
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("WebPage", "https://gitee.com/SummerKaze")
           }
-        },
-        {
+        }),
+        new CustomItemInfo({
+          id: 'support_summer_author',
           title: '赞助作者',
-          info: '赞助作者一杯咖啡',
-          settings_key: 'support_new_author',
+          subtitle: '赞助作者一杯咖啡',
           icon: $r('app.media.ic_java'),
-          onClick: (item, callback) => {
-            ToastUtil.showToast({message: '该功能暂未实现，感谢您的支持！'})
-            callback?.()
+          type: ItemActionType.NONE,
+          onChange: () => {
+            ToastUtil.showToast({ message: '该功能暂未实现，感谢您的支持！' }, 'AboutMePage')
           }
-        },
+        }),
       ]
     }
   ]
-
-  aboutToAppear() {
-
-  }
 
   build() {
     NavDestination() {
@@ -154,13 +149,13 @@ struct AboutMePage {
           // 关于作者详情
           ForEach(
             this.aboutMe,
-            (group: SettingGroup<SettingGroupType>, index) => {
+            (group: AuthorSection, index) => {
               Image(group.image)
                 .height(64)
                 .width(64)
                 .margin({top: 56})
                 .borderRadius(100)
-                .shadow({ radius: 12, color: this.DarkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+                .shadow({ radius: 12, color: AnimeState.darkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
               Text(group.title)
                 .fontSize(18)
                 .fontColor($r('app.color.color_text_major'))
@@ -194,23 +189,13 @@ struct AboutMePage {
                 }
 
                 ForEach(
-                  group.settings,
-                  (setting: SettingItem<SettingGroupType>) => {
-                    SettingRow({
-                      icons: setting.icon,
-                      title: setting.title,
-                      subtitle: setting.info,
-                      onCheck: () => {
-                        if (setting.onClick) {
-                          setting.onClick(
-                            setting,
-                            () => { },
-
-                          )
-                        }
-                      }
+                  group.items,
+                  (item: CustomItemInfo) => {
+                    CustomListItem({
+                      item: item,
+                      itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
                     })
-                  }, (setting: SettingItem<SettingGroupType>) => setting.settings_key)
+                  }, (item: CustomItemInfo) => item.id)
               }
               .backgroundColor($r('app.color.background_color'))
               .borderRadius(16)
@@ -220,9 +205,7 @@ struct AboutMePage {
               }
             },
             // 唯一键生成
-            (group: SettingGroup<SettingGroupType>) => {
-              return group.key || String(group.settings.length)
-            }
+            (group: AuthorSection) => group.key
           )
         }
         .padding(16)
@@ -236,7 +219,7 @@ struct AboutMePage {
       .width('100%')
       .layoutWeight(1)
     }
-    .padding({top: this.topHeight - 20, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

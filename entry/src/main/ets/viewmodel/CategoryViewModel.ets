@@ -22,8 +22,8 @@ export class CategoryViewModel {
   /** 目录页数据源（CategoryPage），引用由 VM 持有，通过 IDataSource 自身通知刷新 */
   readonly categoryDataSource: CategoryDataSource = new CategoryDataSource([])
 
-  /** 目录页当前加载参数 */
-  private url: string = ''
+  /** 目录页当前加载地址（onRetry 重试用） */
+  public url: string = ''
 
   /**
    * 加载目录第一页（原 CategoryPage.loadFirstPage）
@@ -56,7 +56,7 @@ export class CategoryViewModel {
       } else {
         this.state = ViewState.CONTENT
       }
-    } catch (e: Error) {
+    } catch (e) {
       this.errorMessage = JSON.stringify(e)
       this.state = ViewState.ERROR
     }

@@ -1,14 +1,12 @@
-import { dataSourceManager } from "../api/DataSourceManager"
 import VideoInfo, { TypeInfo } from "../entity/VideoInfo"
 import { VideoCategoryNavigateInfo } from "../entity/VideoNavigateInfo"
-import Logger from "../utils/Logger"
-import { BaseDataSource } from "../viewmodel/BaseDataSource"
-import StateView, { ViewState } from "../components/StateView"
+import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
 import { VideoList } from "../components/VideoList"
 import { VideoCategoryColumnsTemplate } from "../utils/breakpoint/BreakPoint"
 import { appSettings } from "../entryability/Settings"
-import { CategoryDataSource } from "../entity/CategoryData"
+import { AnimeState } from "../entryability/AnimeState"
+import { CategoryViewModel } from "../viewmodel/CategoryViewModel"
 
 
 // 系统路由 - 视频目录页
@@ -20,24 +18,11 @@ export function CategoryPageBuilder(name: string, param: Object) {
 /**
  * 视频目录页
  */
-@Component
+@ComponentV2
 export struct CategoryPage {
 
-  @State state: number = 0
-  @State url: string = ''
-  @State page: number = 0
-  @State title: string = ''
-  @State errorMessage: string = ''
-  @Consume('pageStack') pageStack: NavPathStack
-  // 顶部避让高度
-  @StorageProp('topRectHeight') topHeight: number = 0
-  // 底部避让高度
-  @StorageProp('bottomRectHeight') bottomHeight: number = 0
-  // 宽度断点
-  @StorageLink('currentWidthBreakpoint') widthBp: WidthBreakpoint = 1
-  // 高度断点
-  @StorageLink('currentHeightBreakpoint') heightBp: HeightBreakpoint = 0
-  @State categoryDataSource: CategoryDataSource = new CategoryDataSource([])
+  @Local title: string = ''
+  @Local categoryViewModel: CategoryViewModel = new CategoryViewModel()
 
   build() {
     NavDestination() {
@@ -46,13 +31,13 @@ export struct CategoryPage {
       })
       StateView(
         {
-          state: this.state,
-          errorMessage: this.errorMessage,
+          state: this.categoryViewModel.state,
+          errorMessage: this.categoryViewModel.errorMessage,
           content: () => {
             this.Content(appSettings.category_UI_type)
           },
           onRetry: () => {
-            this.loadFirstPage()
+            this.categoryViewModel.loadFirstPage(this.categoryViewModel.url)
             return true
           }
         }
@@ -60,7 +45,7 @@ export struct CategoryPage {
         .width('100%')
         .layoutWeight(1)
     }
-    .padding({top: this.topHeight - 15, bottom: this.bottomHeight - 20})
+    .padding({top: AnimeState.topRectHeight - 15, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -71,8 +56,7 @@ export struct CategoryPage {
       try {
         const params: VideoCategoryNavigateInfo = ctx?.pathInfo?.param as VideoCategoryNavigateInfo
         this.title = params.title
-        this.url = params.url
-        this.loadFirstPage()
+        this.categoryViewModel.loadFirstPage(params.url)
         console.log('CategoryPage 视频目录页接收的params：', JSON.stringify(params))
       } catch (e) {
         console.log(`VideoList Navigate onReady catch exception: ${e.code} ${e.message}`)
@@ -86,12 +70,12 @@ export struct CategoryPage {
     if (UI_type === 1) {
       // 图片 + 标题 1
       VideoList({
-        videoListDataSource: this.categoryDataSource
+        videoListDataSource: this.categoryViewModel.categoryDataSource
       }).padding(16)
     } else {
       // 详细 0
       Grid() {
-        LazyForEach(this.categoryDataSource, (item: VideoInfo) => {
+        LazyForEach(this.categoryViewModel.categoryDataSource, (item: VideoInfo) => {
           GridItem() {
             this.VideoItemDetailed(item)
           }
@@ -99,7 +83,7 @@ export struct CategoryPage {
       }.padding(16)
       .columnsGap(6)
       .rowsGap(8)
-      .columnsTemplate(VideoCategoryColumnsTemplate(this.widthBp))
+      .columnsTemplate(VideoCategoryColumnsTemplate(AnimeState.widthBp))
     }
 
   }
@@ -158,8 +142,6 @@ export struct CategoryPage {
           .fontWeight(FontWeight.Normal)
       }
       .layoutWeight(1)
-      // .borderWidth(2)
-      // .borderColor(Color.Red)
       .justifyContent(FlexAlign.Start)
     }.padding({right: 10})
     .width('100%')
@@ -167,30 +149,4 @@ export struct CategoryPage {
     .backgroundColor($r('app.color.image_mask_color'))
   }
 
-  aboutToAppear(): void {
-
-  }
-
-  async loadFirstPage() {
-    this.state = ViewState.LOADING
-    try {
-      const data = await dataSourceManager.getVideoList(this.url, this.page)
-      Logger.d('CategoryPage', '#loadNextPage list=' + JSON.stringify(data))
-      this.state = ViewState.CONTENT
-      // 推送数据
-      this.categoryDataSource.pushData(data)
-    } catch (err) {
-      this.errorMessage = err.message
-      this.state = ViewState.ERROR
-      Logger.e('fail', '获取界面视频数据', err)
-    }
-  }
-
-  loadNextPage() {
-
-  }
-
 }
-
-
-
