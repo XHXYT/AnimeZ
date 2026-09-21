@@ -162,6 +162,14 @@ struct VideoDetailPage {
     return this.viewModel.isVerticalVideo()
   }
 
+  /** 播放器区域是否为全高（全屏/左右分栏/断点表为 100% 时），此时控制层可撑满整个播放器列 */
+  private isPlayerAreaFullHeight(): boolean {
+    if (this.viewModel.isFullScreen || this.isSideBySide()) {
+      return true
+    }
+    return VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp) === '100%'
+  }
+
   @Builder Content() {
     GridRow({ columns: 12 }) {
       // 播放器区
@@ -170,13 +178,17 @@ struct VideoDetailPage {
         order: 1
       }) {
         Stack() {
-          MultiVideoPlayer({ playerManager: this.playerManager, isFullScreen: this.viewModel.isFullScreen })
+          MultiVideoPlayer({
+            playerManager: this.playerManager,
+            isFullScreen: this.viewModel.isFullScreen,
+            fillHeight: this.isPlayerAreaFullHeight()
+          })
         }
         .width('100%')
         .backgroundColor(Color.Black)
         .alignContent(Alignment.Center)
         .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight })
-        .height(this.viewModel.isFullScreen || this.isSideBySide() ? '100%'
+        .height(this.isPlayerAreaFullHeight() ? '100%'
           : VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp))
       }
 

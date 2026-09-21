@@ -54,7 +54,7 @@ export struct More {
   build() {
     Column() {
       // 标题
-      Header('更多')
+      Header('更多', undefined, false, false)
       // 列表
       Column() {
         ForEach(

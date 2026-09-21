@@ -225,7 +225,6 @@ export const appSettings: AppConfigs = new AppConfigs()
 
 /**
  * 兼容壳：仅保留 versionName 供 AppInfoPage 读取
- * （AppInfoPage 转 V2 后改用 AnimeState.appVersion，届时删除本类）
  */
 export class AppSettings {
 

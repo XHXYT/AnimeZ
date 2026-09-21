@@ -25,6 +25,10 @@ export struct MpvVideoPlayer {
   @Local videoFit: VideoFit = VideoFit.Contain;
   @Local isFullScreen: boolean = false;
   @Require @Param playerManager: IPlayerManager
+  /** 播放器区域为全高（左右分栏等）时撑满容器，控制层可利用上下黑边空间 */
+  @Param fillHeight: boolean = false;
+  /** 外层容器实测宽高比（onAreaChange 测量，0 表示未测量） */
+  @Local containerRatio: number = 0;
 
   private readonly playerInterface: IPlayer = {
     setDataSource: async (url: string): Promise<void> => {
@@ -238,18 +242,25 @@ export struct MpvVideoPlayer {
         .width('100%')
         .height('100%')
     }
-    .height(this.isFullScreen ? '100%' : undefined)
+    .height(this.isFullScreen || this.fillHeight ? '100%' : undefined)
     .backgroundColor(Color.Black)
     .clip(true)
-    .aspectRatio(this.getOuterAspRatio())
+    .aspectRatio(this.isFullScreen || this.fillHeight ? undefined : this.getOuterAspRatio())
     .width('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      const w: number = Number(newArea.width)
+      const h: number = Number(newArea.height)
+      if (w > 0 && h > 0) {
+        this.containerRatio = w / h
+      }
+    })
   }
 
   /** 当前画面尺寸模式对应的渲染表面宽高比 */
   private getSurfaceRatio(): number {
     switch (this.videoFit) {
       case VideoFit.Fill:
-        return this.getOuterAspRatio();
+        return this.getContainerRatio();
       case VideoFit.Fit_16_9:
         return 16 / 9;
       case VideoFit.Fit_4_3:
@@ -270,11 +281,16 @@ export struct MpvVideoPlayer {
    */
   private isSurfaceHeightDriven(): boolean {
     const surfaceRatio = this.getSurfaceRatio();
-    const outerRatio = this.getOuterAspRatio();
+    const outerRatio = this.getContainerRatio();
     if (this.videoFit === VideoFit.Cover) {
       return surfaceRatio > outerRatio;
     }
     return surfaceRatio < outerRatio;
+  }
+
+  /** 实测容器宽高比（onAreaChange 测量；未测量时回退到按窗口推算的值） */
+  private getContainerRatio(): number {
+    return this.containerRatio > 0 ? this.containerRatio : this.getOuterAspRatio()
   }
 
   /**

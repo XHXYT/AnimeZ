@@ -224,7 +224,7 @@ struct VideoCollectionPage {
     .width('100%')
     .height('100%')
     .layoutWeight(1)
-    .padding({top: 16, bottom: 16})
+    .padding({top: 4, bottom: 16})
   }
 
   @Builder
@@ -280,12 +280,15 @@ struct CollectionItem {
           .alignSelf(ItemAlign.Start)
           .fontColor($r('app.color.color_text_major'))
           .fontSize(16)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Column() {
           Text(new Date(this.item.accessTime).toLocaleDateString())
             .alignSelf(ItemAlign.Start)
             .margin({ top: 4 })
             .fontSize(12)
             .fontColor($r('app.color.color_text_minor'))
+            .maxLines(1)
           Text(dataSourceManager.getSourceTitle(this.item.sourceKey))
             .alignSelf(ItemAlign.Start)
             .margin({ top: 4 })
@@ -294,10 +297,13 @@ struct CollectionItem {
             .borderRadius(4)
             .backgroundColor($r('app.color.primary_color'))
             .fontColor(Color.White)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .alignSelf(ItemAlign.Start)
       }
       .height('100%')
+      .layoutWeight(1)
       .margin({ left: 12, right: 16 })
       .justifyContent(FlexAlign.SpaceBetween)
     }

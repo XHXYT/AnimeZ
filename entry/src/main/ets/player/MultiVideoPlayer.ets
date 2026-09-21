@@ -16,6 +16,8 @@ export struct MultiVideoPlayer {
 
   @Require @Param playerManager: IPlayerManager
   @Require @Param isFullScreen: boolean
+  /** 播放器区域为全高（左右分栏等）时撑满容器，控制层可利用上下黑边空间 */
+  @Param fillHeight: boolean = false
 
   aboutToAppear() {
     // 开启应用接续 -> 在播放的页面才打开
@@ -37,22 +39,22 @@ export struct MultiVideoPlayer {
     Stack() {
       if (appSettings.default_player === 'video') {
         // 系统Video组件
-        SystemVideoPlayer({ playerManager: this.playerManager })
+        SystemVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       } else if (appSettings.default_player === 'av') {
         // AVPlayer
-        AVideoPlayer({ playerManager: this.playerManager })
+        AVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       } else if (appSettings.default_player === 'red') {
         // 红薯播放器
-        RedVideoPlayer({ playerManager: this.playerManager })
+        RedVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       } else if (appSettings.default_player === 'mpv') {
         // MPV播放器
-        MpvVideoPlayer({ playerManager: this.playerManager })
+        MpvVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       } else {
         // IJK播放器
-        IjkVideoPlayer({ playerManager: this.playerManager })
+        IjkVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       }
     }
-    .height(this.isFullScreen ? '100%' : undefined)
+    .height(this.isFullScreen || this.fillHeight ? '100%' : undefined)
     .width('100%')
   }
 }

@@ -238,7 +238,7 @@ struct VideoHistoryPage {
     .width('100%')
     .height('100%')
     .layoutWeight(1)
-    .padding({top: 16, bottom: 16})
+    .padding({top: 4, bottom: 16})
   }
 
   @Builder
@@ -346,18 +346,24 @@ struct HistoryItem {
           .alignSelf(ItemAlign.Start)
           .fontColor($r('app.color.color_text_major'))
           .fontSize(16)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Blank()
         Text(this.item.episodeName)
           .alignSelf(ItemAlign.Start)
           .margin({ bottom: 4 })
           .fontSize(12)
           .fontColor($r('app.color.color_text_minor'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(VideoTimeUtils.stringForTime(this.item.currentTime) + ' / ' + VideoTimeUtils.stringForTime(this.item.totalTime))
           .alignSelf(ItemAlign.Start)
           .fontSize(12)
           .fontColor($r('app.color.color_text_minor'))
+          .maxLines(1)
       }
       .height('100%')
+      .layoutWeight(1)
       .margin({ left: 12, right: 16 })
       .justifyContent(FlexAlign.SpaceBetween)
     }

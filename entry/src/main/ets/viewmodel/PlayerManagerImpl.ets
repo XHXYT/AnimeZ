@@ -2,11 +2,13 @@ import media from '@ohos.multimedia.media';
 import { IPlayer } from '../player/model/IPlayer';
 import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from '../player/model/IPlayerManager';
 import window from '@ohos.window';
+import { BusinessError } from '@kit.BasicServicesKit';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel } from './AppContinueModel';
 import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
+import { AnimeState } from '../entryability/AnimeState';
 
 /**
  * 播放器管理（总）
@@ -19,6 +21,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private readonly listeners: PlayerListener[] = []
   private status: number = PlayerStatus.IDLE
   private fullScreenMode: boolean = false
+  /** 自由窗口模式下通过 maximize 进入的全屏，退出时需 recover 恢复自由窗口 */
+  private fullScreenByMaximize: boolean = false
 
   private totalTime: number = 0
   private currentTime: number = 0
@@ -328,6 +332,15 @@ export default class PlayerManagerImpl implements IPlayerManager {
       win.setWindowLayoutFullScreen(true)
       // 隐藏状态栏
       win.setWindowSystemBarEnable([])
+      // 自由窗口（小窗）模式下，窗口本身只是悬浮窗，
+      // 需 maximize 将窗口扩展为设备屏幕全屏（沉浸式，无标题栏），视频才能真正铺满屏幕
+      if (AnimeState.windowMode) {
+        win.maximize().then(() => {
+          this.fullScreenByMaximize = true
+        }).catch((e: BusinessError) => {
+          Logger.e('fail', `enterFullScreen maximize code=${e.code}`, e)
+        })
+      }
       // 手动全屏锁定横屏；传感器触发的全屏保持跟随传感器旋转，
       // 保证手机转回竖屏时窗口随之转回竖屏，从而自动退出全屏
       const orientation = sensorDriven
@@ -350,6 +363,13 @@ export default class PlayerManagerImpl implements IPlayerManager {
       win.setWindowLayoutFullScreen(true)
       // 显示状态栏
       win.setWindowSystemBarEnable(['status', 'navigation'])
+      // 由 maximize 扩展的全屏需 recover 恢复为原自由窗口
+      if (this.fullScreenByMaximize) {
+        this.fullScreenByMaximize = false
+        win.recover().catch((e: BusinessError) => {
+          Logger.e('fail', `exitFullScreen recover code=${e.code}`, e)
+        })
+      }
       // 设置窗口方向为自动但受系统锁定
       win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED)
       this.fullScreenMode = false

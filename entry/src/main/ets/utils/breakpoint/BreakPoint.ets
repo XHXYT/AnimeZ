@@ -101,6 +101,16 @@ export const VideoListColumnsTemplate2 = BreakpointFunction<string>({
   ['xl']: "1fr 1fr 1fr 1fr"
 })
 
+/**视频列表列数（非滚动布局用）*/
+export const VideoListColumnsCount = BreakpointFunction<number>({
+  ['sm']: 3, ['md']: 4, ['lg']: 5, ['xl']: 6
+})
+
+/**视频列表列数-普通（非滚动布局用）*/
+export const VideoListColumnsCount2 = BreakpointFunction<number>({
+  ['sm']: 3, ['md']: 3, ['lg']: 3, ['xl']: 4
+})
+
 /**视频目录列表Grid列数*/
 export const VideoCategoryColumnsTemplate = BreakpointFunction<string>({
   ['sm']: "1fr",
@@ -117,6 +127,11 @@ export const HomeBannerDisplayCount = BreakpointFunction<number>({
 /**首页轮播图前&后边距（前后露出的部分）*/
 export const HomeBannerBannerMargin = BreakpointFunction<number>({
   ['sm']: 0, ['md']: 12, ['lg']: 64, ['xl']: 64
+})
+
+/**首页轮播图左右边距（sm断点与主页整体边距一致，md及以上为0）*/
+export const HomeBannerHorizontalPadding = BreakpointFunction<number>({
+  ['sm']: 16, ['md']: 0, ['lg']: 0, ['xl']: 0
 })
 
 /**视频详情页初始栅格高度*/

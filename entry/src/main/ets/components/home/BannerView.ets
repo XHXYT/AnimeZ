@@ -2,7 +2,7 @@ import VideoInfo from "../../entity/VideoInfo";
 import { BaseDataSource } from "../../viewmodel/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
-import { HomeBannerBannerMargin, HomeBannerDisplayCount } from "../../utils/breakpoint/BreakPoint";
+import { HomeBannerBannerMargin, HomeBannerDisplayCount, HomeBannerHorizontalPadding } from "../../utils/breakpoint/BreakPoint";
 import { AnimeState } from "../../entryability/AnimeState";
 
 // 主页轮播图
@@ -63,7 +63,12 @@ export struct BannerView {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .alignSelf(ItemAlign.Start)
     }
-    .padding({ top: 16, bottom: 16 })
+    .padding({
+      top: 16,
+      bottom: 16,
+      left: HomeBannerHorizontalPadding(AnimeState.widthBp),
+      right: HomeBannerHorizontalPadding(AnimeState.widthBp)
+    })
     .onClick(() => {
       console.log('Home 点击图片 ')
       // 默认为新增 由数据库抛出重复值

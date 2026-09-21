@@ -25,6 +25,8 @@ export struct SystemVideoPlayer {
   @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
   @Local videoFit: ImageFit = ImageFit.Contain
   @Require @Param playerManager: IPlayerManager
+  /** 播放器区域为全高（左右分栏等）时撑满容器，控制层可利用上下黑边空间 */
+  @Param fillHeight: boolean = false
   private timer: number = -1;
   private originalVideoAspRatio: number = DEFAULT_ASPECT;
   private readonly controller: VideoController = new VideoController()
@@ -186,8 +188,8 @@ export struct SystemVideoPlayer {
         .autoPlay(true)
         .controls(false)
         .objectFit(this.videoFit)
-        .aspectRatio(Math.max(this.videoAspRatio, this.getOuterAspRatio()))
-        .height(this.isFullScreen ? '100%' : undefined)
+        .aspectRatio(this.fillHeight || this.isFullScreen ? undefined : Math.max(this.videoAspRatio, this.getOuterAspRatio()))
+        .height(this.fillHeight || this.isFullScreen ? '100%' : undefined)
         .onStart(() => {
           Logger.e('tips', 'onStart')
           this.playerManager?.setStatus(PlayerStatus.PLAY)
@@ -239,9 +241,9 @@ export struct SystemVideoPlayer {
           .height('100%')
       }
     }
-    .height(this.isFullScreen ? '100%' : undefined)
+    .height(this.isFullScreen || this.fillHeight ? '100%' : undefined)
     .backgroundColor(Color.Black)
-    .aspectRatio(this.getOuterAspRatio())
+    .aspectRatio(this.isFullScreen || this.fillHeight ? undefined : this.getOuterAspRatio())
     .width('100%')
   }
 

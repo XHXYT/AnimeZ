@@ -2,7 +2,7 @@
 import VideoInfo from '../entity/VideoInfo';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
-import { VideoListColumnsTemplate, VideoListColumnsTemplate2 } from '../utils/breakpoint/BreakPoint';
+import { VideoListColumnsTemplate, VideoListColumnsTemplate2, VideoListColumnsCount, VideoListColumnsCount2 } from '../utils/breakpoint/BreakPoint';
 import { CategoryDataSource } from '../entity/CategoryData';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { AnimeState } from '../entryability/AnimeState';
@@ -34,18 +34,55 @@ export struct VideoList {
 
   build() {
     Column() {
-      Grid() {
-        LazyForEach(this.videoListDataSource, (item: VideoInfo, index: number) => {
-          GridItem() {
-            this.VideoItem(item)
-          }
-        }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
+      if (this.scrollable) {
+        Grid() {
+          LazyForEach(this.videoListDataSource, (item: VideoInfo, index: number) => {
+            GridItem() {
+              this.VideoItem(item)
+            }
+          }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
+        }
+        .hitTestBehavior(HitTestMode.Default)
+        .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(AnimeState.widthBp) : VideoListColumnsTemplate2(AnimeState.widthBp))
+        .width('100%')
+        .columnsGap(8)
+        .rowsGap(8)
+      } else {
+        this.RowsLayout()
       }
-      .hitTestBehavior(this.scrollable ? HitTestMode.Default : HitTestMode.None)
-      .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(AnimeState.widthBp) : VideoListColumnsTemplate2(AnimeState.widthBp))
-      .width('100%')
-      .columnsGap(8)
-      .rowsGap(8)
+    }.width('100%')
+  }
+
+  private getGroups(): Array<Array<VideoInfo | undefined>> {
+    const cols: number = this.isFullList ? VideoListColumnsCount(AnimeState.widthBp) : VideoListColumnsCount2(AnimeState.widthBp)
+    const source: VideoInfo[] = this.videoList ?? []
+    const groups: Array<Array<VideoInfo | undefined>> = []
+    for (let i = 0; i < source.length; i += cols) {
+      const group: Array<VideoInfo | undefined> = []
+      for (let j = i; j < i + cols; j++) {
+        group.push(j < source.length ? source[j] : undefined)
+      }
+      groups.push(group)
+    }
+    return groups
+  }
+
+  @Builder
+  RowsLayout() {
+    Column({ space: 8 }) {
+      ForEach(this.getGroups(), (group: Array<VideoInfo | undefined>, gi: number) => {
+        Row({ space: 8 }) {
+          ForEach(group, (item: VideoInfo | undefined, ii: number) => {
+            if (item !== undefined) {
+              Column() {
+                this.VideoItem(item)
+              }.layoutWeight(1)
+            } else {
+              Column().layoutWeight(1)
+            }
+          }, (item: VideoInfo | undefined, ii: number) => ii + (item ? JSON.stringify(item) : 'empty'))
+        }.width('100%')
+      }, (group: Array<VideoInfo | undefined>, gi: number) => gi + JSON.stringify(group))
     }.width('100%')
   }
 
@@ -100,7 +137,7 @@ export struct VideoList {
     .borderRadius(12)
     .backgroundColor($r('app.color.background_color'))
     .alignContent(Alignment.BottomEnd)
-    .shadow({ radius: 12, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#eeeeee', offsetX: 6, offsetY: 6 })
+    .shadow({ radius: 14, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#cccccc', offsetX: 6, offsetY: 6 })
     .onClick(() => {
       // 默认为新增
       const params: VideoNavigateInfo = {
