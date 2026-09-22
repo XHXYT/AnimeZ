@@ -111,6 +111,23 @@ export class VideoHistoryTable extends AutoTable<VideoHistoryInfo> {
   }
 
   /**
+   * 根据标题精确查询历史记录
+   * 用于链接未命中时的兜底匹配，避免模糊匹配串到标题互含的其他影片
+   * @param title 视频标题
+   * @param sourceKey 数据源标识，非空时一并过滤，避免多源同名片误匹配
+   * @returns 标题完全相同的历史记录数组
+   */
+  async queryByTitleExact(title: string, sourceKey: string = ''): Promise<VideoHistoryInfo[]> {
+    Logger.d(this, 'queryByTitleExact title=' + title + ' sourceKey=' + sourceKey)
+    let predicates = this.getPredicates().equalTo('title', title)
+    if (sourceKey !== '') {
+      predicates = predicates.equalTo('sourceKey', sourceKey)
+    }
+    let items = await this.query(predicates)
+    return items
+  }
+
+  /**
    * 根据数据源查询历史记录
    * 用于筛选特定来源的视频
    * @param sourceKey 数据源标识

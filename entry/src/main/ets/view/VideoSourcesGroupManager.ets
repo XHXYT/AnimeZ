@@ -23,9 +23,21 @@ export struct GroupManager {
       TitleBar({
         showBack: false,
         title: '分组管理',
-        button: () => {
-          this.AddButton()
-        }
+        rightInset: 56,
+        buttons: [
+          {
+            symbol: 'plus',
+            iconSize: 24,
+            width: 40,
+            height: 40,
+            backgroundColor: $r('app.color.background_color_accent'),
+            action: () => {
+              this.isNewGroup = true
+              this.groupName = ''
+              this.openGroupDialog()
+            }
+          }
+        ]
       })
       // 分组列表
       List({ space: 12 }) {
@@ -128,22 +140,6 @@ export struct GroupManager {
           }
         }
       ],
-    })
-  }
-
-  @Builder
-  AddButton() {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph($r('sys.symbol.plus'))
-        .fontSize(24)
-    }
-    .width(40).height(40)
-    .margin({ top: 16, right: 56 })
-    .backgroundColor($r('app.color.background_color_accent'))
-    .onClick(() => {
-      this.isNewGroup = true
-      this.groupName = ''
-      this.openGroupDialog()
     })
   }
 

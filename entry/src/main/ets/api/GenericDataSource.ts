@@ -18,9 +18,9 @@ import {
 import { AnyNode, HtmlTag } from '../utils/thirdpart/htmlsoup/parse';
 import {
   CategoryConfig, EpisodeConfig, ParserConfig, RecommendConfig,
-  SelectorConfig, VideoConfig, ProcessConfig } from './DataSourceConfig';
-import { sortEpisodesByNumber } from '../utils/SortUtils';
+  SelectorConfig, VideoConfig, ProcessConfig, CategoryCardConfig, LoginConfig } from './DataSourceConfig';
 import { ScriptProcessor } from './ScriptProcessor';
+import AuthStore from '../utils/AuthStore';
 
 // 扩展SelectorConfig类型以支持更灵活的配置
 type SelectorValue = string | { selector: string; postProcess?: ProcessConfig };
@@ -33,6 +33,10 @@ export default class GenericDataSource implements DataSource {
   private enabled: boolean;  // 是否启用
   private priority: number;  // 优先级
   private parserConfig: ParserConfig;
+  // JSON 模式支持
+  private sourceType: 'html' | 'json';
+  private requestHeaders?: Record<string, string>;
+  private loginConfig?: LoginConfig;
 
   constructor(config: any) {
     this.key = config.key;
@@ -41,6 +45,9 @@ export default class GenericDataSource implements DataSource {
     this.enabled = config.enabled !== false; // 默认为true
     this.priority = config.priority || 0;
     this.parserConfig = config.parserConfig;
+    this.sourceType = config.parserConfig?.sourceType || 'html';
+    this.requestHeaders = config.parserConfig?.requestHeaders;
+    this.loginConfig = config.login;
 
     // 验证必要字段
     if (!this.key) throw new Error('Missing key in data source configuration');
@@ -68,6 +75,27 @@ export default class GenericDataSource implements DataSource {
     return this.enabled;
   }
 
+  /**
+   * 是否配置了可用的首页数据规则
+   */
+  hasHomepageConfig(): boolean {
+    const homepage = this.parserConfig?.homepage;
+    if (!homepage) {
+      return false;
+    }
+    if (this.isJsonMode()) {
+      return !!(homepage.banner?.urlTemplate
+        || (homepage.category?.cards && homepage.category.cards.length > 0));
+    }
+    return !!((homepage.category && homepage.category.videos
+      && homepage.category.videos.listSelector)
+      || (homepage.category?.cards && homepage.category.cards.length > 0));
+  }
+
+  private isJsonMode(): boolean {
+    return this.sourceType === 'json';
+  }
+
   async search(keyword: string, page: number): Promise<VideoInfo[]> {
     const config = this.parserConfig.search;
     const url = this.baseUrl + config.videos.urlTemplate
@@ -76,6 +104,13 @@ export default class GenericDataSource implements DataSource {
 
     const videos: VideoInfo[] = [];
     try {
+      if (this.isJsonMode()) {
+        const resp = await this.requestJson(url);
+        return this.parseJsonVideoList(resp, config.videos.listSelector,
+          config.videos.itemSelectors as ExtendedSelectorConfig,
+          config.videos.urlNeedBaseUrl, config.videos.enabledHttps);
+      }
+
       const doc = await this.parseHtml(url);
       const list = select(doc, config.videos.listSelector);
 
@@ -96,15 +131,24 @@ export default class GenericDataSource implements DataSource {
 
   async getHomepageData(): Promise<HomepageData> {
     const config = this.parserConfig.homepage;
-    console.log(`获取主页配置：${JSON.stringify(config)}`)
     try {
+      if (this.isJsonMode()) {
+        // JSON 模式：banner 与分类卡片各自请求独立接口
+        const [bannerList, categoryList] = await Promise.all([
+          this.extractJsonBannerList(config.banner),
+          this.extractJsonCategoryList(config.category)
+        ]);
+        return { bannerList, categoryList };
+      }
+
+      console.log(`获取主页配置：${JSON.stringify(config)}`)
       const doc = await this.parseHtml(this.baseUrl)
       console.log(`网页doc已获取`)
 
       // 并行处理banner和category
       const [bannerList, categoryList] = await Promise.all([
         this.extractBannerList(doc, config.banner),
-        this.extractCategoryList(doc, config.category)
+        this.extractHtmlCategoryList(doc, config.category)
       ]);
 
       return { bannerList, categoryList };
@@ -115,12 +159,36 @@ export default class GenericDataSource implements DataSource {
   }
 
   async getVideoList(moreUrl: string, page: number): Promise<VideoInfo[]> {
+    if (this.isJsonMode()) {
+      try {
+        // JSON 模式：moreUrl 即数据接口地址，支持 {page} 占位符
+        let url = moreUrl;
+        if (url.includes('{page}')) {
+          url = url.replace('{page}', (page > 0 ? page : 1).toString());
+        } else if (page > 0) {
+          url += (url.includes('?') ? '&' : '?') + 'page=' + page;
+        }
+        const videosConfig = this.parserConfig.homepage.category.videos;
+        const resp = await this.requestJson(url);
+        return this.parseJsonVideoList(resp, videosConfig.listSelector,
+          videosConfig.itemSelectors as ExtendedSelectorConfig,
+          videosConfig.urlNeedBaseUrl, videosConfig.enabledHttps);
+      } catch (e) {
+        Logger.e('fail', `获取视频列表(JSON)`, e);
+        throw e
+      }
+    }
+
     const url = `${moreUrl}${page <= 0 ? '' : page}`;
     Logger.e('tips', "CategoryPage #getVideoList parseHtml url = " + url);
 
     try {
       const doc = await this.parseHtml(url);
-      const drama = selectFirst(doc, this.parserConfig.homepage.category.videos.listSelector);
+      const videosConfig = this.parserConfig.homepage.category.videos;
+      // 优先使用 containerSelector 在整页文档中定位列表容器，
+      // 再用 listSelector 在容器内选取条目（避免同选择器在文档层匹配到条目自身）
+      const containerSelector = videosConfig.containerSelector || videosConfig.listSelector;
+      const drama = selectFirst(doc, containerSelector);
 
       if (!drama) {
         return [];
@@ -147,6 +215,15 @@ export default class GenericDataSource implements DataSource {
   }
 
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
+    if (this.isJsonMode()) {
+      try {
+        return await this.getJsonVideoDetail(url);
+      } catch (e) {
+        Logger.e('fail', `获取视频详情(JSON)`, e);
+        throw e;
+      }
+    }
+
     try {
       console.log(`GenericDataSource.getVideoDetailInfo 等待加载的链接：${url}`)
       const doc = await this.parseHtml(url);
@@ -181,7 +258,9 @@ export default class GenericDataSource implements DataSource {
           return episodes.map(episodes => {
             return {
               title: episodes.title,
-              episodes: sortEpisodesByNumber(episodes.episodes, order)
+              // 规范列表保持源站自然顺序，排序仅由显示层处理，
+              // 保证历史记录中保存的 episodeIndex 不随排序设置变化
+              episodes: episodes.episodes
             }
           });
         })
@@ -189,12 +268,16 @@ export default class GenericDataSource implements DataSource {
 
       Logger.e('tips', 'getVideoDetailInfo title=' + title);
 
+      // 封面为相对路径（/upload/...）时拼接 baseUrl（排除协议相对路径 //host）
+      const finalCoverUrl = (coverUrl && coverUrl.startsWith('/') && !coverUrl.startsWith('//'))
+        ? this.baseUrl + coverUrl : coverUrl;
+
       const info: VideoDetailInfo = {
         sourceKey: this.key,
         title: title,
         url: url,
         desc: desc,
-        coverUrl: coverUrl,
+        coverUrl: finalCoverUrl,
         category: category,
         director: director,
         updateTime: updateTime,
@@ -217,10 +300,26 @@ export default class GenericDataSource implements DataSource {
       const config = this.parserConfig.videoUrl;
       let url = ''
 
-      if (config.pattern === 'regex' && config.pattern) {
-        // 使用正则表达式方式提取URL
+      if (config.pattern === 'json') {
+        // JSON 模式：link 即播放地址接口，直接请求并按路径取值
+        const resp = await this.requestJson(link);
+        const valuePath = config.valuePath || 'data.url';
+        const value = this.getJsonPath(resp, valuePath);
+        if (value === null || value === undefined || String(value) === '') {
+          throw new Error('播放地址解析失败，接口未返回播放地址');
+        }
+        url = String(value);
+
+        if (config.postProcess) {
+          url = await this.applyLegacyPostProcess(url, config.postProcess);
+        }
+      } else if (config.pattern === 'link') {
+        // link 模式：link 本身即为播放页地址，直接透传（通常配合 iframeSelector 交给 WebView 解析）
+        url = link;
+      } else if (config.pattern === 'regex' && config.urlSelector) {
+        // 使用正则表达式方式提取URL（pattern 为 regex 时，urlSelector 字段即正则表达式）
         const htmlString = await HttpUtils.getString(link);
-        const match = htmlString.match(new RegExp(config.pattern));
+        const match = htmlString.match(new RegExp(config.urlSelector));
 
         if (match && match[1]) {
           url = match[1];
@@ -334,6 +433,12 @@ export default class GenericDataSource implements DataSource {
         value = this.baseUrl + value;
       }
 
+      // 图片相对路径（/upload/...）同样需要拼接 baseUrl（排除协议相对路径 //host）
+      if (key === 'imgUrl' && value && urlNeedBaseUrl
+        && value.startsWith('/') && !value.startsWith('//')) {
+        value = this.baseUrl + value;
+      }
+
       if (value.startsWith('http://') && enabledHttps) {
         value = 'https://' + value.substring(7);
       }
@@ -382,6 +487,46 @@ export default class GenericDataSource implements DataSource {
     });
 
     return await Promise.all(bannerPromises);
+  }
+
+  /**
+   * HTML 模式：提取分类列表
+   * 配置了 cards 时每个卡片独立请求自己的页面；否则回退到首页同页解析
+   */
+  private async extractHtmlCategoryList(doc: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList[]> {
+    const cards = categoriesConfig?.cards;
+    if (cards && cards.length > 0) {
+      return await Promise.all(cards.map(card => this.processHtmlCategoryCard(card)));
+    }
+    return await this.extractCategoryList(doc, categoriesConfig);
+  }
+
+  /**
+   * HTML 模式：处理单个分类卡片（独立请求卡片页面并解析列表）
+   */
+  private async processHtmlCategoryCard(card: CategoryCardConfig): Promise<DramaList> {
+    let videoList: VideoInfo[] = [];
+    try {
+      const pageUrl = card.url.includes('http') ? card.url : this.baseUrl + card.url;
+      const doc = await this.parseHtml(pageUrl);
+      const listSelector = card.listSelector || card.listPath || '';
+      const items = select(doc, listSelector);
+      videoList = await Promise.all(items.map(async (li) => {
+        return await this.extractVideoInfo(li, card.itemSelectors as ExtendedSelectorConfig,
+          card.urlNeedBaseUrl ?? true, card.enabledHttps ?? true);
+      }));
+    } catch (e) {
+      Logger.e('fail', `解析分类卡片(HTML): ${card.title}`, e);
+    }
+    let moreUrl = card.moreUrl || '';
+    if (moreUrl && !moreUrl.includes('http')) {
+      moreUrl = this.baseUrl + moreUrl;
+    }
+    return {
+      title: card.title,
+      moreUrl: moreUrl,
+      videoList: videoList
+    };
   }
 
   /**
@@ -536,6 +681,353 @@ export default class GenericDataSource implements DataSource {
 
   private async parseHtml(url: string): Promise<AnyNode> {
     return await HttpUtils.getHtml(url);
+  }
+
+  // ==================== JSON 模式 ====================
+
+  /**
+   * 按点分路径从 JSON 对象中取值，支持数组索引（如 data.list.0.videos）
+   */
+  private getJsonPath(root: object | null, path: string): any {
+    if (root === null || root === undefined) {
+      return null;
+    }
+    if (!path) {
+      return root;
+    }
+    let current: any = root;
+    const parts = path.split('.');
+    for (const part of parts) {
+      if (current === null || current === undefined) {
+        return null;
+      }
+      if (Array.isArray(current)) {
+        const index = parseInt(part, 10);
+        current = isNaN(index) ? current[part] : current[index];
+      } else if (typeof current === 'object') {
+        current = current[part];
+      } else {
+        return null;
+      }
+    }
+    return current === undefined ? null : current;
+  }
+
+  /**
+   * 渲染字段模板：{baseUrl} 为源根地址，其余占位符按点分路径从上下文取值；
+   * 取到数组时以 / 连接
+   */
+  private renderTemplate(template: string, context: object | null): string {
+    if (!template) {
+      return '';
+    }
+    return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
+      const name = key.trim();
+      if (name === 'baseUrl') {
+        return this.baseUrl;
+      }
+      const value = this.getJsonPath(context, name);
+      if (value === null || value === undefined) {
+        return '';
+      }
+      if (Array.isArray(value)) {
+        return value.filter(item => item !== null && item !== undefined).map(item => String(item)).join('/');
+      }
+      return String(value);
+    });
+  }
+
+  /**
+   * 请求 JSON 接口：自动拼接 baseUrl、附加自定义请求头与登录凭证，
+   * 响应 code 非 0 时抛出业务错误
+   */
+  private async requestJson(urlOrPath: string, needAuth: boolean = true): Promise<any> {
+    const url = urlOrPath.startsWith('http') ? urlOrPath : this.baseUrl + urlOrPath;
+    const headers: Record<string, string> = {};
+    if (this.requestHeaders) {
+      Object.assign(headers, this.requestHeaders);
+    }
+    if (needAuth && this.loginConfig) {
+      const token = await AuthStore.getToken(this.key);
+      if (token) {
+        const headerName = this.loginConfig.authHeaderName || 'Authorization';
+        headers[headerName] = (this.loginConfig.authValueTemplate || '{token}').replace('{token}', token);
+      }
+    }
+    const text = await HttpUtils.getString(url, headers);
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      && parsed.code !== undefined && parsed.code !== 0) {
+      throw new Error(parsed.msg || `接口返回错误码 ${parsed.code}`);
+    }
+    return parsed;
+  }
+
+  /**
+   * 从 JSON 响应中解析视频列表（listPath 定位数组，itemSelectors 为字段模板）
+   */
+  private async parseJsonVideoList(resp: object, listPath: string,
+    selectors: ExtendedSelectorConfig, urlNeedBaseUrl: boolean, enabledHttps: boolean): Promise<VideoInfo[]> {
+    const videos: VideoInfo[] = [];
+    const list = this.getJsonPath(resp, listPath);
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (item && typeof item === 'object') {
+          videos.push(await this.mapJsonItem(item, selectors, urlNeedBaseUrl, enabledHttps));
+        }
+      }
+    }
+    return videos;
+  }
+
+  /**
+   * 将单个 JSON 对象按字段模板映射为 VideoInfo
+   */
+  private async mapJsonItem(item: object, selectors: ExtendedSelectorConfig,
+    urlNeedBaseUrl: boolean, enabledHttps: boolean): Promise<VideoInfo> {
+    const info: VideoInfo = {
+      sourceKey: this.key,
+      url: '',
+      imgUrl: '',
+      title: '',
+      episode: ''
+    };
+
+    for (const [key, config] of Object.entries(selectors)) {
+      const template = typeof config === 'string' ? config : (config && config.selector ? config.selector : '');
+      let value = this.renderTemplate(template, item);
+
+      if (typeof config !== 'string' && config && config.postProcess && value) {
+        try {
+          value = await ScriptProcessor.execute<string>(value, config.postProcess);
+        } catch (e) {
+          Logger.e('fail', `mapJsonItem postProcess ${key}`, e);
+        }
+      }
+
+      if (key === 'url' && value && !value.startsWith('http') && urlNeedBaseUrl) {
+        value = this.baseUrl + value;
+      }
+      if (key === 'imgUrl' && value && urlNeedBaseUrl
+        && value.startsWith('/') && !value.startsWith('//')) {
+        value = this.baseUrl + value;
+      }
+      if (value.startsWith('http://') && enabledHttps) {
+        value = 'https://' + value.substring(7);
+      }
+
+      (info as any)[key] = value;
+    }
+
+    return info;
+  }
+
+  /**
+   * 今天是周几（1=周一 ... 7=周日），用于 {today} 占位符
+   */
+  private getTodayWeekday(): number {
+    const day = new Date().getDay(); // 0=周日
+    return day === 0 ? 7 : day;
+  }
+
+  /**
+   * JSON 模式：解析轮播图（追番周表当天数据等）
+   */
+  private async extractJsonBannerList(config: VideoConfig): Promise<VideoInfo[]> {
+    if (!config || !config.urlTemplate) {
+      return [];
+    }
+    try {
+      const url = config.urlTemplate.replace('{today}', this.getTodayWeekday().toString());
+      // listSelector 以 regex: 开头时：先取原始文本，再用正则捕获 JSON 数组（用于 RSC/flight 等非纯 JSON 响应）
+      if (config.listSelector && config.listSelector.startsWith('regex:')) {
+        const fullUrl = url.startsWith('http') ? url : this.baseUrl + url;
+        const headers: Record<string, string> = {};
+        if (this.requestHeaders) {
+          Object.assign(headers, this.requestHeaders);
+        }
+        const text = await HttpUtils.getString(fullUrl, headers);
+        const match = text.match(new RegExp(config.listSelector.substring(6)));
+        if (!match || !match[1]) {
+          Logger.e('tips', 'extractJsonBannerList regex 未匹配到轮播数据');
+          return [];
+        }
+        const bannerArray = JSON.parse(match[1]);
+        if (!Array.isArray(bannerArray)) {
+          return [];
+        }
+        return this.parseJsonVideoList(bannerArray, '',
+          config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+      }
+      const resp = await this.requestJson(url);
+      return this.parseJsonVideoList(resp, config.listSelector,
+        config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+    } catch (e) {
+      Logger.e('fail', `解析轮播图(JSON)`, e);
+      return [];
+    }
+  }
+
+  /**
+   * JSON 模式：按配置卡片数组解析首页分类列表（每卡片对应独立接口）
+   */
+  private async extractJsonCategoryList(categoriesConfig: CategoryConfig): Promise<DramaList[]> {
+    const cards = categoriesConfig?.cards;
+    if (!cards || cards.length === 0) {
+      return [];
+    }
+    return await Promise.all(cards.map(card => this.processJsonCategoryCard(card)));
+  }
+
+  private async processJsonCategoryCard(card: CategoryCardConfig): Promise<DramaList> {
+    let videoList: VideoInfo[] = [];
+    try {
+      const resp = await this.requestJson(card.url);
+      videoList = await this.parseJsonVideoList(resp, card.listPath,
+        card.itemSelectors as ExtendedSelectorConfig,
+        card.urlNeedBaseUrl ?? false, card.enabledHttps ?? true);
+    } catch (e) {
+      Logger.e('fail', `解析分类卡片(JSON): ${card.title}`, e);
+    }
+    return {
+      title: card.title,
+      moreUrl: card.moreUrl || '',
+      videoList: videoList
+    };
+  }
+
+  /**
+   * JSON 模式：获取视频详情（url 即详情接口地址）
+   */
+  private async getJsonVideoDetail(url: string): Promise<VideoDetailInfo> {
+    const config = this.parserConfig.detail;
+    const resp = await this.requestJson(url);
+    const data = this.getJsonPath(resp, 'data');
+    if (!data || typeof data !== 'object') {
+      throw new Error('详情数据为空');
+    }
+
+    const episodes = await this.extractJsonEpisodes(data);
+    const recommends = await this.extractJsonRecommends(data);
+
+    let coverUrl = this.renderTemplate(config.coverSelector, data);
+    // 封面地址后处理（如改写为站点图片代理）
+    if (config.coverPostProcess && coverUrl) {
+      try {
+        coverUrl = await ScriptProcessor.execute<string>(coverUrl, config.coverPostProcess);
+      } catch (e) {
+        Logger.e('fail', `详情封面后处理`, e);
+      }
+    }
+    const finalCoverUrl = (coverUrl && coverUrl.startsWith('/') && !coverUrl.startsWith('//'))
+      ? this.baseUrl + coverUrl : coverUrl;
+
+    // 简介字段可能内嵌 HTML 标签与实体，去除标签并解码常见实体
+    const rawDesc = this.renderTemplate(config.descSelector, data);
+    const desc = rawDesc
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+
+    return {
+      sourceKey: this.key,
+      title: this.renderTemplate(config.titleSelector, data),
+      url: url,
+      desc: desc,
+      coverUrl: finalCoverUrl,
+      category: config.categorySelector ? this.renderTemplate(config.categorySelector, data) : '',
+      director: config.directorSelector ? this.renderTemplate(config.directorSelector, data) : '',
+      updateTime: config.updateTimeSelector ? this.renderTemplate(config.updateTimeSelector, data) : '',
+      protagonist: config.protagonistSelector ? this.renderTemplate(config.protagonistSelector, data) : '',
+      episodes: episodes,
+      recommends: recommends
+    };
+  }
+
+  /**
+   * JSON 模式：解析选集路线（如 play_from），逐路线请求选集接口
+   */
+  private async extractJsonEpisodes(detailData: object): Promise<EpisodeList[]> {
+    const config = this.parserConfig.detail.episodes;
+    const episodes: EpisodeList[] = [];
+    if (!config.jsonRoutesPath) {
+      return episodes;
+    }
+
+    const routes = this.getJsonPath(detailData, config.jsonRoutesPath);
+    if (!Array.isArray(routes) || routes.length === 0) {
+      return episodes;
+    }
+
+    const listPath = config.jsonListPath || 'data.list';
+    const titleTemplate = config.jsonRouteTitleTemplate || '{title}';
+    const sectionsUrlTemplate = config.jsonSectionsUrlTemplate || '';
+
+    for (let routeIndex = 0; routeIndex < routes.length; routeIndex++) {
+      const route = routes[routeIndex];
+      if (!route || typeof route !== 'object') {
+        continue;
+      }
+      // 插值上下文：详情字段 + 路线项字段（路线项优先）
+      const context = Object.assign({}, detailData, route);
+      const routeTitle = this.renderTemplate(titleTemplate, context);
+      try {
+        let list: object | null = null;
+        if (sectionsUrlTemplate) {
+          // 每条路线独立请求选集接口
+          const sectionsUrl = this.renderTemplate(sectionsUrlTemplate, context);
+          const resp = await this.requestJson(sectionsUrl);
+          list = this.getJsonPath(resp, listPath);
+        } else {
+          // 未配置选集接口：剧集列表内嵌在路线对象中（jsonListPath 相对路线项取值）
+          list = this.getJsonPath(route, listPath);
+        }
+        const episodeInfos: EpisodeInfo[] = [];
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            if (!item || typeof item !== 'object') {
+              continue;
+            }
+            // 插值上下文：详情字段 + 路线字段 + 剧集字段（剧集优先）+ 路线索引
+            const itemContext = Object.assign({}, detailData, route, item, { routeIndex: routeIndex });
+            const mapped = await this.mapJsonItem(itemContext, config.itemSelectors as ExtendedSelectorConfig, false, false);
+            episodeInfos.push({
+              link: mapped.url,
+              title: mapped.title,
+              desc: mapped.title
+            });
+          }
+        }
+        episodes.push({ title: routeTitle, episodes: episodeInfos });
+      } catch (e) {
+        Logger.e('fail', `解析选集(JSON) 路线 ${routeTitle}`, e);
+      }
+    }
+
+    return episodes;
+  }
+
+  /**
+   * JSON 模式：解析相关推荐
+   */
+  private async extractJsonRecommends(detailData: object): Promise<VideoInfo[]> {
+    const config = this.parserConfig.detail.recommends;
+    if (!config || !config.jsonUrlTemplate) {
+      return [];
+    }
+    try {
+      const url = this.renderTemplate(config.jsonUrlTemplate, detailData);
+      const resp = await this.requestJson(url);
+      return this.parseJsonVideoList(resp, config.listSelector,
+        config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+    } catch (e) {
+      Logger.e('fail', `解析推荐(JSON)`, e);
+      return [];
+    }
   }
 
   private extractVideoUrlFromScript(html: string, pattern: string): string | null {

@@ -9,6 +9,8 @@ import VideoDetailInfo from '../entity/VideoDetailInfo';
 import VideoInfo from '../entity/VideoInfo';
 import HomepageData from '../entity/HomepageData';
 import { rcp } from '@kit.RemoteCommunicationKit';
+import HttpUtils from '../utils/HttpUtils';
+import AuthStore from '../utils/AuthStore';
 
 // 搜索策略枚举
 enum SearchStrategy {
@@ -29,7 +31,105 @@ class DataSourceManager {
 
   async init(context: common.UIAbilityContext) {
     this.context = context
+    await AuthStore.init(context)
     await this.loadFromConfig()
+  }
+
+  /**
+   * 指定数据源是否支持登录
+   */
+  isLoginSupported(key: string): boolean {
+    return !!this.dataSourceConfigs.get(key)?.login;
+  }
+
+  /**
+   * 指定数据源是否已登录
+   */
+  async isLoggedIn(key: string): Promise<boolean> {
+    const token = await AuthStore.getToken(key);
+    return !!token;
+  }
+
+  /**
+   * 登录指定数据源（JSON API 模式），成功后持久化凭证
+   */
+  async loginSource(key: string, username: string, password: string): Promise<void> {
+    const config = this.dataSourceConfigs.get(key);
+    const login = config?.login;
+    if (!config || !login) {
+      throw new Error('该数据源不支持登录');
+    }
+    const url = login.loginUrl.startsWith('http') ? login.loginUrl : config.baseUrl + login.loginUrl;
+
+    const body: Record<string, string> = {};
+    body[login.usernameField || 'username'] = username;
+    body[login.passwordField || 'password'] = password;
+    if (login.extraBody) {
+      Object.assign(body, login.extraBody);
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.parserConfig?.requestHeaders) {
+      Object.assign(headers, config.parserConfig.requestHeaders);
+    }
+
+    const respText = await HttpUtils.postJson(url, JSON.stringify(body), headers);
+    const resp = JSON.parse(respText);
+    if (resp && typeof resp === 'object' && resp.code !== undefined && resp.code !== 0) {
+      throw new Error(resp.msg || `登录失败，错误码 ${resp.code}`);
+    }
+
+    // 按点分路径提取凭证
+    const tokenPath = login.tokenPath || 'data.token';
+    let token: string = '';
+    let node: any = resp;
+    for (const part of tokenPath.split('.')) {
+      if (node === null || node === undefined) {
+        break;
+      }
+      node = node[part];
+    }
+    if (typeof node === 'string' && node) {
+      token = node;
+    }
+    if (!token) {
+      throw new Error('登录失败：响应中未找到凭证');
+    }
+
+    // 解析过期时间（可选字段）
+    let expiresAt = 0;
+    const expiresNode: any = this.getPathValue(resp, 'data.expires_at');
+    if (typeof expiresNode === 'string' && expiresNode) {
+      const parsed = Date.parse(expiresNode);
+      if (!isNaN(parsed)) {
+        expiresAt = parsed;
+      }
+    }
+
+    await AuthStore.saveToken(key, token, username, expiresAt);
+    Logger.i(this, `DataSourceManager.loginSource Login success: ${key}`);
+  }
+
+  /**
+   * 退出登录指定数据源（清除本地凭证）
+   */
+  async logoutSource(key: string): Promise<void> {
+    await AuthStore.clearToken(key);
+    Logger.i(this, `DataSourceManager.logoutSource Logout: ${key}`);
+  }
+
+  /**
+   * 按点分路径从 JSON 对象中取值
+   */
+  private getPathValue(root: object, path: string): any {
+    let node: any = root;
+    for (const part of path.split('.')) {
+      if (node === null || node === undefined) {
+        return null;
+      }
+      node = node[part];
+    }
+    return node === undefined ? null : node;
   }
 
   /**
@@ -56,6 +156,19 @@ class DataSourceManager {
   }
 
   /**
+   * 获取已启用且配置了首页数据规则的数据源key
+   */
+  getHomepageSourceKeys(): string[] {
+    const keys: string[] = []
+    this.dataSources.forEach(item => {
+      if (item.isEnabled() && item.hasHomepageConfig()) {
+        keys.push(item.getKey())
+      }
+    })
+    return keys;
+  }
+
+  /**
    * 获取指定key的数据源名称
    */
   getSourceTitle(key: string): string {
@@ -69,6 +182,19 @@ class DataSourceManager {
     const names: string[] = []
     this.dataSources.forEach(item => {
       names.push(item.getName())
+    })
+    return names;
+  }
+
+  /**
+   * 获取已启用且配置了首页数据规则的数据源名称
+   */
+  getHomepageSourceTitles(): string[] {
+    const names: string[] = []
+    this.dataSources.forEach(item => {
+      if (item.isEnabled() && item.hasHomepageConfig()) {
+        names.push(item.getName())
+      }
     })
     return names;
   }

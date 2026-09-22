@@ -5,17 +5,32 @@ import VideoTimeUtils from '../utils/VideoTimeUtils';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
-import TitleBar from '../components/TitleBar';
+import TitleBar, { TitleBarButton } from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 import { AnimeState } from '../entryability/AnimeState';
 import { historyViewModel } from '../viewmodel/HistoryViewModel';
+import { dataSourceManager } from '../api/DataSourceManager';
 
 // 系统路由
 @Builder
 export function VideoHistoryPageBuilder(name: string, param: Object) {
   VideoHistoryPage()
+}
+
+// 数据源标签字体配色（同一数据源固定使用同一颜色）
+const SOURCE_BADGE_COLORS: string[] = [
+  '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
+  '#03a9f4', '#009688', '#4caf50', '#ff9800', '#f44336'
+]
+
+function sourceBadgeColor(key: string): string {
+  let hash: number = 0
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) % 1000000007
+  }
+  return SOURCE_BADGE_COLORS[hash % SOURCE_BADGE_COLORS.length]
 }
 
 
@@ -64,9 +79,7 @@ struct VideoHistoryPage {
       // 标题栏
       TitleBar({
         title: '观看历史',
-        button: () => {
-          this.EditButton()
-        }
+        buttons: this.editButtons
       })
 
       StateView({
@@ -171,18 +184,19 @@ struct VideoHistoryPage {
     })
   }
 
-  @Builder
-  EditButton() {
-    if (this.viewState == ViewState.CONTENT) {
-      Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
-        .width(24)
-        .height(24)
-        .objectFit(ImageFit.Contain)
-        .fillColor($r('app.color.color_text_major'))
-        .onClick(() => {
-          this.selectionManager.toggleSelectionMode()
-        })
+  private get editButtons(): TitleBarButton[] {
+    if (this.viewState != ViewState.CONTENT) {
+      return []
     }
+    return [
+      {
+        image: this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'),
+        iconSize: 24,
+        action: () => {
+          this.selectionManager.toggleSelectionMode()
+        }
+      }
+    ]
   }
 
   @Builder
@@ -320,6 +334,10 @@ struct HistoryItem {
     this.selectionManager.removeObserver(this.selectionObserver)
   }
 
+  private get sourceTitle(): string {
+    return dataSourceManager.getSourceTitle(this.item.sourceKey) ?? ''
+  }
+
 
   build() {
     Row() {
@@ -356,11 +374,25 @@ struct HistoryItem {
           .fontColor($r('app.color.color_text_minor'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(VideoTimeUtils.stringForTime(this.item.currentTime) + ' / ' + VideoTimeUtils.stringForTime(this.item.totalTime))
-          .alignSelf(ItemAlign.Start)
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .maxLines(1)
+        Row({ space: 8 }) {
+          Text(VideoTimeUtils.stringForTime(this.item.currentTime) + ' / ' + VideoTimeUtils.stringForTime(this.item.totalTime))
+            .fontSize(12)
+            .fontColor($r('app.color.color_text_minor'))
+            .maxLines(1)
+            .layoutWeight(1)
+          if (this.sourceTitle !== '') {
+            Text(this.sourceTitle)
+              .fontSize(10)
+              .fontColor(sourceBadgeColor(this.item.sourceKey))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .constraintSize({ maxWidth: '60%' })
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .borderRadius(4)
+              .backgroundColor('#33808080')
+          }
+        }
+        .alignItems(VerticalAlign.Center)
       }
       .height('100%')
       .layoutWeight(1)

@@ -25,8 +25,8 @@ struct SettingsPage {
    * 设置项数据（getter 每次求值，读 appSettings 最新值保证选中态同步）
    */
   private get itemList(): CustomItemInfo[] {
-    const sourceViews: ResourceStr[] = dataSourceManager.getTotalSourceTitle()
-    const sourceValues: string[] = dataSourceManager.getTotalKey()
+    const sourceViews: ResourceStr[] = dataSourceManager.getHomepageSourceTitles()
+    const sourceValues: string[] = dataSourceManager.getHomepageSourceKeys()
     return [
       // 界面组
       new CustomItemInfo({ id: 'group_appearance', title: '界面', type: ItemActionType.GROUP }),
@@ -213,7 +213,7 @@ struct SettingsPage {
               (group: ItemGroupData) => group.group?.id ?? String(group.items.length)
             )
           }
-          .padding(16)
+          .padding({ left: 16, right: 16, top: 4, bottom: 16 })
           .width('100%')
           .constraintSize({
             minHeight: '100%'

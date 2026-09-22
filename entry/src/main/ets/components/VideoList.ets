@@ -91,19 +91,31 @@ export struct VideoList {
     Stack() {
       Column() {
         // 封面
-        if (item.imgUrl) {
-          Image(item.imgUrl)
-            .borderRadius({ topLeft: 8, topRight: 8 })
-            .alt($r('app.media.pic_load_failed'))
-            .objectFit(ImageFit.Fill)
-            .layoutWeight(1)
-            .width('100%')
-        } else {
-          Image($r('app.media.pic_load_failed'))
-            .borderRadius({ topLeft: 8, topRight: 8 })
-            .layoutWeight(1)
-            .width('100%')
+        Stack() {
+          if (item.imgUrl) {
+            Image(item.imgUrl)
+              .borderRadius({ topLeft: 8, topRight: 8 })
+              .alt($r('app.media.pic_load_failed'))
+              .objectFit(ImageFit.Fill)
+              .width('100%')
+              .height('100%')
+          } else {
+            Image($r('app.media.pic_load_failed'))
+              .borderRadius({ topLeft: 8, topRight: 8 })
+              .width('100%')
+              .height('100%')
+          }
+          // 深色模式轻蒙版压暗封面颜色
+          if (AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK) {
+            Row()
+              .backgroundColor('#40000000')
+              .width('100%')
+              .height('100%')
+              .borderRadius({ topLeft: 8, topRight: 8 })
+          }
         }
+        .layoutWeight(1)
+        .width('100%')
         // 番名
         Text(item.title)
           .height(40)
@@ -121,7 +133,7 @@ export struct VideoList {
         // 集数
         Column() {
           Text(item.episode)
-            .fontColor(Color.White)
+            .fontColor($r('sys.color.font_on_primary'))
             .fontSize(10)
         }
         .height(18)
@@ -130,7 +142,7 @@ export struct VideoList {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .margin({right: 5, left: 5, bottom: 45})
-        .backgroundColor($r('app.color.color_text_normal'))
+        .backgroundColor('#99000000')
       }
 
     }.width('100%')

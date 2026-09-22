@@ -59,3 +59,8 @@ export const VIDEO_SOURCE_EVENT: Event = new EventImpl(3)
  * 应用接续恢复进度
  */
 export const APP_RESUME_PROGRESS_EVENT: Event = new EventImpl(4)
+
+/**
+ * 播放器后端切换（data.resumePos 为切换前播放位置毫秒，用于续播）
+ */
+export const PLAYER_SWITCH_EVENT: Event = new EventImpl(5)

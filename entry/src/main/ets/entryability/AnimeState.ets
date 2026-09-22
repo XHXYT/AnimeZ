@@ -38,6 +38,10 @@ export class _AnimeState {
   @Trace isPhoneLandscape: boolean = false
   /** 窗口模式 true为PC窗口模式 false为普通窗口模式 */
   @Trace windowMode: boolean = false
+  /** 窗口模式右上角系统三键区域避让宽度（vp） */
+  @Trace titleButtonWidth: number = 0
+  /** 窗口模式系统三键图标中心线距窗口顶部距离（vp），用于垂直对齐 */
+  @Trace titleButtonCenter: number = 0
   /** 当前生效颜色模式 */
   @Trace currentColorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
 

@@ -53,7 +53,7 @@ export struct BannerView {
         .width('100%')
         .borderRadius(16)
         .aspectRatio(1.75)
-        .backgroundColor(AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#80000000' : '#40000000')
+        .backgroundColor('#40000000')
       // 标题
       Text(item.title)
         .fontColor(Color.White)

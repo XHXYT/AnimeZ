@@ -6,7 +6,7 @@ import { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import Logger from '../utils/Logger';
 import { downloadViewModel } from '../viewmodel/DownloadViewModel';
 import StateView, { ViewState } from '../components/StateView';
-import TitleBar from '../components/TitleBar';
+import TitleBar, { TitleBarButton } from '../components/TitleBar';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AnimeState } from '../entryability/AnimeState';
 
@@ -36,9 +36,7 @@ struct DownloadManagerPage {
         // 标题栏
         TitleBar({
           title: '下载管理',
-          button: () => {
-            this.editButton()
-          }
+          buttons: this.editButtons
         })
         if (downloadViewModel.state == ViewState.CONTENT) {
           // 功能行
@@ -79,19 +77,19 @@ struct DownloadManagerPage {
     })
   }
 
-  @Builder
-  editButton() {
-    if (downloadViewModel.state == ViewState.CONTENT) {
-      Image(downloadViewModel.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
-        .width(24)
-        .height(24)
-        .margin({ right: 16 })
-        .objectFit(ImageFit.Contain)
-        .fillColor($r('app.color.color_text_major'))
-        .onClick(() => {
-          downloadViewModel.selectionManager.toggleSelectionMode()
-        })
+  private get editButtons(): TitleBarButton[] {
+    if (downloadViewModel.state != ViewState.CONTENT) {
+      return []
     }
+    return [
+      {
+        image: downloadViewModel.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'),
+        iconSize: 24,
+        action: () => {
+          downloadViewModel.selectionManager.toggleSelectionMode()
+        }
+      }
+    ]
   }
 
   @Builder

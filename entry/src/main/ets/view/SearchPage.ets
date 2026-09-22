@@ -8,6 +8,7 @@ import SearchHistoryInfo from '../entity/SearchHistoryInfo';
 import { AnimeState } from '../entryability/AnimeState';
 import { searchViewModel } from '../viewmodel/SearchViewModel';
 import { CategoryViewModel } from '../viewmodel/CategoryViewModel';
+import TitleBar from '../components/TitleBar';
 
 const tag: string = 'SearchPage'
 
@@ -32,7 +33,26 @@ struct SearchPage {
 
   build() {
     NavDestination() {
-      this.SearchBar()
+      TitleBar({
+        searchPlaceholder: '输入关键字...',
+        searchText: this.keyword,
+        onSearchChange: (value: string) => {
+          this.keyword = value
+        },
+        onSearchSubmit: (value: string) => {
+          this.doSearch(value)
+        },
+        buttons: [
+          {
+            text: '搜索',
+            width: 48,
+            fontColor: $r('app.color.primary_color'),
+            action: () => {
+              this.doSearch(this.keyword)
+            }
+          }
+        ]
+      })
       StateView(
         {
           state: this.categoryViewModel.state,
@@ -63,40 +83,6 @@ struct SearchPage {
 
   @Builder content() {
     VideoList({ videoList: this.categoryViewModel.videoList }).height('100%').padding(16)
-  }
-
-  @Builder SearchBar() {
-    Row() {
-      SymbolGlyph($r('sys.symbol.arrow_left'))
-        .fontSize(24)
-        .fontColor([$r('app.color.color_text_major')])
-        .onClick(() => {
-          AnimeState.pageStack.pop(true)
-        })
-      TextInput({ placeholder: '输入关键字...', text: this.keyword })
-        .placeholderFont({ size: 14, weight: 300 })
-        .placeholderColor('#817977')
-        .fontColor($r('app.color.color_text_major'))
-        .onChange((value) => {
-          this.keyword = value
-        })
-        .onSubmit(() => {
-          this.doSearch(this.keyword)
-        })
-        .height(36)
-        .margin({ left: 12, right: 12 })
-        .backgroundColor($r('app.color.background_color'))
-        .layoutWeight(1)
-      Text('搜索')
-        .fontSize(16)
-        .fontColor($r('app.color.primary_color'))
-        .onClick(() => {
-          this.doSearch(this.keyword)
-        })
-    }
-    .height(56)
-    .width('100%')
-    .padding({left: 16, right: 16})
   }
 
   @Builder Bar(title: string, showButton: boolean = true) {

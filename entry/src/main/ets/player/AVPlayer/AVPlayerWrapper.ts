@@ -22,6 +22,13 @@ export class AVPlayerWrapper {
     manager.init(this.getPlayer())
   }
 
+  /** 释放底层 AVPlayer（重复释放由 catch 兜底） */
+  async release(): Promise<void> {
+    return this.avPlayer.release().catch(() => {
+      console.log(`AVPlayer 资源释放失败`)
+    })
+  }
+
   private getPlayer(): IPlayer {
     const thePlayer: IPlayer = {
       setDataSource: async (urlOrFd: string | media.AVFileDescriptor) => {
@@ -96,32 +103,27 @@ export class AVPlayerWrapper {
         Logger.e('tips', 'setDataSource seekTo value=' + value)
         return this.avPlayer.seek(value as number)
       },
-      setSpeed: (speed: media.PlaybackSpeed): Promise<void> => {
+      setSpeed: (speed: number): Promise<void> => {
         return this.setSpeed(speed);
       }
     }
     return thePlayer
   }
 
-  async setSpeed(speed: media.PlaybackSpeed) {
+  async setSpeed(speed: number) {
+    // AVPlayer 仅支持固定档位倍率（0.75/1.0/1.25/1.75/2.0），
+    // 按最接近档位映射；超出 2x（如长按 3x 倍速）取最高档 2x
     let avSpeed: media.PlaybackSpeed
-    switch (speed) {
-      case media.PlaybackSpeed.SPEED_FORWARD_0_75_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_0_75_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_25_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_25_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_75_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_75_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_2_00_X:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_2_00_X
-        break
-      case media.PlaybackSpeed.SPEED_FORWARD_1_00_X:
-      default:
-        avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
-        break
+    if (speed < 0.875) {
+      avSpeed = media.PlaybackSpeed.SPEED_FORWARD_0_75_X
+    } else if (speed < 1.125) {
+      avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
+    } else if (speed < 1.5) {
+      avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_25_X
+    } else if (speed < 1.875) {
+      avSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_75_X
+    } else {
+      avSpeed = media.PlaybackSpeed.SPEED_FORWARD_2_00_X
     }
     return this.avPlayer.setSpeed(avSpeed)
   }
@@ -189,6 +191,7 @@ export class AVPlayerWrapper {
     });
     avPlayer.on('seekDone', (value: number) => {
       Logger.e('tips', 'v seekDone value = ' + value)
+      manager.notifySeekDone()
     })
     avPlayer.on('videoSizeChange', (w: number, h: number) => {
       Logger.e('tips', 'AVPlayer videoSizeChange w = ' + w + ' h=' + h)

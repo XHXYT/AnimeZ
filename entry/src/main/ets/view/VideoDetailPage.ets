@@ -118,16 +118,32 @@ struct VideoDetailPage {
             Logger.e('tips', `URL ${e.url} 开始加载JavaScript`)
             setTimeout(() => {
               // TODO 待修复 webviewController 未绑定上或者绑定了多个 Web 组件
-              this.webviewController.runJavaScript(AnimeState.runJs)
-                .then((result) => {
-                  console.info(`URL ${e.url} 执行 result: ${result}`)
-                  AnimeState.webJsVideoLink = JSON.parse(result)
-                  AnimeState.showWebView = false
-                  console.info(`URL ${e.url} 显示状态: ${AnimeState.showWebView} 解析后链接：${AnimeState.webJsVideoLink}`)
-                })
-                .catch((error: BusinessError) => {
-                  Logger.e('fail', '加载JavaScript', error)
-                })
+              // 注意：页面销毁后 Web 组件解绑，runJavaScript 会同步抛 17100001，
+              // .catch 捕获不到同步异常，必须在回调内部 try-catch
+              try {
+                this.webviewController.runJavaScript(AnimeState.runJs)
+                  .then((result) => {
+                    console.info(`URL ${e.url} 执行 result: ${result}`)
+                    // 兼容两种返回：runJavaScript 结果可能为原始字符串或 JSON 编码字符串
+                    let link: string = result
+                    try {
+                      const parsed: string = JSON.parse(result)
+                      if (parsed !== '') {
+                        link = parsed
+                      }
+                    } catch (err) {
+                      // result 非合法 JSON 时按原始字符串处理
+                    }
+                    AnimeState.webJsVideoLink = link
+                    AnimeState.showWebView = false
+                    console.info(`URL ${e.url} 显示状态: ${AnimeState.showWebView} 解析后链接：${AnimeState.webJsVideoLink}`)
+                  })
+                  .catch((error: BusinessError) => {
+                    Logger.e('fail', '加载JavaScript', error)
+                  })
+              } catch (error) {
+                Logger.e('fail', '页面已销毁，跳过JS注入', error)
+              }
             }, 4000)
           }
         } catch (error) {
@@ -471,22 +487,25 @@ struct VideoDetailPage {
         .width('100%')
         .padding({ left: 16, top: 16, right: 16, bottom: 4 })
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo, episodeIndex: number) => {
+          ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo) => {
             Text(item.title)
               .textAlign(TextAlign.Center)
               .backgroundColor(
-                (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex)
+                (this.viewModel.episodeListIndex == episodeListIndex
+                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
                   ? '#bb3366ff' : $r('app.color.background_color_accent')
               )
               .fontColor(
-                (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex)
+                (this.viewModel.episodeListIndex == episodeListIndex
+                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
                   ? Color.White : $r('app.color.color_text_major')
               )
               .fontSize(12)
               .padding({ top: 8, bottom: 8 })
               .borderRadius(6)
               .borderWidth(
-                (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex)
+                (this.viewModel.episodeListIndex == episodeListIndex
+                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
                   ? 0 : 1.5
               )
               .borderColor($r('app.color.background_color_accent'))
@@ -494,13 +513,16 @@ struct VideoDetailPage {
               .width(this.viewModel.isFullScreen ? '17%' : '18%')
               .maxLines(1)
               .onClick(() => {
-                if (this.viewModel.episodeListIndex == episodeListIndex && this.viewModel.episodeIndex == episodeIndex) {
+                // 显示顺序可能被排序打乱，按剧集对象映射回规范索引
+                const canonicalIdx = episodeList.episodes.indexOf(item)
+                if (this.viewModel.episodeListIndex == episodeListIndex
+                  && this.viewModel.episodeIndex == canonicalIdx) {
                   return;
                 }
                 this.viewModel.historyInfo.videoProgress = 0;
                 this.viewModel.historyInfo.currentTime = 0;
                 this.viewModel.historyInfo.totalTime = 0;
-                this.viewModel.playVideo(episodeListIndex, episodeIndex);
+                this.viewModel.playVideo(episodeListIndex, canonicalIdx);
               })
           })
         }

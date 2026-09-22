@@ -18,7 +18,8 @@ export  interface IPlayer {
 
     seekTo: (msec: number) => Promise<void>
 
-    setSpeed: (speed: media.PlaybackSpeed) => Promise<void>
+    /** 设置播放倍速（实际倍率数值，如 0.75 / 1.0 / 2.0 / 3.0） */
+    setSpeed: (speed: number) => Promise<void>
 
 }
 

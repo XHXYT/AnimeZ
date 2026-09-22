@@ -103,11 +103,17 @@ export class VideoCollectionTable extends AutoTable<VideoCollectionInfo> {
 
   /**
    * 根据标题查询单条记录（取第一条）
+   * @param title 视频标题
+   * @param sourceKey 数据源标识，非空时一并过滤，避免多源同名片误匹配
    */
-  async queryOneByTitle(title: string): Promise<VideoCollectionInfo> {
-    Logger.d(this, 'queryOneByTitle title=' + title)
+  async queryOneByTitle(title: string, sourceKey: string = ''): Promise<VideoCollectionInfo> {
+    Logger.d(this, 'queryOneByTitle title=' + title + ' sourceKey=' + sourceKey)
 
-    let items = await this.queryByTitleExact(title)
+    let predicates = this.getPredicates().equalTo('title', title)
+    if (sourceKey !== '') {
+      predicates = predicates.equalTo('sourceKey', sourceKey)
+    }
+    let items = await this.query(predicates)
     return items[0] || null
   }
 

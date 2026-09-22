@@ -1,6 +1,7 @@
 
 import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
-import { HISTORY_CHANGED_EVENT } from '../utils/EventBus';
+import { HISTORY_CHANGED_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import emitter from '@ohos.events.emitter';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AppConfigs, appSettings } from '../entryability/Settings';
@@ -20,6 +21,13 @@ import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 
+
+/** 续播定位结果：校正后的剧集索引 + 是否保留播放进度 */
+class ResumeTarget {
+  listIndex: number = 0;
+  episodeIndex: number = 0;
+  keepPosition: boolean = false;
+}
 
 @ObservedV2
 export class VideoDetailViewModel {
@@ -82,6 +90,24 @@ export class VideoDetailViewModel {
     this.videoHistoryInfoDB = new VideoHistoryTable(context)
     this.playerManager = playerManager;
     this.initPlayerListener();
+    // 控制面板切换播放器后端：以当前进度重播当前集
+    PLAYER_SWITCH_EVENT.on((data: emitter.EventData) => {
+      const resumePos = data.data ? data.data['resumePos'] as number : -1
+      this.onPlayerSwitch(resumePos)
+    })
+  }
+
+  /**
+   * 播放器后端切换：appSettings.default_player 变更触发 MultiVideoPlayer
+   * 重建（旧组件卸载释放、新组件挂载注册），等待新实例注册完成后
+   * 以切换前的播放位置重播当前集
+   */
+  private async onPlayerSwitch(resumePos: number) {
+    Logger.e('tips', `onPlayerSwitch resumePos=${resumePos}`)
+    // AVPlayer 等后端为异步创建，留足新组件挂载注册时间
+    await this.sleep(500)
+    this.resumePosition = resumePos > 0 ? resumePos : -1
+    this.playVideo(this.episodeListIndex, this.episodeIndex)
   }
 
   // 初始化播放器监听器
@@ -148,6 +174,9 @@ export class VideoDetailViewModel {
     this.playerManager.addListener(playerListener);
   }
 
+  // 历史续播：仅首次进入详情页时携带，消费后立即复位，换集/重试不续播旧位置
+  private resumePosition: number = -1;
+
   // 初始化数据
   public async initialize(params: VideoNavigateInfo) {
     this.url = params.url as string;
@@ -180,8 +209,15 @@ export class VideoDetailViewModel {
       this.historyInfo.sourceKey = this.sourceKey;
       this.state = ViewState.CONTENT
       SystemBarUtils.setWindowSystemBarTransparent(true);
+      // 历史续播：先校正索引（源站列表可能增删集导致索引错位），再恢复播放位置
+      const resumeMs = this.historyInfo.currentTime;
+      const canResume = resumeMs > 0 && (this.historyInfo.totalTime <= 0 || resumeMs < this.historyInfo.totalTime - 5000);
+      const target = this.resolveResumeIndex(this.historyInfo.episodeListIndex, this.historyInfo.episodeIndex, this.historyInfo.episodeName);
+      if (canResume && target.keepPosition) {
+        this.resumePosition = resumeMs;
+      }
       // 尝试播放视频
-      this.playVideo(this.historyInfo.episodeListIndex, this.historyInfo.episodeIndex);
+      this.playVideo(target.listIndex, target.episodeIndex);
     } catch (err) {
       this.errorMessage = err.message;
       this.state = ViewState.ERROR;
@@ -189,11 +225,61 @@ export class VideoDetailViewModel {
     }
   }
 
+  /**
+   * 校正历史记录中的剧集索引并决定是否保留续播进度：
+   * 源站剧集列表可能增删集或调整顺序，DB 存的纯位置索引会错位。
+   * - 列表索引越界 → 回退第一集并放弃进度
+   * - 集索引越界 → 按剧集名回查；命中则用新索引并保留进度，否则回退第一集并放弃进度
+   * - 索引均合法但名称对不上 → 按剧集名回查；命中则用新索引，否则信任原索引（名称格式变化）
+   */
+  private resolveResumeIndex(listIndex: number, episodeIndex: number, episodeName: string): ResumeTarget {
+    const target = new ResumeTarget();
+    const episodes = this.videoDetailInfo.episodes;
+    if (!episodes || episodes.length === 0) {
+      return target;
+    }
+    if (listIndex < 0 || listIndex >= episodes.length) {
+      // 剧集列表整体变化：回退第一集，进度已不可信
+      return target;
+    }
+    target.listIndex = listIndex;
+    target.keepPosition = true;
+    const list = episodes[listIndex].episodes;
+    if (!list || list.length === 0) {
+      target.keepPosition = false;
+      return target;
+    }
+    if (episodeIndex >= 0 && episodeIndex < list.length) {
+      if (episodeName === '' || list[episodeIndex].title === episodeName) {
+        target.episodeIndex = episodeIndex;
+        return target;
+      }
+      // 名称对不上：按名称回查（列表增删集导致错位），查不到则信任原索引
+      const byName = list.findIndex((item: EpisodeInfo) => item.title === episodeName);
+      target.episodeIndex = byName >= 0 ? byName : episodeIndex;
+      return target;
+    }
+    // 集索引越界：按名称回查，找不到则回退第一集并放弃进度
+    if (episodeName !== '') {
+      const byName = list.findIndex((item: EpisodeInfo) => item.title === episodeName);
+      if (byName >= 0) {
+        target.episodeIndex = byName;
+        return target;
+      }
+    }
+    target.episodeIndex = 0;
+    target.keepPosition = false;
+    return target;
+  }
+
   // 播放视频
   public async playVideo(episodeListIndex: number, episodeIndex: number) {
     Logger.e('tips', `playVideo episodeListIndex = ${episodeListIndex} episodeIndex=${episodeIndex}`);
     this.episodeListIndex = episodeListIndex;
     this.episodeIndex = episodeIndex;
+    // 读取并复位续播位置（仅首次进入详情页时为有效值）
+    const startPos = this.resumePosition;
+    this.resumePosition = -1;
 
     const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex];
     const episode = episodeList.episodes[this.episodeIndex];
@@ -204,9 +290,9 @@ export class VideoDetailViewModel {
     this.historyInfo.videoUrl = episode.videoUrl as string;
 
     if (episode.videoUrl) {
-      this.saveHistoryInfo(true);
-      this.checkVideoInfo();
-      this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex);
+      await this.saveHistoryInfo(true);
+      await this.checkVideoInfo();
+      this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos);
     } else {
       try {
         console.log(`VideoDetailViewModel.playVideo 视频剧集链接，link：${episode.link}`)
@@ -216,9 +302,9 @@ export class VideoDetailViewModel {
         const finalUrl = await this.checkParesVideoLink(url)
         episode.videoUrl = finalUrl
         this.historyInfo.videoUrl = finalUrl
-        this.saveHistoryInfo(true);
-        this.checkVideoInfo();
-        this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex)
+        await this.saveHistoryInfo(true);
+        await this.checkVideoInfo();
+        this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos)
       } catch (err) {
         this.playerManager.setStatus(PlayerStatus.ERROR);
         Logger.e('fail', `VideoDetailViewModel.playVideo 视频链接解析`, err);
@@ -254,7 +340,7 @@ export class VideoDetailViewModel {
 
       // 开始轮询等待结果
       const pollingIntervalMs = 500; // 轮询间隔500毫秒，避免过于频繁
-      const timeoutMs = 9000; // 超时时间5秒
+      const timeoutMs = 20000; // 超时时间20秒（JS 在页面加载完成 4 秒后才注入，需留足余量）
       const startTime = Date.now();
 
       while (true) {
@@ -268,6 +354,13 @@ export class VideoDetailViewModel {
 
         // 从全局状态获取JS执行结果
         const jsLink = AnimeState.webJsVideoLink;
+
+        // 页面内JS以 ERR_ 开头返回时表示解析失败，立即终止等待
+        if (jsLink && jsLink !== '' && jsLink.startsWith('ERR_')) {
+          AnimeState.showWebView = false
+          console.error(`checkParesVideoLink: 页面内JS解析失败: ${jsLink}`);
+          return Promise.reject(new Error(`播放地址解析失败: ${jsLink}`));
+        }
 
         // 如果结果存在且不为空，说明JS已执行并返回了值
         if (jsLink && jsLink !== '' && jsLink.includes('http')) {
@@ -324,28 +417,32 @@ export class VideoDetailViewModel {
 
   // 检查视频历史信息
   private async checkVideoInfo() {
-    const HistoryList = await this.videoHistoryInfoDB.queryByTitle(this.title);
-    if (!HistoryList) {
-      console.warn(`没有查询到历史记录，暂无历史记录`)
-      return
+    // 优先按详情页链接精确匹配（与 save 的 upsert 键一致），
+    // 避免标题互含的影片（如"海贼王"与"海贼王 剧场版"）通过模糊查询串记录
+    let historyDetail = await this.videoHistoryInfoDB.queryByLink(this.url);
+    if (!historyDetail && this.title !== '') {
+      // 链接未命中（源站链接格式变化等），按标题+数据源精确匹配兜底
+      const byTitle = await this.videoHistoryInfoDB.queryByTitleExact(this.title, this.sourceKey);
+      historyDetail = byTitle[0];
     }
-    if (HistoryList.length !== 0) {
-      const HistoryDetail = HistoryList[0];
-      if (HistoryDetail) {
-        this.historyInfo = HistoryDetail;
-        this.videoID = this.historyInfo.id;
-      }
+    if (historyDetail) {
+      this.historyInfo = historyDetail;
+      this.videoID = this.historyInfo.id;
     }
   }
 
   // 检查收藏信息
   private async checkCollectionInfo() {
-    const CollectionInfo = await this.videoCollectionInfoDB.queryOneByTitle(this.title);
-    if (CollectionInfo.id) {
-      this.collectionInfo = CollectionInfo
-      if (this.collectionInfo !== undefined && this.videoID !== null) {
-        this.isCollect = true;
-      }
+    // 优先按链接精确匹配（与 save 的 upsert 键一致），
+    // 未命中（源站链接格式变化等）按标题+数据源精确匹配兜底
+    let collectionInfo = await this.videoCollectionInfoDB.queryByLink(this.url);
+    if (!collectionInfo && this.title !== '') {
+      collectionInfo = await this.videoCollectionInfoDB.queryOneByTitle(this.title, this.sourceKey);
+    }
+    if (collectionInfo && collectionInfo.id) {
+      this.collectionInfo = collectionInfo
+      this.collectID = collectionInfo.id
+      this.isCollect = true;
     }
   }
 
@@ -353,10 +450,17 @@ export class VideoDetailViewModel {
   public async collect() {
     Logger.d('collect', 'collect() called');
     try {
-      // 创建收藏对象
+      // 以详情接口返回的链接为收藏键（与历史表一致）
+      const detailUrl = (this.videoDetailInfo.url as string) || this.url;
+      // 查找已有收藏（链接优先，标题+数据源兜底），命中则沿用原记录，避免链接变体产生重复收藏
+      let existing = await this.videoCollectionInfoDB.queryByLink(detailUrl);
+      if (!existing) {
+        existing = await this.videoCollectionInfoDB.queryOneByTitle(this.videoDetailInfo.title, this.sourceKey);
+      }
+      // 创建收藏对象（已有记录沿用其 id 和 link 作为键）
       const theCollectionInfo: VideoCollectionInfo = {
-        id: this.collectID,
-        link: this.url,
+        id: existing && existing.id ? existing.id : null,
+        link: existing ? existing.link : detailUrl,
         title: this.videoDetailInfo.title,
         coverUrl: this.videoDetailInfo.coverUrl,
         sourceKey: this.sourceKey,
@@ -366,6 +470,7 @@ export class VideoDetailViewModel {
       const insertId = await this.videoCollectionInfoDB.save(theCollectionInfo);
       // 更新 collectID 为数据库返回的实际ID
       this.collectID = insertId;
+      this.collectionInfo = theCollectionInfo;
       this.isCollect = true;
       ToastUtil.showToast({ message: "收藏成功" });
       Logger.d('collect', `collect() success, new ID: ${insertId}`);
@@ -378,8 +483,20 @@ export class VideoDetailViewModel {
   // 取消收藏
   public async removeCollect() {
     try {
-      await this.videoCollectionInfoDB.deleteByLink(this.url);
+      // 优先按已加载的收藏记录 id 精确删除
+      if (this.collectionInfo.id) {
+        await this.videoCollectionInfoDB.deleteById(this.collectionInfo.id)
+      } else if (this.collectID !== null && this.collectID > 0) {
+        await this.videoCollectionInfoDB.deleteById(this.collectID)
+      }
+      // 兼容不同入口/历史数据的链接变体：导航链接与详情链接均尝试清理
+      await this.videoCollectionInfoDB.deleteByLink(this.url)
+      const detailUrl = this.videoDetailInfo.url as string
+      if (detailUrl && detailUrl !== this.url) {
+        await this.videoCollectionInfoDB.deleteByLink(detailUrl)
+      }
       this.isCollect = false;
+      this.collectID = 0;
       ToastUtil.showToast({ message: "取消收藏" });
     } catch (err) {
       console.error(`取消收藏失败：${err.message}`)
@@ -401,6 +518,8 @@ export class VideoDetailViewModel {
   // 处理页面隐藏
   public async onPageHide() {
     this.restoreOrientation();
+    // 任何路径离开详情页（返回键/页面内返回/手势）都恢复默认系统栏样式
+    SystemBarUtils.setWindowSystemBarTransparent(false);
     await this.saveHistoryInfo(true);
     ToastUtil.showToast({ message: '历史记录已保存' });
     // 触发历史记录更新事件
@@ -446,6 +565,7 @@ export class VideoDetailViewModel {
   // 销毁资源
   public onDestroy() {
     this.restoreOrientation();
+    PLAYER_SWITCH_EVENT.off()
     this.playerManager.destroy();
   }
 

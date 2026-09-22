@@ -5,6 +5,8 @@ import Logger from '../utils/Logger';
 import { media } from '@kit.MediaKit';
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
 import { AnimeState } from '../entryability/AnimeState';
+import { PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import emitter from '@ohos.events.emitter';
 
 // 系统路由 - 本地视频播放界面
 @Builder
@@ -21,6 +23,8 @@ struct LocalVideoPlayerPage {
 
   @Local isFullScreen: boolean = false
   @Local playerManager: IPlayerManager = new PlayerManagerImpl()
+  /** 当前播放的本地视频 */
+  private currentEpisode: EpisodeInfo | null = null
 
   aboutToAppear() {
     this.playerManager.addListener({
@@ -28,7 +32,7 @@ struct LocalVideoPlayerPage {
       },
       onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
       },
-      onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
+      onVideoSpeedChanged: (videoSpeed: number) => {
       },
       onVideoFitChanged: (videoFit: VideoFit) => {
       },
@@ -47,11 +51,27 @@ struct LocalVideoPlayerPage {
       onBuffering: (type, value) => {
       }
     })
+    // 控制面板切换播放器后端：以当前进度重播当前视频
+    PLAYER_SWITCH_EVENT.on((data: emitter.EventData) => {
+      const resumePos = data.data ? data.data['resumePos'] as number : -1
+      this.onPlayerSwitch(resumePos)
+    })
     // TODO 暂时直接进入全屏模式
     this.playerManager.enterFullScreen()
   }
 
+  /** 播放器后端切换：等待新播放器组件挂载注册后，以切换前进度重播 */
+  private async onPlayerSwitch(resumePos: number) {
+    if (!this.currentEpisode) {
+      return
+    }
+    Logger.e('tips', `LocalVideoPlayerPage onPlayerSwitch resumePos=${resumePos}`)
+    await new Promise<void>(resolve => setTimeout(resolve, 500))
+    this.playerManager.playEpisodeList([this.currentEpisode], 0, resumePos > 0 ? resumePos : -1)
+  }
+
   aboutToDisappear() {
+    PLAYER_SWITCH_EVENT.off()
     this.playerManager.exitFullScreen()
     this.playerManager.destroy()
   }
@@ -74,6 +94,7 @@ struct LocalVideoPlayerPage {
       let params = value.pathInfo.param as Record<string, EpisodeInfo>
       let episode: EpisodeInfo = params.episode as EpisodeInfo
       Logger.e('tips', 'aboutToAppear episode=' + JSON.stringify(episode))
+      this.currentEpisode = episode
       this.playerManager.playEpisodeList([episode], 0)
     })
   }

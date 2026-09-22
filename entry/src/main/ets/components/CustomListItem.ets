@@ -136,6 +136,9 @@ export struct CustomListItem {
     .bindMenu(
       this.showMenu,
       this.item.type == ItemActionType.MENU ? MenuSelectWitch(this.item, (menu) => {
+        // 先置 false：onChange 内的 setColorMode 会同步触发整页重渲染，
+        // 此时若 showMenu 仍为 true，bindMenu 会随 @Param 更新重新弹出菜单
+        this.showMenu = false
         this.item.value = menu.value
         ToastUtil.showToast({ message: `${this.item.title}切换为: ${menu.title ?? menu.value}` }, 'CustomListItem')
       }) : undefined,

@@ -22,7 +22,7 @@ export struct SystemVideoPlayer {
   @Local playerStatus: number = PlayerStatus.IDLE
   @Local isFullScreen: boolean = false
   @Local videoUrl: string = ''
-  @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
+  @Local videoSpeed: PlaybackSpeed = PlaybackSpeed.Speed_Forward_1_00_X
   @Local videoFit: ImageFit = ImageFit.Contain
   @Require @Param playerManager: IPlayerManager
   /** 播放器区域为全高（左右分栏等）时撑满容器，控制层可利用上下黑边空间 */
@@ -67,16 +67,37 @@ export struct SystemVideoPlayer {
       this.controller.setCurrentTime(msec / 1000, SeekMode.ClosestKeyframe)
     },
 
-    setSpeed: (speed: media.PlaybackSpeed) => {
+    setSpeed: (speed: number) => {
       return new Promise<void>((resolve, reject) => {
         try {
-          this.videoSpeed = speed
+          this.videoSpeed = this.rateToPlaybackSpeed(speed)
           resolve()
         } catch (error) {
           reject(error)
         }
       })
     },
+  }
+
+  /**
+   * 实际倍率数值映射为 Video 组件的固定档位枚举：
+   * Video 组件仅支持 0.75/1.0/1.25/1.75/2.0 档位，
+   * 按最接近档位映射；超出 2x（如长按 3x 倍速）取最高档 2x
+   */
+  private rateToPlaybackSpeed(speed: number): PlaybackSpeed {
+    if (speed < 0.875) {
+      return PlaybackSpeed.Speed_Forward_0_75_X
+    }
+    if (speed < 1.125) {
+      return PlaybackSpeed.Speed_Forward_1_00_X
+    }
+    if (speed < 1.5) {
+      return PlaybackSpeed.Speed_Forward_1_25_X
+    }
+    if (speed < 1.875) {
+      return PlaybackSpeed.Speed_Forward_1_75_X
+    }
+    return PlaybackSpeed.Speed_Forward_2_00_X
   }
 
   /**播放器监听回调*/
@@ -225,6 +246,7 @@ export struct SystemVideoPlayer {
         .onSeeked((e) => {
           // TODO seek时没有回调该函数？
           Logger.e('tips', 'onSeeked time=' + e.time)
+          this.playerManager?.notifySeekDone()
         })
         .onFinish(() => {
           Logger.e('tips', 'onFinish')

@@ -1,9 +1,8 @@
 import { DataSourceConfig, ParserConfig } from "../api/DataSourceConfig"
 import { VideoSourcesViewModel, SortType } from "../viewmodel/VideoSourcesViewModel"
 import StateView from "../components/StateView"
-import TitleBar from "../components/TitleBar"
-import { ButtonBuilder, ButtonConfig, MenuItem } from "../components/common/Button"
-import { LengthMetrics } from "@kit.ArkUI"
+import TitleBar, { TitleBarButton } from "../components/TitleBar"
+import { ButtonBuilder, MenuItem } from "../components/common/Button"
 import { appSettings } from "../entryability/Settings"
 import { GroupManager } from "./VideoSourcesGroupManager"
 import { VIDEO_SOURCE_EVENT } from "../utils/EventBus"
@@ -11,6 +10,8 @@ import { OnSelectChangeObserver, SelectionManager } from "../utils/SelectionMana
 import { Copy } from "../utils/ClipBoardUtil"
 import { SymbolGlyphModifier } from "@kit.ArkUI"
 import { AnimeState } from "../entryability/AnimeState"
+import { dataSourceManager } from "../api/DataSourceManager"
+import { ToastUtil } from "../utils/ToastUtils"
 
 // 系统路由 - 视频源
 @Builder
@@ -23,8 +24,6 @@ struct VideoSources {
 
   @Local selectionManager: SelectionManager<DataSourceConfig> = new SelectionManager<DataSourceConfig>()
   viewModel: VideoSourcesViewModel = new VideoSourcesViewModel(this.selectionManager)
-  // 添加搜索控制器
-  private searchController: SearchController = new SearchController()
 
   @Local selectMode: boolean = false
   @Local showGroupManager: boolean = false
@@ -69,9 +68,11 @@ struct VideoSources {
         // 标题栏
         TitleBar({
           title: '视频源',
-          button: () => {
-            this.ControlBar()
-          }
+          searchPlaceholder: '搜索视频源',
+          onSearchChange: (value: string) => {
+            this.viewModel.setSearchText(value)
+          },
+          buttons: this.getControlButtons()
         })
         // 内容区域
         StateView({
@@ -106,7 +107,7 @@ struct VideoSources {
         }
       })
     }
-    .padding({top: AnimeState.topRectHeight - 12, bottom: AnimeState.bottomRectHeight - 12})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 12})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -260,31 +261,6 @@ struct VideoSources {
   }
 
   @Builder
-  ControlBar() {
-    Flex({
-      direction: FlexDirection.Row,
-      alignItems: ItemAlign.Center,
-      space: { main: LengthMetrics.vp(12) }
-    }) {
-      // 搜索框
-      Search({ placeholder: '搜索视频源', controller: this.searchController })
-        .margin({ top: 24, bottom: 24})
-        .height(36)
-        .onChange((value: string) => {
-          this.viewModel.setSearchText(value)
-        })
-      // 遍历并渲染其余按钮
-      ForEach(this.getControlButtons(), (config: ButtonConfig) => {
-        ButtonBuilder({
-          config: config,
-          menuSelected: config.menuSelected
-        })
-      })
-    }
-    .backgroundColor($r('app.color.background_color_accent'))
-  }
-
-  @Builder
   GroupManager() {
     GroupManager({ viewModel: this.viewModel })
   }
@@ -311,9 +287,9 @@ struct VideoSources {
         this.viewModel.setGroupType(group)
       }
     } as MenuItem))
-    const controlButtons: ButtonConfig[] = [
+    const controlButtons: TitleBarButton[] = [
       { // 排序按钮
-        symbolSrc: 'mobiledata_circle', // Symbol 图标
+        symbol: 'mobiledata_circle', // Symbol 图标
         iconSize: 24,
         needCheckmark: true,
         menuSelected: appSettings.video_sources_order,
@@ -351,7 +327,7 @@ struct VideoSources {
         ]
       },
       { // 分组按钮
-        symbolSrc: 'satellite_map', // Symbol 图标
+        symbol: 'satellite_map', // Symbol 图标
         iconSize: 24,
         needCheckmark: true,
         menuTitle: '分组筛选',
@@ -391,7 +367,7 @@ struct VideoSources {
         ]
       },
       { // 更多按钮
-        symbolSrc: 'dot_grid_2x2', // Symbol 图标
+        symbol: 'dot_grid_2x2', // Symbol 图标
         iconSize: 24,
         needCheckmark: false,
         fontColor: $r('app.color.color_text_major'),
@@ -500,6 +476,13 @@ struct SourceItem {
   @Param selectMode: boolean = false
   @Local isSelected: boolean = false
   @Local isShowMenu: boolean = false
+  // 登录状态
+  @Local showLoginSheet: boolean = false
+  @Local loginUsername: string = ''
+  @Local loginPassword: string = ''
+  @Local loginLoading: boolean = false
+  @Local loginMessage: string = ''
+  @Local loggedIn: boolean = false
   private readonly selectionObserver: OnSelectChangeObserver<DataSourceConfig> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
     },
@@ -513,10 +496,51 @@ struct SourceItem {
   aboutToAppear() {
     this.selectionManager.addObserver(this.selectionObserver)
     this.isSelected = this.selectionManager.isSelect(this.item)
+    this.refreshLoginState()
   }
 
   aboutToDisappear() {
     this.selectionManager.removeObserver(this.selectionObserver)
+  }
+
+  private refreshLoginState() {
+    if (!this.item.login) {
+      return
+    }
+    dataSourceManager.isLoggedIn(this.item.key).then((loggedIn: boolean) => {
+      this.loggedIn = loggedIn
+    })
+  }
+
+  private async doLogin() {
+    if (!this.loginUsername || !this.loginPassword) {
+      this.loginMessage = '请输入账号和密码'
+      return
+    }
+    this.loginLoading = true
+    this.loginMessage = ''
+    try {
+      await dataSourceManager.loginSource(this.item.key, this.loginUsername, this.loginPassword)
+      this.loggedIn = true
+      this.loginPassword = ''
+      this.showLoginSheet = false
+      ToastUtil.showToast({ message: '登录成功' })
+    } catch (error) {
+      this.loginMessage = error.message || '登录失败'
+    } finally {
+      this.loginLoading = false
+    }
+  }
+
+  private async doLogout() {
+    try {
+      await dataSourceManager.logoutSource(this.item.key)
+    } catch (error) {
+      console.error(`退出登录失败：${error.message}`)
+    }
+    this.loggedIn = false
+    this.loginPassword = ''
+    ToastUtil.showToast({ message: '已退出登录' })
   }
 
   build() {
@@ -584,11 +608,91 @@ struct SourceItem {
         // 显示菜单
         this.isShowMenu = true
       }))
+    .bindSheet(this.showLoginSheet!!, this.LoginSheet(), {
+      detents: [SheetSize.MEDIUM],
+      showClose: true,
+      dragBar: false,
+      backgroundColor: $r('app.color.color_card'),
+      keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY,
+      preferType: SheetType.CENTER,
+      onDisappear: () => {
+        this.showLoginSheet = false
+      }
+    })
+  }
+
+  @Builder
+  LoginSheet() {
+    Column({ space: 16 }) {
+      Text(this.loggedIn ? '账号管理' : '账号登录')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.color_text_major'))
+      Text(this.item.name)
+        .fontSize(13)
+        .fontColor($r('app.color.color_text_minor'))
+
+      if (this.loggedIn) {
+        Column({ space: 12 }) {
+          Text('该数据源已登录')
+            .fontSize(14)
+            .fontColor($r('app.color.color_text_major'))
+          Button('退出登录')
+            .width('100%')
+            .backgroundColor(Color.Red)
+            .onClick(() => {
+              this.doLogout()
+            })
+        }
+        .width('100%')
+      } else {
+        Column({ space: 12 }) {
+          TextInput({ placeholder: '账号', text: this.loginUsername })
+            .onChange((value: string) => {
+              this.loginUsername = value
+            })
+            .width('100%')
+          TextInput({ placeholder: '密码', text: this.loginPassword })
+            .type(InputType.Password)
+            .showPasswordIcon(true)
+            .onChange((value: string) => {
+              this.loginPassword = value
+            })
+            .width('100%')
+          if (this.loginMessage) {
+            Text(this.loginMessage)
+              .fontSize(13)
+              .fontColor(Color.Red)
+              .width('100%')
+          }
+          Button(this.loginLoading ? '登录中...' : '登录')
+            .width('100%')
+            .enabled(!this.loginLoading)
+            .onClick(() => {
+              this.doLogin()
+            })
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(24)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
   menuBuilder(item: DataSourceConfig) {
     Menu() {
+      if (item.login) {
+        MenuItem({
+          symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.person')).fontSize(17).fontColor([$r('sys.color.font_primary')]),
+          content: this.loggedIn ? '账号管理' : '账号登录',
+        })
+          .onClick(() => {
+            this.loginMessage = ''
+            this.showLoginSheet = true
+          })
+      }
       MenuItem({
         symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.square_link_square')).fontSize(17).fontColor([$r('sys.color.font_primary')]),
         content: '多选',

@@ -12,7 +12,8 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { VolumeAndBrightnessProgress } from '../components/VolumeAndBrightnessProgress';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { audio } from '@kit.AudioKit';
-import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
+import { APP_RESUME_PROGRESS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import emitter from '@ohos.events.emitter';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 
 interface KeyValue {
@@ -20,17 +21,36 @@ interface KeyValue {
   value: number
 }
 
+/** 播放设置面板的播放器切换选项（与 SettingsPage 默认播放器保持一致） */
+class PlayerOption {
+  name: string = ''
+  value: string = ''
+
+  constructor(name: string, value: string) {
+    this.name = name
+    this.value = value
+  }
+}
+
+const PLAYER_OPTIONS: PlayerOption[] = [
+  new PlayerOption('AVPlayer', 'av'),
+  new PlayerOption('MPVPlayer', 'mpv'),
+  new PlayerOption('IjkPlayer', 'ijk'),
+  new PlayerOption('VideoPlayer', 'video'),
+  new PlayerOption('RedPlayer', 'red'),
+]
+
 interface IArea {
   width: number,
   height: number
 }
 
 const VIDEO_SPEED_LIST: KeyValue[] = [
-  { name: '0.75', value: PlaybackSpeed.Speed_Forward_0_75_X },
-  { name: '1.00', value: PlaybackSpeed.Speed_Forward_1_00_X },
-  { name: '1.25', value: PlaybackSpeed.Speed_Forward_1_25_X },
-  { name: '1.75', value: PlaybackSpeed.Speed_Forward_1_75_X },
-  { name: '2.00', value: PlaybackSpeed.Speed_Forward_2_00_X },
+  { name: '0.75', value: 0.75 },
+  { name: '1.00', value: 1.00 },
+  { name: '1.25', value: 1.25 },
+  { name: '1.75', value: 1.75 },
+  { name: '2.00', value: 2.00 },
 ]
 
 const VIDEO_FIT_LIST: KeyValue[] = [
@@ -58,6 +78,8 @@ export struct VideoPlayerController {
   @Local totalTime: string = "00:00";
   @Local progress: number = 0;
   @Local slideEnable: boolean = true;
+
+  @Local sliderAreaWidth: number = 0;
   @Local playerStatus: number = PlayerStatus.IDLE;
   @Local showController: boolean = true;
   @Local title: string = ''
@@ -88,10 +110,39 @@ export struct VideoPlayerController {
   @Local playerControllerArea: IArea = { width: 0, height: 0 }
   private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager();
 
+  /** @description 拖动轴向：0未判定 1纵向(音量/亮度) 2横向(进度) */
+  private panAxis: number = 0
+  /** @description 手势起始坐标 */
+  private panStartX: number = 0
+  private panStartY: number = 0
+  /** @description 横向拖动起始时的播放位置(ms) */
+  private seekDragStartPos: number = 0
+  /** @description 横向拖动进度预览中（抑制播放器进度回写） */
+  @Local isSeekDragging: boolean = false
+  /** @description 拖动/长按快退的预览位置(ms) */
+  @Local seekPreviewPos: number = 0
+  /** @description 拖动进度浮层延迟隐藏计时 */
+  private seekOverlayTimer: number = -1
+  /** @description 长按左半屏：2x 速率连续快退中 */
+  @Local isRewinding: boolean = false
+  /** @description 快退目标位置(ms) */
+  private rewindTargetPos: number = 0
+  /** @description 快退循环计时（每 500ms 后退 1000ms，即 2x 速率） */
+  private rewindTimer: number = -1
+  /** @description 长按右半屏：3x 倍速播放中 */
+  @Local isSpeedBoosting: boolean = false
+  /** @description 长按倍速前的原倍率 */
+  private speedBeforeBoost: number = 1.0
+
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
       this.initLoading()
+      if (status == PlayerStatus.DONE || status == PlayerStatus.ERROR) {
+        // 播放结束/出错时终止手势驱动的快退与倍速，防止计时器残留
+        this.stopRewind()
+        this.stopSpeedBoost()
+      }
       if (status === PlayerStatus.PLAY) {
         // 播放视频后关闭控制面板
         this.closeController()
@@ -154,6 +205,9 @@ export struct VideoPlayerController {
       console.info(`audioVolumeManager - Volume level: ${streamVolumeEvent.volume} `);
       console.info(`audioVolumeManager - Whether to updateUI: ${streamVolumeEvent.updateUi} `);
     });
+
+    // 初始控制层可见，启动 5 秒无操作自动隐藏
+    this.closeController()
   }
 
   aboutToDisappear() {
@@ -164,6 +218,12 @@ export struct VideoPlayerController {
     }
 
     this.audioVolumeManager.off('streamVolumeChange')
+    this.stopRewind()
+    this.stopSpeedBoost()
+    if (this.seekOverlayTimer >= 0) {
+      clearTimeout(this.seekOverlayTimer)
+      this.seekOverlayTimer = -1
+    }
   }
 
   onDidBuild(): void {
@@ -183,6 +243,9 @@ export struct VideoPlayerController {
       // 音量和亮度面板
       this.VolumeAndBrightnessBuilder()
 
+      // 拖动进度 / 长按快退快进提示浮层
+      this.GestureIndicatorBuilder()
+
       if (this.showController || this.isLoading) {
         // 控制面板
         this.VideoController()
@@ -193,7 +256,23 @@ export struct VideoPlayerController {
     .width('100%')
     .height('100%')
     .onClick(() => {
+      if (this.showPanel) {
+        return
+      }
       this.showController = !this.showController;
+      if (this.showController) {
+        // 控制层出现后启动 5 秒无操作自动隐藏
+        this.closeController()
+      } else if (this.showControllerTimer >= 0) {
+        clearTimeout(this.showControllerTimer)
+        this.showControllerTimer = -1
+      }
+    })
+    .onTouch(() => {
+      // 控制层可见期间的任意触摸（含子组件）都重置自动隐藏计时
+      if (this.showController && !this.showPanel) {
+        this.closeController()
+      }
     })
     .onAreaChange((oldValue: Area, newValue: Area) => {
       // 记录播放器控制器的大小
@@ -203,63 +282,119 @@ export struct VideoPlayerController {
       }
     })
     .gesture(
-      PanGesture({ direction: PanDirection.Vertical })
+      PanGesture({ direction: PanDirection.All })
         .onActionStart((event: GestureEvent) => {
-          // 判断手势是否在屏幕左侧（左半部分）
-          const gestureX = event.fingerList[0]?.localX ?? 0;
-          this.isLeftSideGesture = gestureX < this.playerControllerArea.width / 2;
-
-          // 记录初始Y坐标，左右两侧都需要
-          this.lastGestureY = event.fingerList[0]?.localY ?? 0;
+          // 控制面板锁定/右侧面板打开时禁用手势
+          if (this.isLocked || this.showPanel) {
+            return
+          }
+          this.panAxis = 0
+          this.panStartX = event.fingerList[0]?.localX ?? 0;
+          this.panStartY = event.fingerList[0]?.localY ?? 0;
         })
         .onActionUpdate((event: GestureEvent) => {
-          // 左侧 -> 音量调节
-          if (this.isLeftSideGesture) {
-            this.isVolumeAndBrightnessVisible = true;
+          if (this.isLocked || this.showPanel) {
+            return
+          }
+          const currentX = event.fingerList[0]?.localX ?? 0;
+          const currentY = event.fingerList[0]?.localY ?? 0;
 
-            // 获取当前手指的Y坐标
-            const currentY = event.fingerList[0]?.localY ?? 0;
-            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
-            const deltaY = currentY - this.lastGestureY;
+          // 首次有效位移时判定轴向：横向 -> 进度拖动，纵向 -> 音量/亮度
+          if (this.panAxis == 0) {
+            const deltaX = currentX - this.panStartX
+            const deltaY = currentY - this.panStartY
+            if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
+              return
+            }
+            const duration = this.playerManager.getDuration() as number
+            if (Math.abs(deltaX) > Math.abs(deltaY) && duration > 0) {
+              this.panAxis = 2
+              this.isSeekDragging = true
+              this.seekDragStartPos = this.playerManager.getCurrentPosition()
+              this.seekPreviewPos = this.seekDragStartPos
+              if (this.seekOverlayTimer >= 0) {
+                clearTimeout(this.seekOverlayTimer)
+                this.seekOverlayTimer = -1
+              }
+            } else {
+              this.panAxis = 1
+              // 纵向：判定侧边（左音量/右亮度），以当前Y为基线
+              this.isLeftSideGesture = this.panStartX < this.playerControllerArea.width / 2;
+              this.lastGestureY = currentY;
+              return
+            }
+          }
 
-            // 根据滑动距离调节音量，每滑动30px改变1级音量
-            // 向上滑动增加音量，向下滑动降低音量
-            const volumeChange = -deltaY / 30;
-            let curVolume = this.volume + volumeChange;
-
-            // 限制音量范围在 0-15 之间
-            curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
-            curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
-            this.volume = curVolume;
-
-            // 更新上一次的Y坐标
-            this.lastGestureY = currentY;
+          if (this.panAxis == 2) {
+            // 横向拖动：滑过整个播放区宽度对应总时长，实时预览目标位置
+            const width = this.playerControllerArea.width
+            const duration = this.playerManager.getDuration() as number
+            if (width <= 0 || duration <= 0) {
+              return
+            }
+            let target = this.seekDragStartPos + (currentX - this.panStartX) / width * duration
+            target = this.getValidValue(target, 0, duration)
+            this.seekPreviewPos = target
+            this.progress = target / duration * 100
+            this.currentTime = VideoTimeUtils.stringForTime(target)
           } else {
+            // 纵向：左半区音量 / 右半区亮度
             this.isVolumeAndBrightnessVisible = true;
-
-            // 获取当前手指的Y坐标
-            const currentY = event.fingerList[0]?.localY ?? 0;
-            // 计算Y坐标的变化量（向上滑动为负，向下滑动为正）
             const deltaY = currentY - this.lastGestureY;
-
-            // 根据滑动距离调节亮度，每滑动100px改变0.1的亮度（亮度范围0-1）
-            // 向上滑动增加亮度，向下滑动降低亮度
-            const brightnessChange = -deltaY / 100;
-            let curBrightness = this.screenBrightness + brightnessChange;
-
-            // 限制亮度范围在 0-1 之间
-            curBrightness = this.getValidValue(curBrightness, 0.0, 1.0);
-
-            // 设置屏幕亮度
-            this.screenBrightness = curBrightness;
-            this.setScreenBrightness(this.screenBrightness);
-
-            // 更新上一次的Y坐标
+            if (this.isLeftSideGesture) {
+              // 每滑动30px改变1级音量，向上滑动增加音量
+              const volumeChange = -deltaY / 30;
+              let curVolume = this.volume + volumeChange;
+              curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
+              curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
+              this.volume = curVolume;
+            } else {
+              // 每滑动100px改变0.1亮度，向上滑动增加亮度
+              const brightnessChange = -deltaY / 100;
+              let curBrightness = this.screenBrightness + brightnessChange;
+              curBrightness = this.getValidValue(curBrightness, 0.0, 1.0);
+              this.screenBrightness = curBrightness;
+              this.setScreenBrightness(this.screenBrightness);
+            }
             this.lastGestureY = currentY;
           }
         })
         .onActionEnd(() => {
-          this.setHidePanelTimer();
+          if (this.panAxis == 2) {
+            // 松手才执行真正的跳转；浮层短暂停留后消失
+            this.playerManager.seekTo(this.seekPreviewPos)
+            if (this.seekOverlayTimer >= 0) {
+              clearTimeout(this.seekOverlayTimer)
+            }
+            this.seekOverlayTimer = setTimeout(() => {
+              this.isSeekDragging = false
+              this.seekOverlayTimer = -1
+            }, 600)
+          } else if (this.panAxis == 1) {
+            this.setHidePanelTimer();
+          }
+          this.panAxis = 0
+        })
+    )
+    .gesture(
+      LongPressGesture({ repeat: false })
+        .onAction((event: GestureEvent) => {
+          // 控制面板锁定/右侧面板打开时禁用手势
+          if (this.isLocked || this.showPanel) {
+            return
+          }
+          const x = event.fingerList[0]?.localX ?? 0
+          if (x < this.playerControllerArea.width / 2) {
+            // 左半屏长按：2x 速率连续快退
+            this.startRewind()
+          } else {
+            // 右半屏长按：临时 3x 倍速播放
+            this.startSpeedBoost()
+          }
+        })
+        .onActionEnd(() => {
+          this.stopRewind()
+          this.stopSpeedBoost()
         })
     )
   }
@@ -284,6 +419,96 @@ export struct VideoPlayerController {
         // }
       }
     })
+  }
+
+  @Builder
+  GestureIndicatorBuilder() {
+    if (this.isSeekDragging || this.isRewinding || this.isSpeedBoosting) {
+      Column({ space: 8 }) {
+        if (this.isSpeedBoosting) {
+          Text('>> 3X 倍速中')
+            .fontColor(Color.White)
+            .fontSize(16)
+        } else {
+          if (this.isRewinding) {
+            Text('<< 2X 快退中')
+              .fontColor(Color.White)
+              .fontSize(16)
+          } else {
+            Text(this.seekDeltaText())
+              .fontColor(Color.White)
+              .fontSize(16)
+          }
+          Text(`${VideoTimeUtils.stringForTime(this.seekPreviewPos)} / ${this.totalTime}`)
+            .fontColor(Color.White)
+            .fontSize(14)
+        }
+      }
+      .padding({ left: 32, right: 32, top: 16, bottom: 16 })
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor('#80000000')
+      .borderRadius(16)
+    }
+  }
+
+  /** 拖动进度时的偏移描述文本 */
+  private seekDeltaText(): string {
+    const deltaSec = Math.round((this.seekPreviewPos - this.seekDragStartPos) / 1000)
+    if (deltaSec >= 0) {
+      return `快进 ${deltaSec} 秒`
+    }
+    return `快退 ${-deltaSec} 秒`
+  }
+
+  /** 长按左半屏：以 2x 速率连续快退（播放器不支持倒放，用循环后退跳转实现） */
+  private startRewind() {
+    const duration = this.playerManager.getDuration() as number
+    if (duration <= 0) {
+      return
+    }
+    this.isRewinding = true
+    this.rewindTargetPos = this.playerManager.getCurrentPosition()
+    this.rewindTick()
+    this.rewindTimer = setInterval((): void => {
+      this.rewindTick()
+    }, 500)
+  }
+
+  private rewindTick() {
+    const duration = this.playerManager.getDuration() as number
+    this.rewindTargetPos = Math.max(0, this.rewindTargetPos - 1000)
+    this.seekPreviewPos = this.rewindTargetPos
+    this.currentTime = VideoTimeUtils.stringForTime(this.rewindTargetPos)
+    this.progress = duration > 0 ? this.rewindTargetPos / duration * 100 : 0
+    this.playerManager.seekTo(this.rewindTargetPos)
+  }
+
+  private stopRewind() {
+    if (this.rewindTimer >= 0) {
+      clearInterval(this.rewindTimer)
+      this.rewindTimer = -1
+    }
+    this.isRewinding = false
+  }
+
+  /** 长按右半屏：临时 3x 倍速播放，松手恢复原倍速 */
+  private startSpeedBoost() {
+    if (this.playerStatus != PlayerStatus.PLAY) {
+      return
+    }
+    const prev = VIDEO_SPEED_LIST.find((item: KeyValue) => item.name == this.currentSpeed)
+    this.speedBeforeBoost = prev ? prev.value : 1.0
+    this.isSpeedBoosting = true
+    this.playerManager.setSpeed(3.0)
+  }
+
+  private stopSpeedBoost() {
+    if (!this.isSpeedBoosting) {
+      return
+    }
+    this.isSpeedBoosting = false
+    this.playerManager.setSpeed(this.speedBeforeBoost)
   }
 
   @Builder VideoController() {
@@ -485,18 +710,23 @@ export struct VideoPlayerController {
           .selectedColor($r('app.color.primary_color'))
           .enabled(this.slideEnable)
           .onChange((value: number, mode: SliderChangeMode) => {
-            Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value + ' typeof mode=' + (typeof mode)
-              + ' result=' + (mode == SliderChangeMode.End || mode == SliderChangeMode.Click)
-              + ' result2=' + (mode == SliderChangeMode.Click) + ' click=' + SliderChangeMode.Click + ' result3=' + (mode === SliderChangeMode.Click))
-            if (mode == SliderChangeMode.End || mode == 3) {
+            Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value)
+            if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
               this.progress = value
               let seekValue = value / 100 * (this.playerManager.getDuration() as number);
-              Logger.e('tips', 'Slider onChange seekValue=' + seekValue + " duration=" + this.playerManager.getDuration())
-
               this.setProgress(this.playerManager.getDuration() as number, seekValue)
-
               this.playerManager.seekTo(seekValue);
             }
+          })
+          .onAreaChange((_oldArea: Area, newArea: Area) => {
+            const w = Number(newArea.width);
+            if (w > 0) {
+              this.sliderAreaWidth = w;
+            }
+          })
+          .onClick((event: ClickEvent) => {
+            // 兜底：部分设备点击轨道不触发 onChange 的 Click 模式，按点击位置直接跳转
+            this.seekBySliderTap(event.x)
           })
         Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
 
@@ -645,7 +875,7 @@ export struct VideoPlayerController {
         }
         .width('100%')
         Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(sortEpisodesByNumber(this.episodeList, appSettings.episodes_order), (episode: EpisodeInfo, index: number) => {
+          ForEach(sortEpisodesByNumber(this.episodeList, appSettings.episodes_order), (episode: EpisodeInfo) => {
             Text(episode.title)
               .padding(8)
               .fontSize(this.isFullScreen ? 14 : 12)
@@ -654,15 +884,18 @@ export struct VideoPlayerController {
               .constraintSize({
                 minWidth: '50%'
               })
-              .backgroundColor(this.episodeIndex == index ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .backgroundColor(this.episodeList[this.episodeIndex] === episode
+                ? $r('app.color.primary_color_accent') : Color.Transparent)
               .borderRadius(6)
               .borderColor(Color.White)
               .borderWidth(0)
               .onClick(() => {
-                if (this.episodeIndex == index) {
+                // 显示顺序可能被排序打乱，按剧集对象映射回规范索引
+                const canonicalIdx = this.episodeList.indexOf(episode)
+                if (canonicalIdx < 0 || canonicalIdx == this.episodeIndex) {
                   return
                 }
-                this.playerManager.playEpisodeList(sortEpisodesByNumber(this.episodeList, appSettings.episodes_order), index)
+                this.playerManager.selectEpisode(canonicalIdx)
                 this.hideRightPanel()
               })
           })
@@ -686,32 +919,39 @@ export struct VideoPlayerController {
     Scroll() {
       Column({ space: this.isFullScreen ? 16 : 8 }) {
 
-        // TODO 切换播放器
-//        Text('播放器')
-//          .alignSelf(ItemAlign.Start)
-//          .fontSize(this.isFullScreen ? 16 : 13)
-//          .fontColor(Color.White)
-//
-//        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
-//          ForEach(['系统内置', 'IjkPlayer'], (item, i) => {
-//            Text(item)
-//              .textAlign(TextAlign.Center)
-//              .fontColor(Color.White)
-//              .fontSize(this.isFullScreen ? 14 : 11)
-//              .padding(6)
-//              .backgroundColor(i == 0 ? $r('app.color.primary_color_accent') : Color.Transparent)
-//              .borderRadius(4)
-//              .margin({ bottom: 8 })
-//              .constraintSize({
-//                minWidth: '40%'
-//              })
-//              .maxLines(1)
-//              .onClick(() => {
-//                promptAction.showToast({ message: 'TODO 播放器' })
-//              })
-//          })
-//        }
-//        .width('100%')
+        Text('播放器')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
+          ForEach(PLAYER_OPTIONS, (item: PlayerOption) => {
+            Text(item.name)
+              .textAlign(TextAlign.Center)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .padding(6)
+              .backgroundColor((appSettings.default_player == item.value)
+                ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .borderRadius(4)
+              .margin({ bottom: 8 })
+              .width('33%')
+              .maxLines(1)
+              .onClick(() => {
+                if (appSettings.default_player == item.value) {
+                  return
+                }
+                // 记录当前进度，切换后从该处续播
+                const resumePos = this.playerManager.getCurrentPosition()
+                appSettings.default_player = item.value
+                const eventData: emitter.EventData = { data: { 'resumePos': resumePos } }
+                PLAYER_SWITCH_EVENT.emit(emitter.EventPriority.LOW, eventData)
+                // 关闭面板展示加载状态
+                this.hideRightPanel()
+              })
+          })
+        }
+        .width('100%')
 
         Text('画面尺寸')
           .alignSelf(ItemAlign.Start)
@@ -799,11 +1039,15 @@ export struct VideoPlayerController {
 
   private closeController() {
     console.log(`视频已经播放，控制面板即将关闭`)
+    // 先清掉旧计时，避免多个计时器并存导致提前隐藏
+    if (this.showControllerTimer >= 0) {
+      clearTimeout(this.showControllerTimer)
+    }
     this.showControllerTimer = setTimeout(() => {
-      // 5s后隐藏
+      // 5s内无操作后隐藏
       this.showController = false
       this.showControllerTimer = -1
-    }, 6000)
+    }, 5000)
   }
 
   private showRightPanel(type: number) {
@@ -813,6 +1057,7 @@ export struct VideoPlayerController {
     this.showController = false
     if (this.showControllerTimer >= 0) {
       clearTimeout(this.showControllerTimer)
+      this.showControllerTimer = -1
     }
     ToastUtil.animateTo(
       {
@@ -840,6 +1085,8 @@ export struct VideoPlayerController {
           this.showPanel = false
           this.showController = true
           this.rightPanelType = PanelType.NONE
+          // 控制层重新出现，启动 5 秒无操作自动隐藏
+          this.closeController()
         }
       },
       () => {
@@ -849,6 +1096,10 @@ export struct VideoPlayerController {
   }
 
   private setProgress(duration: number, position: number) {
+    // 拖动进度/长按快退预览期间不回写播放器进度，避免与预览位置互相跳动
+    if (this.isSeekDragging || this.isRewinding) {
+      return
+    }
     let pos = 0;
     if (duration > 0) {
       this.slideEnable = true;
@@ -862,6 +1113,21 @@ export struct VideoPlayerController {
       position = duration;
     }
     this.currentTime = VideoTimeUtils.stringForTime(position);
+  }
+
+  /** 点击进度条任意位置直接跳转（ClickEvent.x 为相对组件左边缘的局部坐标） */
+  private seekBySliderTap(localX: number): void {
+    const width = this.sliderAreaWidth;
+    const duration = this.playerManager.getDuration() as number;
+    if (width <= 0 || duration <= 0) {
+      return;
+    }
+    const ratio = Math.min(1, Math.max(0, localX / width));
+    const seekValue = ratio * duration;
+    Logger.e('tips', 'seekBySliderTap x=' + localX + ' width=' + width + ' seekValue=' + seekValue);
+    this.progress = ratio * 100;
+    this.setProgress(duration, seekValue);
+    this.playerManager.seekTo(seekValue);
   }
 
   private initLoading() {

@@ -129,18 +129,10 @@ export struct RedVideoPlayer {
       }
     },
 
-    setSpeed: async (speed: media.PlaybackSpeed) => {
+    setSpeed: async (speed: number) => {
       if (!this.player) return;
       try {
-        let speedValue: number = 1.0;
-        switch (speed) {
-          case media.PlaybackSpeed.SPEED_FORWARD_0_75_X: speedValue = 0.75; break;
-          case media.PlaybackSpeed.SPEED_FORWARD_1_00_X: speedValue = 1.00; break;
-          case media.PlaybackSpeed.SPEED_FORWARD_1_25_X: speedValue = 1.25; break;
-          case media.PlaybackSpeed.SPEED_FORWARD_1_75_X: speedValue = 1.75; break;
-          case media.PlaybackSpeed.SPEED_FORWARD_2_00_X: speedValue = 2.00; break;
-        }
-        await this.player.setSpeed(speedValue);
+        await this.player.setSpeed(speed);
       } catch (error) {
         Logger.e('tips', `setSpeed failed: ${error}`);
       }
@@ -210,6 +202,7 @@ export struct RedVideoPlayer {
     onSeekDone: () => {
       Logger.i('RedVideoPlayer', 'Listener.onSeekDone 拖拽进度条完成');
       // 拖拽进度条完成
+      this.playerManager?.notifySeekDone();
     },
 
     onBufferingStart: () => {
@@ -344,7 +337,7 @@ export struct RedVideoPlayer {
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
     },
-    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
+    onVideoSpeedChanged: (videoSpeed: number) => {
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
       this.videoFit = videoFit;

@@ -11,6 +11,7 @@ import { ColorModeManager } from '../utils/ColorModeManager';
 import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
 import { permissionManage } from '../utils/PermissionManage';
+import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 import SQLite from '../db/SQLite';
 
@@ -39,7 +40,16 @@ export default class EntryAbility extends UIAbility {
     // 自由窗口模式变化监听（true 为 PC 窗口模式，false 为普通窗口模式，持有引用供解绑）
     private onFreeWindowModeChange: (data: boolean) => void = (data: boolean) => {
         AnimeState.windowMode = data;
+        if (this.mainWindow) {
+            this.applyWindowDecor(this.mainWindow);
+            this.readTitleButtonRect(this.mainWindow);
+        }
         hilog.info(0x0000, 'WindowLog', '当前窗口模式 freeWindowMode：%{public}s', JSON.stringify(data));
+    };
+    // 窗口三键区域变化监听（持有引用供解绑）
+    private onTitleButtonRectChange: (rect: window.TitleButtonRect) => void = (rect: window.TitleButtonRect) => {
+        AnimeState.titleButtonWidth = rect.width + rect.right;
+        AnimeState.titleButtonCenter = rect.top + rect.height / 2;
     };
     // 避让区域变化监听（持有引用供解绑）
     private onAvoidAreaChange: (data: window.AvoidAreaOptions) => void = (data: window.AvoidAreaOptions) => {
@@ -108,6 +118,8 @@ export default class EntryAbility extends UIAbility {
     onConfigurationUpdate(newConfig: Configuration): void {
         // 系统深浅色等配置变化时同步全局状态（替代 V1 幽灵 key currentColorMode）
         AnimeState.currentColorMode = newConfig.colorMode ?? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
+        // 深浅色切换后按当前样式重绘系统栏内容颜色，避免状态栏字色残留旧模式
+        SystemBarUtils.reapplyWindowSystemBar()
     }
 
     onWindowStageCreate(windowStage: window.WindowStage) {
@@ -170,6 +182,20 @@ export default class EntryAbility extends UIAbility {
         const mainWindow = await windowStage.getMainWindow()
         this.mainWindow = mainWindow
 
+        // 开启窗口尺寸记忆（仅支持的设备生效，其余由系统返回 801 忽略）
+        try {
+            windowStage.setWindowRectAutoSave(true)
+                .then(() => {
+                    console.info('窗口尺寸记忆已开启');
+                })
+                .catch((err: BusinessError) => {
+                    console.error(`窗口尺寸记忆开启失败，code: ${err.code} message: ${err.message}`);
+                });
+        } catch (error) {
+            const err = error as BusinessError
+            console.error(`窗口尺寸记忆调用失败，code: ${err.code} message: ${err.message}`);
+        }
+
         // 设置窗口全屏
         mainWindow.setWindowLayoutFullScreen(true)
             .then(() => {
@@ -204,6 +230,10 @@ export default class EntryAbility extends UIAbility {
                 console.error(`窗口模式获取失败，code: ${err.code} message: ${err.message}`);
             }
 
+            // 窗口模式：隐藏装饰栏（保留三键）并读取三键避让区域
+            this.applyWindowDecor(mainWindow)
+            this.readTitleButtonRect(mainWindow)
+
             // 避让高度初始值
             this.readAvoidAreas(mainWindow)
             // 窗口尺寸初始值
@@ -218,9 +248,51 @@ export default class EntryAbility extends UIAbility {
                 const err = error as BusinessError
                 console.error(`窗口模式监听注册失败，code: ${err.code} message: ${err.message}`);
             }
+            try {
+                mainWindow.on('windowTitleButtonRectChange', this.onTitleButtonRectChange)
+            } catch (error) {
+                const err = error as BusinessError
+                console.error(`三键区域监听注册失败，code: ${err.code} message: ${err.message}`);
+            }
         } catch (error) {
             const err = error as BusinessError
             console.error(`UI上下文获取失败，code: ${err.code} message: ${err.message}`);
+        }
+    }
+
+    /**
+     * 窗口模式下隐藏系统装饰栏（三键保留，下沉到页面右上角）
+     */
+    private applyWindowDecor(mainWindow: window.Window): void {
+        if (!AnimeState.windowMode) {
+            return;
+        }
+        try {
+            mainWindow.setWindowDecorVisible(false)
+        } catch (error) {
+            const err = error as BusinessError
+            console.error(`窗口装饰栏隐藏失败，code: ${err.code} message: ${err.message}`);
+        }
+    }
+
+    /**
+     * 读取三键区域宽度写入全局状态（非窗口模式置 0）
+     */
+    private readTitleButtonRect(mainWindow: window.Window): void {
+        if (!AnimeState.windowMode) {
+            AnimeState.titleButtonWidth = 0
+            AnimeState.titleButtonCenter = 0
+            return;
+        }
+        try {
+            const rect: window.TitleButtonRect = mainWindow.getTitleButtonRect()
+            AnimeState.titleButtonWidth = rect.width + rect.right
+            AnimeState.titleButtonCenter = rect.top + rect.height / 2
+        } catch (error) {
+            AnimeState.titleButtonWidth = 0
+            AnimeState.titleButtonCenter = 0
+            const err = error as BusinessError
+            console.error(`三键区域获取失败，code: ${err.code} message: ${err.message}`);
         }
     }
 
@@ -281,10 +353,15 @@ export default class EntryAbility extends UIAbility {
     onWindowStageDestroy() {
         // Main window is destroyed, release UI related resources
         hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
-        // 解绑窗口监听器
-        this.mainWindow?.off('windowSizeChange', this.onWindowSizeChange)
-        this.mainWindow?.off('avoidAreaChange', this.onAvoidAreaChange)
-        this.mainWindow?.off('freeWindowModeChange', this.onFreeWindowModeChange)
+        // 解绑窗口监听器（强杀/窗口已销毁时 off 会抛 1300002，需兜底避免崩溃）
+        try {
+            this.mainWindow?.off('windowSizeChange', this.onWindowSizeChange)
+            this.mainWindow?.off('avoidAreaChange', this.onAvoidAreaChange)
+            this.mainWindow?.off('freeWindowModeChange', this.onFreeWindowModeChange)
+            this.mainWindow?.off('windowTitleButtonRectChange', this.onTitleButtonRectChange)
+        } catch (error) {
+            hilog.error(0x0000, 'testTag', 'onWindowStageDestroy off failed: %{public}s', JSON.stringify(error));
+        }
         this.mainWindow = undefined
         this.uiContext = undefined
     }

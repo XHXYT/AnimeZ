@@ -124,20 +124,12 @@ export struct MpvVideoPlayer {
       }
     },
 
-    setSpeed: async (speed: media.PlaybackSpeed): Promise<void> => {
+    setSpeed: async (speed: number): Promise<void> => {
       if (this.destroyed) {
         return;
       }
-      let speedValue: number = 1.0;
-      switch (speed) {
-        case media.PlaybackSpeed.SPEED_FORWARD_0_75_X: speedValue = 0.75; break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_00_X: speedValue = 1.00; break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_25_X: speedValue = 1.25; break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_75_X: speedValue = 1.75; break;
-        case media.PlaybackSpeed.SPEED_FORWARD_2_00_X: speedValue = 2.00; break;
-      }
       try {
-        this.mpvPlayer.setSpeed(speedValue);
+        this.mpvPlayer.setSpeed(speed);
       } catch (error) {
         Logger.e('fail', `MpvVideoPlayer.setSpeed`, error);
       }
@@ -311,7 +303,7 @@ export struct MpvVideoPlayer {
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
     },
-    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
+    onVideoSpeedChanged: (videoSpeed: number) => {
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
       this.videoFit = videoFit;

@@ -47,22 +47,31 @@ export struct HomePage {
         Image($r("app.media.ic_download_manager"))
           .width(20)
           .height(20)
-          .fillColor('#817977')
+          .fillColor(AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977')
           .objectFit(ImageFit.Contain)
+          .offset({
+            y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
+          })
           .onClick(() => {
             AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
           })
 
         SymbolGlyph($r('sys.symbol.clock'))
           .fontSize(20)
-          .fontColor(['#817977'])
+          .fontColor([AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977'])
+          .offset({
+            y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
+          })
           .onClick(() => {
             AnimeState.pageStack.pushPathByName("VideoHistoryPage", '', true)
           })
       }
       .height(56)
       .width('100%')
-      .padding({left: 16, right: 16})
+      .padding({
+        left: 16,
+        right: AnimeState.windowMode ? Math.max(16, AnimeState.titleButtonWidth + 12) : 16
+      })
       // 视频推荐区
       StateView(
         {

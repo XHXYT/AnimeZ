@@ -27,15 +27,16 @@ export struct AVideoPlayer {
   @Local aspRatio: number = DEFAULT_ASPECT
   @Local videoAspRatio: number = DEFAULT_ASPECT
   @Local videoFit: VideoFit = VideoFit.Contain
-  @Local videoSpeed: media.PlaybackSpeed = media.PlaybackSpeed.SPEED_FORWARD_1_00_X
+  @Local videoSpeed: number = 1.0
 
   private readonly componentController: XComponentController = new XComponentController()
   @Require @Param playerManager: IPlayerManager
   /** 播放器区域为全高（左右分栏等）时撑满容器，控制层可利用上下黑边空间 */
   @Param fillHeight: boolean = false
-  /** 外层容器实测宽高比（onAreaChange 测量，0 表示未测量） */
   @Local containerRatio: number = 0
   private timer: number = -1;
+  /** XComponent onLoad 中创建的底层播放器包装（卸载时释放） */
+  private avWrapper: AVPlayerWrapper | null = null
 
   /**
    * AVPlayer播放器监听回调
@@ -108,6 +109,9 @@ export struct AVideoPlayer {
       clearTimeout(this.timer)
       this.timer = -1
     }
+    // 组件卸载即释放底层播放器：切换播放器后端或退出页面时，
+    // 防止 AVPlayer 在 Surface 已销毁的情况下继续加载/出声（与 MPV 行为对齐）
+    this.avWrapper?.release()
   }
 
   build() {
@@ -127,6 +131,7 @@ export struct AVideoPlayer {
           media.createAVPlayer()
             .then((player) => {
               const avPlayer: AVPlayerWrapper = new AVPlayerWrapper(player)
+              this.avWrapper = avPlayer
               avPlayer.init(this.playerManager as IPlayerManager, surfaceId)
             })
             .catch(() => {

@@ -3,7 +3,7 @@ import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionMana
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { DEFAULT_DURATION } from '../utils/TransitionHelper';
-import TitleBar from '../components/TitleBar';
+import TitleBar, { TitleBarButton } from '../components/TitleBar';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { ToastUtil } from '../utils/ToastUtils';
@@ -60,9 +60,7 @@ struct VideoCollectionPage {
       // 标题栏
       TitleBar({
         title: '我的收藏',
-        button: () => {
-          this.EditButton()
-        }
+        buttons: this.editButtons
       })
 
       StateView(
@@ -158,18 +156,19 @@ struct VideoCollectionPage {
     })
   }
 
-  @Builder
-  EditButton() {
-    if (this.viewState == ViewState.CONTENT) {
-      Image(this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'))
-        .width(24)
-        .height(24)
-        .objectFit(ImageFit.Contain)
-        .fillColor($r('app.color.color_text_major'))
-        .onClick(() => {
-          this.selectionManager.toggleSelectionMode()
-        })
+  private get editButtons(): TitleBarButton[] {
+    if (this.viewState != ViewState.CONTENT) {
+      return []
     }
+    return [
+      {
+        image: this.selectMode ? $r('app.media.ic_edit_cancel') : $r('app.media.ic_edit'),
+        iconSize: 24,
+        action: () => {
+          this.selectionManager.toggleSelectionMode()
+        }
+      }
+    ]
   }
 
   @Builder CollectionList() {
@@ -184,7 +183,8 @@ struct VideoCollectionPage {
             return
           }
           const params: VideoNavigateInfo = {
-            id: item.id,
+            // 收藏表 id 不是历史表 id，传 null；续播信息由详情页检索历史表获得
+            id: null,
             url: item.link as string,
             sourceKey: item.sourceKey,
             title: item.title,

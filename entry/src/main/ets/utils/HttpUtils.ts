@@ -56,4 +56,36 @@ export default class HttpUtils {
         }
     }
 
+    /**
+     * 发送 JSON POST 请求，返回响应文本
+     * @param url 请求地址
+     * @param body JSON 字符串请求体
+     * @param headers 额外请求头
+     */
+    static async postJson(url: string, body: string, headers?: object): Promise<string> {
+        let httpRequest = http.createHttp()
+
+        let header = {
+            'user-agent': USER_AGENT,
+            'content-type': 'application/json'
+        }
+        if (headers) {
+            header = Object.assign(header, headers)
+        }
+
+        const resp: http.HttpResponse = await httpRequest.request(url, {
+            method: http.RequestMethod.POST,
+            readTimeout: 20000,
+            connectTimeout: 20000,
+            expectDataType: http.HttpDataType.STRING,
+            header: header,
+            extraData: body
+        })
+        if (resp.result) {
+            return resp.result as string
+        } else {
+            throw new Error(resp.responseCode.toString())
+        }
+    }
+
 }

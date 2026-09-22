@@ -20,6 +20,8 @@ const DEFAULT_ASPECT = 1.9
 @ComponentV2
 export struct IjkVideoPlayer {
   private readonly ijkPlayer = IjkMediaPlayer.getInstance()
+  /** 组件卸载后拒绝所有操作，防止迟到的异步回调污染管理器状态 */
+  private destroyed: boolean = false
   @Local videoAspRatio: number = DEFAULT_ASPECT
   @Local aspRatio: number = DEFAULT_ASPECT
   @Local videoFit: VideoFit = VideoFit.Contain
@@ -37,64 +39,75 @@ export struct IjkVideoPlayer {
   /**播放器*/
   private readonly player: IPlayer = {
     setDataSource: async (url: string) => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.setDataSource(url);
       this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
     },
 
     prepare: async () => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.prepareAsync()
     },
 
-    start: async (): Promise<void>  => {
+    start: async (): Promise<void> => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.start()
       this.playerManager?.setStatus(PlayerStatus.PLAY)
     },
 
     stop: async (): Promise<void> => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.stop()
       this.playerManager?.setStatus(PlayerStatus.STOP)
     },
 
     pause:async () => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.pause();
       this.playerManager?.setStatus(PlayerStatus.PAUSE);
     },
 
     reset: async () => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.reset()
       this.playerManager?.setStatus(PlayerStatus.IDLE)
     },
 
     release: async () => {
-      this.ijkPlayer.release()
+      if (this.destroyed) {
+        return
+      }
+      try {
+        this.ijkPlayer.release()
+      } catch (error) {
+        Logger.e('fail', 'IjkVideoPlayer.release', error)
+      }
     },
 
     seekTo: async (msec: number) => {
+      if (this.destroyed) {
+        return
+      }
       this.ijkPlayer.seekTo(String(msec));
     },
 
-    setSpeed: async (speed: media.PlaybackSpeed) => {
-      let speedValue: string;
-      switch (speed) {
-        case media.PlaybackSpeed.SPEED_FORWARD_0_75_X:
-          speedValue = '0.75';
-          break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_00_X:
-          speedValue = '1.00';
-          break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_25_X:
-          speedValue = '1.25';
-          break;
-        case media.PlaybackSpeed.SPEED_FORWARD_1_75_X:
-          speedValue = '1.75';
-          break;
-        case media.PlaybackSpeed.SPEED_FORWARD_2_00_X:
-          speedValue = '2.00';
-          break;
-        default:
-          speedValue = '1.00'; // 默认速度
-          break;
+    setSpeed: async (speed: number) => {
+      if (this.destroyed) {
+        return
       }
+      const speedValue = speed.toFixed(2);
       this.ijkPlayer.setSpeed(speedValue);
     },
   }
@@ -111,7 +124,7 @@ export struct IjkVideoPlayer {
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
     },
-    onVideoSpeedChanged: (videoSpeed: media.PlaybackSpeed) => {
+    onVideoSpeedChanged: (videoSpeed: number) => {
     },
     onVideoFitChanged: (videoFit: VideoFit) => {
       this.videoFit = videoFit;
@@ -162,7 +175,16 @@ export struct IjkVideoPlayer {
   }
 
   aboutToDisappear() {
+    this.destroyed = true
     this.playerManager?.removeListener(this.playerListener)
+    this.stopProgress()
+    // 组件卸载即释放底层播放器：切换播放器后端或退出页面时，
+    // 防止 IJK 在 Surface 已销毁的情况下继续出声（与 MPV 行为对齐）
+    try {
+      this.ijkPlayer.release()
+    } catch (error) {
+      Logger.e('fail', 'IjkVideoPlayer aboutToDisappear release', error)
+    }
   }
 
   build() {
@@ -273,6 +295,9 @@ export struct IjkVideoPlayer {
   private initPlayer() {
     this.ijkPlayer.setOnVideoSizeChangedListener({
       onVideoSizeChanged: (width: number, height: number, sar_num: number, sar_den: number) => {
+        if (this.destroyed) {
+          return
+        }
         if (typeof width == 'string') {
           width = parseInt(width)
         }
@@ -285,12 +310,18 @@ export struct IjkVideoPlayer {
 
     this.ijkPlayer.setOnBufferingUpdateListener({
       onBufferingUpdate: (percent: number) => {
+        if (this.destroyed) {
+          return
+        }
         Logger.e('tips', 'onBufferingUpdate p=' + percent)
       }
     })
 
     this.ijkPlayer.setOnCompletionListener({
       onCompletion: () => {
+        if (this.destroyed) {
+          return
+        }
         Logger.e('tips', 'onCompletion')
         this.playerManager?.setStatus(PlayerStatus.DONE)
       }
@@ -298,13 +329,20 @@ export struct IjkVideoPlayer {
 
     this.ijkPlayer.setOnSeekCompleteListener({
       onSeekComplete: () => {
+        if (this.destroyed) {
+          return
+        }
         Logger.e('tips', 'onSeekComplete')
+        this.playerManager?.notifySeekDone()
       }
     })
 
 
     this.ijkPlayer.setOnErrorListener({
       onError: (what: number, extra: number) => {
+        if (this.destroyed) {
+          return
+        }
         Logger.e('tips', 'onError what=' + what + " extra=" + extra)
         this.playerManager?.setStatus(PlayerStatus.ERROR)
       }
@@ -312,6 +350,9 @@ export struct IjkVideoPlayer {
 
     this.ijkPlayer.setOnPreparedListener({
       onPrepared: () => {
+        if (this.destroyed) {
+          return
+        }
         Logger.e('tips', 'onPrepared')
         this.playerManager?.setStatus(PlayerStatus.PREPARED)
       }
@@ -319,6 +360,9 @@ export struct IjkVideoPlayer {
 
     this.ijkPlayer.setOnInfoListener({
       onInfo: (what: number, extra: number) => {
+        if (this.destroyed) {
+          return
+        }
         this.onInfo(what, extra)
       }
     })

@@ -1,7 +1,6 @@
 import Logger from '../utils/Logger';
 import Webview from '@ohos.web.webview';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { GoToWeb } from '../utils/GoOutWeb';
 import TitleBar from '../components/TitleBar';
 import { AnimeState } from '../entryability/AnimeState';
@@ -33,9 +32,58 @@ struct WebPage {
       TitleBar({
         title: this.title,
         subtitle: this.info,
-        button: () => {
-          this.FunctionButton()
-        }
+        buttons: [
+          { // 刷新
+            symbol: 'arrow_clockwise',
+            iconSize: 24,
+            action: () => {
+              try {
+                this.controller.refresh()
+              } catch (error) {
+                Logger.e('fail', '刷新Web页面', error)
+              }
+            }
+          },
+          { // 更多
+            symbol: 'dot_grid_2x2',
+            iconSize: 24,
+            needCheckmark: true,
+            menuSelected: this.theUA === -1 ? 'ua_default' : this.theUA === 0 ? 'ua_phone' : 'ua_pad',
+            menuItems: [
+              {
+                name: '去浏览器打开',
+                value: 'go_web',
+                symbolStart: 'safari',
+                action: () => {
+                  if (typeof this.url === 'string') {
+                    GoToWeb(this.url, this.getUIContext().getHostContext()! as common.UIAbilityContext)
+                  }
+                }
+              },
+              {
+                name: '默认UA',
+                value: 'ua_default',
+                action: () => {
+                  this.setUA(-1, this.defaultUserUA)
+                }
+              },
+              {
+                name: '移动端UA',
+                value: 'ua_phone',
+                action: () => {
+                  this.setUA(0, PHONE_USER_AGENT)
+                }
+              },
+              {
+                name: '桌面端UA',
+                value: 'ua_pad',
+                action: () => {
+                  this.setUA(1, PAD_USER_AGENT)
+                }
+              }
+            ]
+          }
+        ]
       })
 
       if (this.loadingProgress < 100) {
@@ -76,7 +124,7 @@ struct WebPage {
         .layoutWeight(1)
 
     }
-    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -121,111 +169,19 @@ struct WebPage {
 
   }
 
-  @Builder
-  MoreMenu() {
-    Menu() {
-      MenuItem({
-        content: '去浏览器打开',
-        symbolEndIcon: new SymbolGlyphModifier($r('sys.symbol.chevron_right'))
-      })
-        .enabled(typeof this.url === 'string')
-        .onClick((selected) => {
-          if (typeof this.url === 'string') {
-            GoToWeb(this.url, this.getUIContext().getHostContext()! as common.UIAbilityContext)
-          }
-        })
-      MenuItem({
-        builder: ():void => this.UAMenu(),
-        content: '切换UA',
-        symbolEndIcon: new SymbolGlyphModifier($r('sys.symbol.chevron_right'))
-      })
-        .enabled(typeof this.url === 'string')
+  private setUA(ua: number, userAgent: string): void {
+    this.theUA = ua
+    try {
+      this.controller.setCustomUserAgent(userAgent)
+    } catch (error) {
+      Logger.e('fail', '设置自定义UA', error)
     }
-  }
-  @Builder
-  UAMenu() {
-    Menu() {
-      MenuItem({ content: 'UA' })
-        .contentFont({ weight: FontWeight.Bold })
-      MenuItem({
-        content: '默认',
-        symbolEndIcon: this.theUA === -1 ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
-      })
-        .onClick(() => {
-          this.theUA = -1
-          // 默认UA
-          try {
-            this.controller.setCustomUserAgent(this.defaultUserUA)
-          } catch (error) {
-            Logger.e('fail', '加载默认UA', error)
-          }
-          // 刷新网页
-          try {
-            this.controller.refresh()
-          } catch (error) {
-            Logger.e('fail', '设置默认UA后刷新Web页面', error)
-          }
-        })
-      MenuItem({
-        content: '移动端',
-        symbolEndIcon: this.theUA === 0 ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
-      })
-        .onClick(() => {
-          this.theUA = 0
-          // 移动端UA
-          try {
-            this.controller.setCustomUserAgent(PHONE_USER_AGENT)
-          } catch (error) {
-            Logger.e('fail', '加载移动端UA', error)
-          }
-          // 刷新网页
-          try {
-            this.controller.refresh()
-          } catch (error) {
-            Logger.e('fail', '设置移动端UA后刷新Web页面', error)
-          }
-        })
-      MenuItem({
-        content: '桌面端',
-        symbolEndIcon: this.theUA === 1 ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
-      })
-        .onClick(() => {
-          this.theUA = 1
-          // 桌面端UA
-          try {
-            this.controller.setCustomUserAgent(PAD_USER_AGENT)
-          } catch (error) {
-            Logger.e('fail', '加载桌面端UA', error)
-          }
-          // 刷新网页
-          try {
-            this.controller.refresh()
-          } catch (error) {
-            Logger.e('fail', '设置桌面端UA后刷新Web页面', error)
-          }
-        })
+    // 刷新网页
+    try {
+      this.controller.refresh()
+    } catch (error) {
+      Logger.e('fail', '设置UA后刷新Web页面', error)
     }
-  }
-
-  @Builder
-  FunctionButton() {
-    // 刷新
-    SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-      .fontSize(24)
-      .fontColor([$r('app.color.color_text_major')])
-      .onClick(() => {
-        try {
-          this.controller.refresh()
-        } catch (error) {
-          Logger.e('fail', '刷新Web页面', error)
-        }
-      })
-    // 更多
-    SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-      .fontSize(28)
-      .margin({ left: 12 })
-      .bindMenu(this.MoreMenu())
-      .fontColor([$r('app.color.color_text_major')])
   }
 
 }
