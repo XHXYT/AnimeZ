@@ -16,6 +16,7 @@ import { APP_RESUME_PROGRESS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBu
 import emitter from '@ohos.events.emitter';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { CastListener, CastManager } from './CastManager';
+import { PiPManager } from './PiPManager';
 import { AVCastPicker, AVCastPickerState } from '@kit.AVSessionKit';
 import { common } from '@kit.AbilityKit';
 
@@ -724,16 +725,22 @@ export struct VideoPlayerController {
           .width(24)
           .height(24)
           .margin({ left: this.isFullScreen ? 24 : 16 })
-        // TODO 小窗播放
-        Image($r("app.media.ic_float_window"))
-          .width(28)
-          .height(28)
-          .fillColor(Color.White)
-          .margin({ left: this.isFullScreen ? 24 : 16 })
-          .objectFit(ImageFit.Contain)
-          .onClick(() => {
-            ToastUtil.showToast({ message: 'TODO 小窗播放' })
-          })
+        // 小窗播放（画中画，仅支持的播放器后端显示）
+        if (PiPManager.isPlayerSupported(appSettings.default_player)) {
+          Image($r("app.media.ic_float_window"))
+            .width(28)
+            .height(28)
+            .fillColor(Color.White)
+            .margin({ left: this.isFullScreen ? 24 : 16 })
+            .objectFit(ImageFit.Contain)
+            .onClick(() => {
+              if (this.isCasting) {
+                ToastUtil.showToast({ message: '投播中不支持小窗播放' })
+                return
+              }
+              PiPManager.requestPiP()
+            })
+        }
         // 播放设置
         Image($r("app.media.ic_setting"))
           .width(24)
@@ -1206,6 +1213,29 @@ export struct VideoPlayerController {
             })
         }
         .width('100%')
+
+        if (PiPManager.isPlayerSupported(appSettings.default_player)) {
+          Row() {
+            Column() {
+              Text('退出播放页自动小窗')
+                .fontSize(this.isFullScreen ? 16 : 13)
+                .fontColor(Color.White)
+              Text('返回、导航、后台时自动进入画中画')
+                .fontSize(this.isFullScreen ? 12 : 10)
+                .fontColor('#99ffffff')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+
+            Blank()
+
+            Toggle({ type: ToggleType.Switch, isOn: appSettings.auto_pip_on_exit })
+              .onChange((isOn: boolean) => {
+                appSettings.auto_pip_on_exit = isOn
+              })
+          }
+          .width('100%')
+        }
 
       }
       .padding(this.isFullScreen ? 16 : 8)

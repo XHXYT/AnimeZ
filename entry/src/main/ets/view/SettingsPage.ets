@@ -9,6 +9,7 @@ import { dataSourceManager } from '../api/DataSourceManager'
 import Logger from '../utils/Logger'
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
 import { AnimeState } from '../entryability/AnimeState'
+import { PiPManager } from '../player/PiPManager'
 
 // 系统路由
 @Builder
@@ -146,6 +147,16 @@ struct SettingsPage {
           appSettings.auto_play_on_no_wifi = value as boolean
         }
       }),
+      new CustomItemInfo({
+        id: 'auto_pip_on_exit',
+        title: '退出播放页自动小窗',
+        subtitle: '返回、导航、后台时自动进入画中画小窗',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_pip_on_exit,
+        onChange: (value) => {
+          appSettings.auto_pip_on_exit = value as boolean
+        }
+      }),
 
       // 更多组
       new CustomItemInfo({ id: 'group_more', title: '更多', type: ItemActionType.GROUP }),
@@ -167,7 +178,13 @@ struct SettingsPage {
           AnimeState.pageStack.pushPathByName("AboutMePage", '')
         }
       })
-    ]
+    ].filter((item: CustomItemInfo) => {
+      // 小窗播放仅支持部分播放器后端：选了不支持的后端时隐藏自动小窗开关
+      if (item.id === 'auto_pip_on_exit') {
+        return PiPManager.isPlayerSupported(appSettings.default_player)
+      }
+      return true
+    })
   }
 
   /** 分组结果（供 ForEach 与间距判断复用） */

@@ -72,6 +72,10 @@ export class AppConfigs {
    * 视频源配置覆盖导入
    */
   @Trace video_source_import_overwrite: boolean = false
+  /**
+   * 退出播放页自动小窗（画中画）
+   */
+  @Trace auto_pip_on_exit: boolean = false
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -121,6 +125,8 @@ export class AppConfigs {
       (json["video_sources_group_filter_manager"] as string) ?? this.video_sources_group_filter_manager
     this.video_source_import_overwrite =
       (json["video_source_import_overwrite"] as boolean) ?? this.video_source_import_overwrite
+    this.auto_pip_on_exit =
+      (json["auto_pip_on_exit"] as boolean) ?? this.auto_pip_on_exit
   }
 
   /**
@@ -151,6 +157,8 @@ export class AppConfigs {
           (legacy["video_sources_group_filter_manager"] as string) ?? this.video_sources_group_filter_manager
         this.video_source_import_overwrite =
           (legacy["video_source_import_overwrite"] as boolean) ?? this.video_source_import_overwrite
+        this.auto_pip_on_exit =
+          (legacy["auto_pip_on_exit"] as boolean) ?? this.auto_pip_on_exit
         Logger.i('Settings', '旧版配置迁移至 preferences 成功')
       }
       PersistentStorage.deleteProp("AppSettings")
@@ -166,7 +174,7 @@ export class AppConfigs {
     'auto_resume_download_on_wifi', 'need_blur', 'max_downloading_count', 'default_player',
     'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
-    'video_source_import_overwrite')
+    'video_source_import_overwrite', 'auto_pip_on_exit')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -187,7 +195,8 @@ export class AppConfigs {
         "video_sources_order": this.video_sources_order,
         "video_sources_group_filter": this.video_sources_group_filter,
         "video_sources_group_filter_manager": this.video_sources_group_filter_manager,
-        "video_source_import_overwrite": this.video_source_import_overwrite
+        "video_source_import_overwrite": this.video_source_import_overwrite,
+        "auto_pip_on_exit": this.auto_pip_on_exit
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -215,6 +224,7 @@ export class AppConfigs {
     this.video_sources_group_filter = '不分组'
     this.video_sources_group_filter_manager = ''
     this.video_source_import_overwrite = false
+    this.auto_pip_on_exit = false
     this.isLoading = false
     await this.save()
   }

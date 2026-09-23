@@ -3,16 +3,16 @@
     "signingConfigs": [
       {
         "name": "default",
-        "type": "HarmonyOS",
         "material": {
-          "storeFile": "",
-          "storePassword": "",
-          "keyAlias": "",
-          "keyPassword": "",
-          "signAlg": "",
-          "profile": "",
-          "certpath": ""
-        }
+          "storePassword": "0000002011027EEBDAC601D6674CE48E3D924E29267F04A3231D0A4B3034DB078A0C7FE27039618817668BDD0AD9E21E",
+          "certpath": "/storage/Users/currentUser/HUAWEI/key/AnimeZ/default_AnimeZMkcvPZdwQIWRLpbw83VglhdNkCDlF38POsLpynUWLjc.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000002011027EEBDAC601D6674CE48E3D924E29267F04A3231D0A4B3034DB078A0C7FE27039618817668BDD0AD9E21E",
+          "profile": "/storage/Users/currentUser/HUAWEI/key/AnimeZ/default_AnimeZMkcvPZdwQIWRLpbw83VglhdNkCDlF38POsLpynUWLjc.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/storage/Users/currentUser/HUAWEI/key/AnimeZ/default_AnimeZMkcvPZdwQIWRLpbw83VglhdNkCDlF38POsLpynUWLjc.p12"
+        },
+        "type": "HarmonyOS"
       }
     ],
     "products": [
@@ -28,22 +28,7 @@
         },
         "targetSdkVersion": "6.0.0(20)"
       }
-    ],
-    //    "capabilities": [
-    //      {
-    //        "bundleName": "org.z.anime",
-    //        "config": [
-    //          {
-    //            "name": "Device status detection",
-    //            "capability": "com.huawei.service.device_security.device_verify"
-    //          },
-    //          {
-    //            "name": "Safety Detect",
-    //            "capability": "com.huawei.service.device_security.safety_detect"
-    //          }
-    //        ]
-    //      }
-    //    ]
+    ]
   },
   "modules": [
     {

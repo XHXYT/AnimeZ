@@ -4,6 +4,8 @@
 /.idea
 **/build
 /.hvigor
+/.bitfun
+/.deveco
 .cxx
 /.clangd
 /.clang-format

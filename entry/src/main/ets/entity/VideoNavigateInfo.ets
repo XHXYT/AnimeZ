@@ -8,7 +8,11 @@ export interface VideoNavigateInfo {
   url: string,
   sourceKey: string,
   title: string,
-  cover: string
+  cover: string,
+  /** 画中画恢复进入：以小窗实时进度续播 */
+  isPiPRestore?: boolean,
+  /** 画中画恢复时的播放位置（毫秒） */
+  pipPosition?: number
 }
 
 /**
