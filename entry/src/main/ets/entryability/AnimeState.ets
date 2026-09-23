@@ -53,6 +53,15 @@ export class _AnimeState {
   @Trace runJs: string = ''
   /** WebView JS 解析通道：JS 执行结果回传链接 */
   @Trace webJsVideoLink: string = ''
+  /** WebView JS 解析通道：手动模式（显示完整页面，等待用户点击站点播放按钮后经桥回传结果） */
+  @Trace webviewManual: boolean = false
+  /** WebView JS 解析通道：手动模式触发原因（展示给用户的当前状态说明） */
+  @Trace webviewManualReason: string = ''
+
+  /** 当前播放媒体标题（投播元数据展示用） */
+  @Trace playingTitle: string = ''
+  /** 当前播放媒体封面URL（投播元数据展示用） */
+  @Trace playingCoverUrl: string = ''
 
   // ===== 非响应式静态资源 =====
   /** UI 上下文 */

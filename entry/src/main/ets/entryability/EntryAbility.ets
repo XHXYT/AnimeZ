@@ -2,7 +2,7 @@ import UIAbility from '@ohos.app.ability.UIAbility';
 import hilog from '@ohos.hilog';
 import window from '@ohos.window';
 import { AbilityConstant, bundleManager, Configuration, ConfigurationConstant, Want, wantConstant } from '@kit.AbilityKit';
-import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
+import { BusinessError, deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { appSettings, AppSettings } from './Settings';
 import { _AnimeState, AnimeState } from './AnimeState';
@@ -178,6 +178,7 @@ export default class EntryAbility extends UIAbility {
     /**
      * 主窗口初始化：全屏、UIContext、权限、避让高度、断点、监听器注册（写入 AnimeState）
      */
+    @SuppressWarnings({ rules: [SuppressWarningsType.SYSCAP] })
     private async initMainWindow(windowStage: window.WindowStage): Promise<void> {
         const mainWindow = await windowStage.getMainWindow()
         this.mainWindow = mainWindow
@@ -263,6 +264,7 @@ export default class EntryAbility extends UIAbility {
     /**
      * 窗口模式下隐藏系统装饰栏（三键保留，下沉到页面右上角）
      */
+    @SuppressWarnings({ rules: [SuppressWarningsType.SYSCAP] })
     private applyWindowDecor(mainWindow: window.Window): void {
         if (!AnimeState.windowMode) {
             return;

@@ -31,6 +31,16 @@ class ResumeTarget {
 
 @ObservedV2
 export class VideoDetailViewModel {
+
+  /**
+   * 手动点击兜底模式注入的钩子 JS：
+   * 拦截站点自身发起的 resolve XHR，捕获其响应中的真实播放地址，
+   * 经 animeBridge.onLink 桥回传给应用完成原生播放。
+   * 前 10 秒内收到的 403 视为站点残留的自动尝试，忽略不回传。
+   */
+  private static readonly MANUAL_HOOK_JS: string =
+    `(function(){var posted=false;var t0=Date.now();function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};return 'HOOK';})()`;
+
   // 视频详情信息
   @Trace public videoDetailInfo: VideoDetailInfo = {
     title: '',
@@ -196,11 +206,16 @@ export class VideoDetailViewModel {
   // 获取视频详情
   public async getDetailInfo() {
     this.state = ViewState.LOADING
+    // 从进入详情页即进入解析态：控制面板显示加载圈，覆盖详情加载→链接解析→播放器就绪全程
+    this.playerManager.notifyParseState(true);
     try {
       // 获取视频详情
       console.log(`VideoDetailViewModel.playVideo 等待获取视频详情的链接，url：${this.url}`)
       const info = await dataSourceManager.getVideoDetailInfo(this.url, this.appSettings.episodes_order)
       this.videoDetailInfo = info;
+      // 同步当前播放媒体信息到全局状态，供投播元数据展示
+      AnimeState.playingTitle = this.videoDetailInfo.title
+      AnimeState.playingCoverUrl = this.videoDetailInfo.coverUrl
       console.log(`VideoDetailViewModel.playVideo 获取视频详情成功，info：${JSON.stringify(this.videoDetailInfo, null, 2)}`)
       // 更新视频信息
       this.historyInfo.link = this.videoDetailInfo.url as string;
@@ -219,6 +234,7 @@ export class VideoDetailViewModel {
       // 尝试播放视频
       this.playVideo(target.listIndex, target.episodeIndex);
     } catch (err) {
+      this.playerManager.notifyParseState(false);
       this.errorMessage = err.message;
       this.state = ViewState.ERROR;
       Logger.e('fail', `VideoDetailViewModel.getDetailInfo 视频详情获取`, err);
@@ -290,22 +306,28 @@ export class VideoDetailViewModel {
     this.historyInfo.videoUrl = episode.videoUrl as string;
 
     if (episode.videoUrl) {
+      // 详情页阶段置过的解析态在此收口，交由播放器状态（IDLE/PREPARED）接管加载圈
+      this.playerManager.notifyParseState(false);
       await this.saveHistoryInfo(true);
       await this.checkVideoInfo();
       this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos);
     } else {
+      // 解析期间通知控制面板显示加载圈（与播放状态解耦，切集解析时也能看到反馈）
+      this.playerManager.notifyParseState(true);
       try {
         console.log(`VideoDetailViewModel.playVideo 视频剧集链接，link：${episode.link}`)
         let url = await dataSourceManager.parseVideoUrl(episode.link)
         console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，url：${url}`)
         // 检查链接是否需要js
         const finalUrl = await this.checkParesVideoLink(url)
+        this.playerManager.notifyParseState(false);
         episode.videoUrl = finalUrl
         this.historyInfo.videoUrl = finalUrl
         await this.saveHistoryInfo(true);
         await this.checkVideoInfo();
         this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos)
       } catch (err) {
+        this.playerManager.notifyParseState(false);
         this.playerManager.setStatus(PlayerStatus.ERROR);
         Logger.e('fail', `VideoDetailViewModel.playVideo 视频链接解析`, err);
       }
@@ -330,57 +352,92 @@ export class VideoDetailViewModel {
         return Promise.reject(new Error('Invalid URL format for JS parsing.'));
       }
 
-      // 准备并激活WebView
-      // *** 在开始轮询前，先清空上一次的结果，防止读到旧数据 ***
-      AnimeState.webJsVideoLink = ''
-      AnimeState.webviewUrl = rawLink
-      AnimeState.runJs = js
-      AnimeState.showWebView = true
-      console.info(`checkParesVideoLink: 已激活WebView，目标URL: ${url}, JS:${js}`);
+      const sep = rawLink.includes('?') ? '&' : '?';
+      let lastErr = 'ERR_UNKNOWN';
 
-      // 开始轮询等待结果
-      const pollingIntervalMs = 500; // 轮询间隔500毫秒，避免过于频繁
-      const timeoutMs = 20000; // 超时时间20秒（JS 在页面加载完成 4 秒后才注入，需留足余量）
-      const startTime = Date.now();
+      // 阶段一：自动解析，最多2次尝试（_r 参数供页面 JS 区分尝试序号，每次重建 WebView 获取新凭证）
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        AnimeState.webviewManual = false;
+        AnimeState.webJsVideoLink = '';
+        AnimeState.webviewUrl = `${rawLink}${sep}_r=${attempt}`;
+        AnimeState.runJs = js;
+        // src 变化不会触发已存在的 Web 组件重新加载，必须重建组件
+        AnimeState.showWebView = false;
+        await this.sleep(300);
+        AnimeState.showWebView = true;
+        console.info(`checkParesVideoLink: 自动解析第${attempt}次尝试，目标URL: ${AnimeState.webviewUrl}`);
 
-      while (true) {
-        // 检查是否超时
-        if (Date.now() - startTime > timeoutMs) {
-          // 超时后，隐藏WebView并抛出错误
-          AnimeState.showWebView = false
-          console.error('checkParesVideoLink: 轮询超时，未能获取JS结果。');
-          return Promise.reject(new Error('JS execution timed out.'));
+        const result = await this.waitWebViewResult(25000);
+        if (result.includes('http') && !result.startsWith('ERR_')) {
+          console.info(`checkParesVideoLink: 成功获取JS链接: ${result}`);
+          this.finishWebView();
+          return result;
         }
-
-        // 从全局状态获取JS执行结果
-        const jsLink = AnimeState.webJsVideoLink;
-
-        // 页面内JS以 ERR_ 开头返回时表示解析失败，立即终止等待
-        if (jsLink && jsLink !== '' && jsLink.startsWith('ERR_')) {
-          AnimeState.showWebView = false
-          console.error(`checkParesVideoLink: 页面内JS解析失败: ${jsLink}`);
-          return Promise.reject(new Error(`播放地址解析失败: ${jsLink}`));
+        lastErr = result;
+        // 仅凭证失败(403)时换帧率参数再试一次，其它错误直接进入手动兜底
+        if (!lastErr.startsWith('ERR_HTTP_403')) {
+          break;
         }
-
-        // 如果结果存在且不为空，说明JS已执行并返回了值
-        if (jsLink && jsLink !== '' && jsLink.includes('http')) {
-          console.info(`checkParesVideoLink: 成功获取JS链接: ${jsLink}`);
-          // 隐藏WebView
-          AnimeState.showWebView = false
-          // 返回结果
-          return jsLink;
-        }
-
-        // 如果还没结果，等待一段时间后继续下一次轮询
-        console.debug(`checkParesVideoLink: 轮询中... 未获取到结果，${pollingIntervalMs}ms后重试。`);
-        await this.sleep(pollingIntervalMs);
       }
 
+      // 阶段二：自动解析失败，进入手动点击兜底模式（显示真实页面，用户点击播放后捕获站点自身解析结果）
+      console.info(`checkParesVideoLink: 自动解析失败(${lastErr})，进入手动点击模式`);
+      let reason = '自动解析未能获取播放地址';
+      if (lastErr.startsWith('ERR_HTTP_403')) {
+        reason = '站点播放凭证校验未通过';
+      } else if (lastErr === 'ERR_TIMEOUT') {
+        reason = '自动解析超时';
+      }
+      AnimeState.webviewManualReason = `${reason} · ${lastErr}`;
+      AnimeState.webviewManual = true;
+      AnimeState.webJsVideoLink = '';
+      AnimeState.webviewUrl = `${rawLink}${sep}_m=${Date.now()}`;
+      AnimeState.runJs = VideoDetailViewModel.MANUAL_HOOK_JS;
+      AnimeState.showWebView = false;
+      await this.sleep(300);
+      AnimeState.showWebView = true;
+
+      const manualResult = await this.waitWebViewResult(120000);
+      this.finishWebView();
+      if (manualResult.includes('http') && !manualResult.startsWith('ERR_')) {
+        console.info(`checkParesVideoLink: 手动模式成功获取链接: ${manualResult}`);
+        return manualResult;
+      }
+      console.error(`checkParesVideoLink: 手动模式解析失败: ${manualResult}`);
+      return Promise.reject(new Error(`播放地址解析失败: ${manualResult}`));
     } else {
       // 情况二：直接返回输入的URL
       console.info(`checkParesVideoLink: 直接返回URL: ${url}`);
       return url;
     }
+  }
+
+  /**
+   * 轮询等待 WebView JS 结果（runJavaScript 返回值或 animeBridge 桥回调写入 webJsVideoLink）
+   * @param timeoutMs 超时时间
+   * @returns 回传内容（http 链接或 ERR_ 错误串），超时返回 'ERR_TIMEOUT'
+   */
+  private async waitWebViewResult(timeoutMs: number): Promise<string> {
+    const startTime = Date.now();
+    while (true) {
+      const jsLink = AnimeState.webJsVideoLink;
+      if (jsLink && jsLink !== '') {
+        return jsLink;
+      }
+      if (Date.now() - startTime > timeoutMs) {
+        AnimeState.showWebView = false;
+        console.error('waitWebViewResult: 等待JS结果超时。');
+        return 'ERR_TIMEOUT';
+      }
+      await this.sleep(500);
+    }
+  }
+
+  /** 收尾：隐藏 WebView 并复位手动模式标志 */
+  private finishWebView(): void {
+    AnimeState.showWebView = false;
+    AnimeState.webviewManual = false;
+    AnimeState.webviewManualReason = '';
   }
 
   /**

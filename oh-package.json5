@@ -4,13 +4,11 @@
     "@ohos/hypium": "1.0.6"
   },
   "modelVersion": "5.0.2",
-  "name": "animez",
+  "name": "AnimeZ",
   "description": "example description",
   "repository": {},
   "version": "1.0.1",
   "dynamicDependencies": {},
   "dependencies": {
-    "@ohos/ijkplayer": "^2.0.11",
-    "@ya520/webdav": "^1.0.1"
   }
 }

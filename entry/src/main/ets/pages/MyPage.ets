@@ -12,7 +12,7 @@ import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 const TAG: string = 'MyPage'
 
 /**
- * 我的页面（单 List 结构：条目级懒加载与独立测量，横向历史栏重排不牵动整页）
+ * 我的页面
  */
 @ComponentV2
 export struct MyPage {

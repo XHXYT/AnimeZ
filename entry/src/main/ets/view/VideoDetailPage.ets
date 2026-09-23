@@ -105,10 +105,113 @@ struct VideoDetailPage {
   }
 
   @Builder WebViewContent() {
+    Stack() {
+      if (AnimeState.webviewManual) {
+        // 半模态遮罩
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('rgba(0,0,0,0.45)')
+          .transition(TransitionEffect.OPACITY.animation({ duration: 250 }))
+        // 半模态卡片：状态头部 + 网页
+        Column() {
+          this.ManualHeader()
+          this.CoreWeb()
+        }
+        .width('100%')
+        .height('100%')
+        .margin({
+          left: 16,
+          right: 16,
+          top: AnimeState.topRectHeight + 24,
+          bottom: 32
+        })
+        .borderRadius(20)
+        .clip(true)
+        .backgroundColor(Color.White)
+        .transition(TransitionEffect.OPACITY
+          .combine(TransitionEffect.translate({ y: 60 }))
+          .animation({ duration: 250, curve: Curve.Friction }))
+      } else {
+        // 自动模式：隐藏 1x1 WebView
+        Stack() {
+          this.CoreWeb()
+        }
+        .width(1)
+        .height(1)
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 手动模式状态头部：当前状态 + 需要用户辅助的操作类型 + 取消 */
+  @Builder ManualHeader() {
+    Column() {
+      Row() {
+        Column() {
+          Text('需要手动辅助播放')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FF1F1F1F')
+          Text(AnimeState.webviewManualReason)
+            .fontSize(11)
+            .fontColor('#FF888888')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 2 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color('#FF007DFF')
+          .margin({ right: 10 })
+
+        Button('取消')
+          .fontSize(14)
+          .height(32)
+          .padding({ left: 14, right: 14 })
+          .backgroundColor('rgba(0,0,0,0.05)')
+          .fontColor('#FF1F1F1F')
+          .onClick(() => {
+            AnimeState.webJsVideoLink = 'ERR_MANUAL_CANCEL';
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 12, top: 12, bottom: 6 })
+
+      Text('▶ 请在网页中点击播放按钮，应用将自动捕获播放地址并继续播放')
+        .fontSize(12)
+        .fontColor('#FF007DFF')
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 8 })
+    }
+    .width('100%')
+    .backgroundColor(Color.White)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  /** WebView 主体（自动/手动模式共用，尺寸由父容器决定） */
+  @Builder CoreWeb() {
     Web({ src: AnimeState.webviewUrl, controller: this.webviewController })
-      .backgroundColor(Color.Transparent)
+      .backgroundColor(AnimeState.webviewManual ? Color.White : Color.Transparent)
       .javaScriptAccess(true)
-      .width(1).height(1)
+      .javaScriptProxy({
+        object: {
+          onLink: (link: string): void => {
+            console.info(`animeBridge.onLink: ${link}`);
+            AnimeState.webJsVideoLink = link;
+          }
+        },
+        name: 'animeBridge',
+        methodList: ['onLink'],
+        controller: this.webviewController
+      })
+      .width('100%')
+      .layoutWeight(1)
       .onPageBegin((event) => {
         console.log(`链接 ${event.url} 成功加载`)
       })
@@ -116,6 +219,8 @@ struct VideoDetailPage {
         try {
           if (e) {
             Logger.e('tips', `URL ${e.url} 开始加载JavaScript`)
+            // 手动模式下尽快安装钩子（避免错过用户点击触发的站点自身解析）；自动模式延迟等待页面就绪
+            const injectDelay = AnimeState.webviewManual ? 800 : 3000;
             setTimeout(() => {
               // TODO 待修复 webviewController 未绑定上或者绑定了多个 Web 组件
               // 注意：页面销毁后 Web 组件解绑，runJavaScript 会同步抛 17100001，
@@ -123,20 +228,25 @@ struct VideoDetailPage {
               try {
                 this.webviewController.runJavaScript(AnimeState.runJs)
                   .then((result) => {
-                    console.info(`URL ${e.url} 执行 result: ${result}`)
-                    // 兼容两种返回：runJavaScript 结果可能为原始字符串或 JSON 编码字符串
-                    let link: string = result
-                    try {
-                      const parsed: string = JSON.parse(result)
-                      if (parsed !== '') {
-                        link = parsed
+                    if (!AnimeState.webviewManual) {
+                      console.info(`URL ${e.url} 执行 result: ${result}`)
+                      // 兼容两种返回：runJavaScript 结果可能为原始字符串或 JSON 编码字符串
+                      let link: string = result
+                      try {
+                        const parsed: string = JSON.parse(result)
+                        if (parsed !== '') {
+                          link = parsed
+                        }
+                      } catch (err) {
+                        // result 非合法 JSON 时按原始字符串处理
                       }
-                    } catch (err) {
-                      // result 非合法 JSON 时按原始字符串处理
+                      AnimeState.webJsVideoLink = link
+                      AnimeState.showWebView = false
+                      console.info(`URL ${e.url} 显示状态: ${AnimeState.showWebView} 解析后链接：${AnimeState.webJsVideoLink}`)
+                    } else {
+                      // 手动模式：结果经 animeBridge 桥回传，此处仅确认钩子安装
+                      console.info(`URL ${e.url} 手动模式钩子已安装: ${result}`)
                     }
-                    AnimeState.webJsVideoLink = link
-                    AnimeState.showWebView = false
-                    console.info(`URL ${e.url} 显示状态: ${AnimeState.showWebView} 解析后链接：${AnimeState.webJsVideoLink}`)
                   })
                   .catch((error: BusinessError) => {
                     Logger.e('fail', '加载JavaScript', error)
@@ -144,7 +254,7 @@ struct VideoDetailPage {
               } catch (error) {
                 Logger.e('fail', '页面已销毁，跳过JS注入', error)
               }
-            }, 4000)
+            }, injectDelay)
           }
         } catch (error) {
           Logger.e('fail', 'webviewController 加载JavaScript', error)

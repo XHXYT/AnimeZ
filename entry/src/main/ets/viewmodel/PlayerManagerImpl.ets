@@ -163,7 +163,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
       this.pendingSeekPos = startPos > 0 ? startPos : -1
       if (this.status != PlayerStatus.IDLE) {
         await this.player.reset()
-        this.status = PlayerStatus.IDLE
+        // 通知式置位（部分后端 reset 不上报事件），保证控制层加载圈在换集 reset→prepare 期间不中断
+        this.setStatus(PlayerStatus.IDLE)
       }
       await this.player.setDataSource(url)
     }
@@ -197,7 +198,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
         this.isInitializing = true
         this.currentTime = 0
         await this.player.reset()
-        this.status = PlayerStatus.IDLE
+        this.setStatus(PlayerStatus.IDLE)
         await this.player.setDataSource(this.url)
       } else {
         // 优先使用未消费的续播位置（currentTime 可能已被加载期间的 position=0 事件覆盖）
@@ -330,6 +331,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
     } else if (this.status == PlayerStatus.DONE) {
       this.currentTime = 0
       this.pendingSeekPos = -1
+    }
+  }
+
+  notifyParseState(parsing: boolean) {
+    for (let listener of this.listeners) {
+      listener.onParseStateChanged?.(parsing)
     }
   }
 

@@ -15,6 +15,9 @@ import { audio } from '@kit.AudioKit';
 import { APP_RESUME_PROGRESS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
+import { CastListener, CastManager } from './CastManager';
+import { AVCastPicker, AVCastPickerState } from '@kit.AVSessionKit';
+import { common } from '@kit.AbilityKit';
 
 interface KeyValue {
   name: string,
@@ -91,6 +94,8 @@ export struct VideoPlayerController {
   @Local isLocked: boolean = false
   @Local videoFit: number = VideoFit.Contain
   @Local isLoading: boolean = false
+  /** @description 链接解析中（数据源/WebView 解析阶段，驱动加载圈与文案） */
+  @Local isParsing: boolean = false
   @Local episodeList: EpisodeInfo[] = []
   @Local episodeIndex: number = 0
   @Require @Param playerManager: IPlayerManager
@@ -134,6 +139,25 @@ export struct VideoPlayerController {
   /** @description 长按倍速前的原倍率 */
   private speedBeforeBoost: number = 1.0
 
+  /** @description 系统投播中（远端设备播放） */
+  @Local isCasting: boolean = false
+  /** @description 投播设备名称 */
+  @Local castDeviceName: string = ''
+  /** @description 投播端播放中 */
+  @Local isCastPlaying: boolean = false
+  /** @description 投播端最近进度(ms)，断开投播时本端从此处续播 */
+  private castLastPos: number = 0
+  /** @description 投播端最近媒体时长(ms) */
+  private castLastDuration: number = 0
+  private castManager: CastManager = new CastManager()
+
+  /** @description 上控制栏高度（控制层可见时为手势屏蔽区） */
+  private topBarHeight: number = 0
+  /** @description 下控制栏高度（控制层可见时为手势屏蔽区） */
+  private bottomBarHeight: number = 0
+  /** @description 本次手势起点落在控制栏区域内，屏蔽手势 */
+  private gestureBlocked: boolean = false
+
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
@@ -142,8 +166,21 @@ export struct VideoPlayerController {
         // 播放结束/出错时终止手势驱动的快退与倍速，防止计时器残留
         this.stopRewind()
         this.stopSpeedBoost()
+        // 出错/结束时自动展示控制层，便于查看状态或切换选集（不自动隐藏）
+        if (this.showControllerTimer >= 0) {
+          clearTimeout(this.showControllerTimer)
+          this.showControllerTimer = -1
+        }
+        this.showController = true
       }
       if (status === PlayerStatus.PLAY) {
+        if (this.isCasting) {
+          // 投播中本端因切集解析后自动开播：推送新资源到远端并暂停本端
+          this.pushCurrentEpisodeToCast()
+          return
+        }
+        // 播放开始后时长已知，刷新投播会话元数据
+        this.refreshCastSession()
         // 播放视频后关闭控制面板
         this.closeController()
       }
@@ -153,6 +190,8 @@ export struct VideoPlayerController {
       this.episodeList = episodeList
       this.episodeIndex = episodeIndex
       this.title = episodeList[episodeIndex].desc
+      // 切集后刷新投播会话元数据，保证系统投播面板展示最新剧集
+      this.refreshCastSession()
     },
     onVideoSpeedChanged: (videoSpeed: number) => {
     },
@@ -166,6 +205,12 @@ export struct VideoPlayerController {
     onVideoSizeChange: (w: number, h: number) => {
     },
     onProgressChange: (totalTime: number, currentTime: number) => {
+      if (this.isCasting) {
+        // 投播中进度以远端回传为准
+        return
+      }
+      // 持续刷新远端起播位置，发起投播时远端从当前进度开播
+      this.castManager.updateProgress(currentTime)
       this.setProgress(totalTime, currentTime)
     },
     onBuffering: (type: media.BufferingInfoType, value: number) => {
@@ -185,6 +230,56 @@ export struct VideoPlayerController {
         this.isLoading = false
       }
       Logger.e('tips', 'onBuffering isLoading=' + this.isLoading)
+    },
+    onParseStateChanged: (parsing: boolean) => {
+      // 链接解析阶段（含 WebView 内解析/手动辅助）：显示加载圈，避免界面看似卡死
+      this.isParsing = parsing
+      this.initLoading()
+    }
+  }
+
+  private readonly castListener: CastListener = {
+    onCastConnected: (deviceName: string) => {
+      this.isCasting = true
+      this.castDeviceName = deviceName
+      this.isCastPlaying = true
+      this.castLastPos = 0
+      this.castLastDuration = 0
+      this.stopRewind()
+      this.stopSpeedBoost()
+      // 本端暂停，由远端接管播放
+      this.playerManager.pause()
+      this.closeController()
+      ToastUtil.showToast({ message: `已投屏至 ${deviceName}` })
+    },
+    onCastDisconnected: () => {
+      this.isCasting = false
+      this.castDeviceName = ''
+      this.isCastPlaying = false
+      // 本端从投播进度续播
+      const resumePos = this.castLastPos
+      this.castLastPos = 0
+      this.castLastDuration = 0
+      if (resumePos > 0) {
+        this.playerManager.seekTo(resumePos)
+      }
+      this.playerManager.start()
+    },
+    onCastStateChanged: (isPlaying: boolean) => {
+      this.isCastPlaying = isPlaying
+    },
+    onCastProgressChange: (duration: number, position: number) => {
+      if (duration > 0) {
+        this.castLastDuration = duration
+      }
+      this.castLastPos = position
+      this.setProgress(duration, position)
+    },
+    onCastEndOfStream: () => {
+      // 远端播放结束：自动投播下一集
+      if (this.episodeIndex < this.episodeList.length - 1) {
+        this.playerManager.selectEpisode(this.episodeIndex + 1)
+      }
     }
   }
 
@@ -198,6 +293,10 @@ export struct VideoPlayerController {
     } else {
       throw new Error('You must set playerManager firstly!')
     }
+
+    this.castManager.setListener(this.castListener)
+    // 预创建投播 AVSession（AVCastPicker 组件点击时要求会话已存在）
+    this.refreshCastSession()
 
     // TODO API20 监听系统音频变化
     this.audioVolumeManager.on('streamVolumeChange', audio.StreamUsage.STREAM_USAGE_MUSIC, (streamVolumeEvent: audio.StreamVolumeEvent) => {
@@ -224,6 +323,7 @@ export struct VideoPlayerController {
       clearTimeout(this.seekOverlayTimer)
       this.seekOverlayTimer = -1
     }
+    this.castManager.destroy()
   }
 
   onDidBuild(): void {
@@ -291,9 +391,13 @@ export struct VideoPlayerController {
           this.panAxis = 0
           this.panStartX = event.fingerList[0]?.localX ?? 0;
           this.panStartY = event.fingerList[0]?.localY ?? 0;
+          // 控制层可见时，起点落在上/下控制栏区域内则屏蔽本次手势（留 10px 容差）
+          this.gestureBlocked = this.showController
+            && (this.panStartY < this.topBarHeight + 10
+              || this.panStartY > this.playerControllerArea.height - this.bottomBarHeight - 10)
         })
         .onActionUpdate((event: GestureEvent) => {
-          if (this.isLocked || this.showPanel) {
+          if (this.isLocked || this.showPanel || this.gestureBlocked) {
             return
           }
           const currentX = event.fingerList[0]?.localX ?? 0;
@@ -306,11 +410,11 @@ export struct VideoPlayerController {
             if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
               return
             }
-            const duration = this.playerManager.getDuration() as number
+            const duration = this.effectiveDuration()
             if (Math.abs(deltaX) > Math.abs(deltaY) && duration > 0) {
               this.panAxis = 2
               this.isSeekDragging = true
-              this.seekDragStartPos = this.playerManager.getCurrentPosition()
+              this.seekDragStartPos = this.isCasting ? this.castLastPos : this.playerManager.getCurrentPosition()
               this.seekPreviewPos = this.seekDragStartPos
               if (this.seekOverlayTimer >= 0) {
                 clearTimeout(this.seekOverlayTimer)
@@ -318,7 +422,7 @@ export struct VideoPlayerController {
               }
             } else {
               this.panAxis = 1
-              // 纵向：判定侧边（左音量/右亮度），以当前Y为基线
+              // 纵向：判定侧边（左亮度/右音量），以当前Y为基线
               this.isLeftSideGesture = this.panStartX < this.playerControllerArea.width / 2;
               this.lastGestureY = currentY;
               return
@@ -328,7 +432,7 @@ export struct VideoPlayerController {
           if (this.panAxis == 2) {
             // 横向拖动：滑过整个播放区宽度对应总时长，实时预览目标位置
             const width = this.playerControllerArea.width
-            const duration = this.playerManager.getDuration() as number
+            const duration = this.effectiveDuration()
             if (width <= 0 || duration <= 0) {
               return
             }
@@ -338,31 +442,37 @@ export struct VideoPlayerController {
             this.progress = target / duration * 100
             this.currentTime = VideoTimeUtils.stringForTime(target)
           } else {
-            // 纵向：左半区音量 / 右半区亮度
+            // 纵向：左半区亮度 / 右半区音量
             this.isVolumeAndBrightnessVisible = true;
             const deltaY = currentY - this.lastGestureY;
             if (this.isLeftSideGesture) {
-              // 每滑动30px改变1级音量，向上滑动增加音量
-              const volumeChange = -deltaY / 30;
-              let curVolume = this.volume + volumeChange;
-              curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
-              curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
-              this.volume = curVolume;
-            } else {
               // 每滑动100px改变0.1亮度，向上滑动增加亮度
               const brightnessChange = -deltaY / 100;
               let curBrightness = this.screenBrightness + brightnessChange;
               curBrightness = this.getValidValue(curBrightness, 0.0, 1.0);
               this.screenBrightness = curBrightness;
               this.setScreenBrightness(this.screenBrightness);
+            } else {
+              // 每滑动30px改变1级音量，向上滑动增加音量
+              const volumeChange = -deltaY / 30;
+              let curVolume = this.volume + volumeChange;
+              curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
+              curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
+              this.volume = curVolume;
             }
             this.lastGestureY = currentY;
           }
         })
         .onActionEnd(() => {
+          this.gestureBlocked = false
           if (this.panAxis == 2) {
             // 松手才执行真正的跳转；浮层短暂停留后消失
-            this.playerManager.seekTo(this.seekPreviewPos)
+            if (this.isCasting) {
+              this.castLastPos = this.seekPreviewPos
+              this.castManager.seek(this.seekPreviewPos)
+            } else {
+              this.playerManager.seekTo(this.seekPreviewPos)
+            }
             if (this.seekOverlayTimer >= 0) {
               clearTimeout(this.seekOverlayTimer)
             }
@@ -384,6 +494,13 @@ export struct VideoPlayerController {
             return
           }
           const x = event.fingerList[0]?.localX ?? 0
+          const y = event.fingerList[0]?.localY ?? 0
+          // 控制层可见时，上/下控制栏区域内不触发长按手势（留 10px 容差）
+          if (this.showController
+            && (y < this.topBarHeight + 10
+              || y > this.playerControllerArea.height - this.bottomBarHeight - 10)) {
+            return
+          }
           if (x < this.playerControllerArea.width / 2) {
             // 左半屏长按：2x 速率连续快退
             this.startRewind()
@@ -403,7 +520,7 @@ export struct VideoPlayerController {
   VolumeAndBrightnessBuilder() {
     if (this.isVolumeAndBrightnessVisible) {
       VolumeAndBrightnessProgress({
-        isVolume: this.isLeftSideGesture,
+        isVolume: !this.isLeftSideGesture,
         volumeProgress: (this.volume / 15) * 100, // 将音量 0-15 转换为 0-100
         brightnessProgress: this.screenBrightness * 100 // 将亮度 0-1 转换为 0-100
       })
@@ -463,6 +580,9 @@ export struct VideoPlayerController {
 
   /** 长按左半屏：以 2x 速率连续快退（播放器不支持倒放，用循环后退跳转实现） */
   private startRewind() {
+    if (this.isCasting) {
+      return
+    }
     const duration = this.playerManager.getDuration() as number
     if (duration <= 0) {
       return
@@ -494,7 +614,7 @@ export struct VideoPlayerController {
 
   /** 长按右半屏：临时 3x 倍速播放，松手恢复原倍速 */
   private startSpeedBoost() {
-    if (this.playerStatus != PlayerStatus.PLAY) {
+    if (this.isCasting || this.playerStatus != PlayerStatus.PLAY) {
       return
     }
     const prev = VIDEO_SPEED_LIST.find((item: KeyValue) => item.name == this.currentSpeed)
@@ -509,6 +629,45 @@ export struct VideoPlayerController {
     }
     this.isSpeedBoosting = false
     this.playerManager.setSpeed(this.speedBeforeBoost)
+  }
+
+  /** 当前是否处于播放中（投播时取远端状态） */
+  private isPlayingNow(): boolean {
+    return this.isCasting ? this.isCastPlaying : this.playerStatus == PlayerStatus.PLAY
+  }
+
+  /** 当前媒体时长（投播时优先取远端回传时长） */
+  private effectiveDuration(): number {
+    if (this.isCasting && this.castLastDuration > 0) {
+      return this.castLastDuration
+    }
+    return this.playerManager.getDuration() as number
+  }
+
+  /** 创建/刷新投播 AVSession 与元数据（AVCastPicker 组件依赖已存在的会话拉起设备面板） */
+  private refreshCastSession() {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    this.castManager.prepare(context, this.episodeList, this.episodeIndex, this.effectiveDuration(),
+      AnimeState.playingTitle, AnimeState.playingCoverUrl)
+  }
+
+  /** AVCastPicker 组件自定义图标（投播中高亮） */
+  @Builder
+  CastPickerIconBuilder() {
+    Image($r('app.media.ic_airplay'))
+      .width('100%')
+      .height('100%')
+      .fillColor(this.isCasting ? $r('app.color.primary_color_accent') : Color.White)
+      .objectFit(ImageFit.Contain)
+  }
+
+  /** 投播中切集：本端已解析出直链并自动开播，将新资源推送到远端并暂停本端 */
+  private pushCurrentEpisodeToCast() {
+    this.playerManager.pause()
+    this.castLastPos = 0
+    this.castLastDuration = 0
+    this.castManager.updateEpisodes(this.episodeList, this.episodeIndex)
+    this.castManager.castEpisode(this.episodeIndex, 0)
   }
 
   @Builder VideoController() {
@@ -536,18 +695,35 @@ export struct VideoPlayerController {
           .margin({ left: 16 })
           .align(Alignment.Start)
         Blank()
-        // TODO 投屏
-        if (this.isFullScreen) {
-          Image($r("app.media.ic_airplay"))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
-            .margin({ left: 24 })
-            .objectFit(ImageFit.Contain)
-            .onClick(() => {
-              ToastUtil.showToast({ message: 'TODO 投屏' })
-            })
+        if (this.isCasting) {
+          Text(`投屏中·${this.castDeviceName}`)
+            .fontColor($r('app.color.primary_color_accent'))
+            .fontSize(12)
+            .maxLines(1)
+            .margin({ right: 8 })
         }
+        // 投屏（投播中点击可切换设备/切回本机）
+        AVCastPicker({
+          sessionType: 'video',
+          customPicker: (): void => {
+            this.CastPickerIconBuilder()
+          },
+          onStateChange: (state: AVCastPickerState): void => {
+            if (state == AVCastPickerState.STATE_APPEARING) {
+              // 设备选择面板展示期间保持控制层可见：AVCastPicker 组件被移除会导致系统面板关闭
+              if (this.showControllerTimer >= 0) {
+                clearTimeout(this.showControllerTimer)
+                this.showControllerTimer = -1
+              }
+            } else if (state == AVCastPickerState.STATE_DISAPPEARING) {
+              // 面板关闭后恢复 5 秒自动隐藏
+              this.closeController()
+            }
+          }
+        })
+          .width(24)
+          .height(24)
+          .margin({ left: this.isFullScreen ? 24 : 16 })
         // TODO 小窗播放
         Image($r("app.media.ic_float_window"))
           .width(28)
@@ -580,6 +756,10 @@ export struct VideoPlayerController {
       .alignRules({
         top: { anchor: '__container__', align: VerticalAlign.Top } // 顶部与父容器顶部对齐
       })
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        // 记录上控制栏高度，控制层可见时作为手势屏蔽区
+        this.topBarHeight = newArea.height as number
+      })
 
       // 中部左侧控制区域
       if (this.isFullScreen) {
@@ -603,12 +783,15 @@ export struct VideoPlayerController {
 
       // 中部指示区域
       if (this.isLoading) {
-        // 加载圆圈
-        Column() {
+        // 加载圆圈（播放前为线路解析，播放中为缓冲）
+        Column({ space: 8 }) {
           LoadingProgress()
             .width(48)
             .height(48)
             .color(Color.White)
+          Text(this.isParsing || this.playerStatus !== PlayerStatus.PLAY ? '线路解析中...' : '缓冲中...')
+            .fontColor(Color.White)
+            .fontSize(14)
         }
         .padding({ left: 32, right: 32, top: 16, bottom: 16 })
         .alignItems(HorizontalAlign.Center)
@@ -620,7 +803,7 @@ export struct VideoPlayerController {
           center: { anchor: '__container__', align: VerticalAlign.Center}
         })
       }
-      if (this.playerStatus === PlayerStatus.ERROR || this.playerStatus === PlayerStatus.DONE) {
+      if (!this.isParsing && (this.playerStatus === PlayerStatus.ERROR || this.playerStatus === PlayerStatus.DONE)) {
         // 播放错误 & 重新播放
         Column({space: 8}) {
           Image($r('app.media.ic_refresh'))
@@ -681,13 +864,21 @@ export struct VideoPlayerController {
 
       // 下控制栏区域
       Row() {
-        Image((this.playerStatus == PlayerStatus.PLAY) ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
+        Image(this.isPlayingNow() ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
           .width(24)
           .height(24)
           .fillColor(Color.White)
           .margin({ left: this.isFullScreen ? 16 : 12 })
           .objectFit(ImageFit.Contain)
           .onClick(() => {
+            if (this.isCasting) {
+              if (this.isCastPlaying) {
+                this.castManager.pause()
+              } else {
+                this.castManager.play()
+              }
+              return
+            }
             if (this.playerStatus == PlayerStatus.PLAY) {
               this.playerManager.pause()
             } else {
@@ -713,9 +904,15 @@ export struct VideoPlayerController {
             Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value)
             if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
               this.progress = value
-              let seekValue = value / 100 * (this.playerManager.getDuration() as number);
-              this.setProgress(this.playerManager.getDuration() as number, seekValue)
-              this.playerManager.seekTo(seekValue);
+              const duration = this.effectiveDuration()
+              const seekValue = value / 100 * duration;
+              this.setProgress(duration, seekValue)
+              if (this.isCasting) {
+                this.castLastPos = seekValue
+                this.castManager.seek(seekValue)
+              } else {
+                this.playerManager.seekTo(seekValue);
+              }
             }
           })
           .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -782,6 +979,10 @@ export struct VideoPlayerController {
       .alignRules({
         bottom: { anchor: '__container__', align: VerticalAlign.Bottom } // 底部对齐父容器底部
       })
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        // 记录下控制栏高度，控制层可见时作为手势屏蔽区
+        this.bottomBarHeight = newArea.height as number
+      })
     }
     .width('100%')
     .height('100%')
@@ -836,7 +1037,11 @@ export struct VideoPlayerController {
             .borderWidth(this.currentSpeed == item.name ? 0 : 1)
             .onClick(() => {
               this.currentSpeed = item.name
-              this.playerManager.setSpeed(item.value)
+              if (this.isCasting) {
+                this.castManager.setSpeed(item.value)
+              } else {
+                this.playerManager.setSpeed(item.value)
+              }
             })
         })
 
@@ -1118,7 +1323,7 @@ export struct VideoPlayerController {
   /** 点击进度条任意位置直接跳转（ClickEvent.x 为相对组件左边缘的局部坐标） */
   private seekBySliderTap(localX: number): void {
     const width = this.sliderAreaWidth;
-    const duration = this.playerManager.getDuration() as number;
+    const duration = this.effectiveDuration();
     if (width <= 0 || duration <= 0) {
       return;
     }
@@ -1127,11 +1332,17 @@ export struct VideoPlayerController {
     Logger.e('tips', 'seekBySliderTap x=' + localX + ' width=' + width + ' seekValue=' + seekValue);
     this.progress = ratio * 100;
     this.setProgress(duration, seekValue);
-    this.playerManager.seekTo(seekValue);
+    if (this.isCasting) {
+      this.castLastPos = seekValue;
+      this.castManager.seek(seekValue);
+    } else {
+      this.playerManager.seekTo(seekValue);
+    }
   }
 
   private initLoading() {
-    this.isLoading = this.playerStatus == PlayerStatus.IDLE
+    this.isLoading = this.isParsing
+    || this.playerStatus == PlayerStatus.IDLE
     || this.playerStatus == PlayerStatus.INITIALIZED
     || this.playerStatus == PlayerStatus.PREPARED
   }

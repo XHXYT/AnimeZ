@@ -42,6 +42,9 @@ export interface PlayerListener {
 
   onBuffering: (type: media.BufferingInfoType, value: number) => void
 
+  /** 链接解析阶段状态（可选）：解析开始/结束时通知 UI 显示加载反馈 */
+  onParseStateChanged?: (parsing: boolean) => void
+
 }
 
 export default interface IPlayerManager {
@@ -114,6 +117,9 @@ export default interface IPlayerManager {
   notifyTime: (duration: number, currentTime: number) => void
 
   notifyBuffering: (type: media.BufferingInfoType, value: number) => void
+
+  /** 通知监听者链接解析开始/结束（驱动控制面板加载圈，与播放状态解耦） */
+  notifyParseState: (parsing: boolean) => void
 
   /** 底层播放器 seek 完成回调（AVPlayer seekDone / IJK onSeekComplete），用于关闭 seek 加载圈 */
   notifySeekDone: () => void
