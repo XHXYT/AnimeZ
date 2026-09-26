@@ -102,7 +102,8 @@ const
 	NTH_CHILD = /^nth-child\((.+)\)$/,
 	NTH_LAST_CHILD = /^nth-last-child\((.+)\)$/,
 	NTH_OF_TYPE = /^nth-of-type\((.+)\)$/,
-	NTH_LAST_OF_TYPE = /^nth-last-of-type\((.+)\)$/
+	NTH_LAST_OF_TYPE = /^nth-last-of-type\((.+)\)$/,
+	CONTAINS = /^contains\((.+)\)$/
 
 type MatchSet = HtmlTag[]
 abstract class Selector {
@@ -242,8 +243,9 @@ class SingleSelector extends Selector { //selector that doesn't relate different
 			const pseudo = this.pseudos[i]
 			let nthChildMatch: RegExpMatchArray | null = null,
 				nthLastChildMatch: RegExpMatchArray | null,
-				nthOfTypeMatch: RegExpMatchArray | null = null,
-				nthLastOfTypeMatch: RegExpMatchArray | null
+				nthOfTypeMatch: RegExpMatchArray | null,
+				nthLastOfTypeMatch: RegExpMatchArray | null,
+				containsMatch: RegExpMatchArray | null = null
 			if (pseudo === 'checked') {
 				if (element.attributes.checked === undefined) return
 			}
@@ -307,6 +309,9 @@ class SingleSelector extends Selector { //selector that doesn't relate different
 				if (!match) {
 					return
 				}
+			}
+			else if ((containsMatch = CONTAINS.exec(pseudo))) {
+				if (!element.textContent.includes(stripQuotes(containsMatch[1]))) return
 			}
 			else if (pseudo === 'indeterminate') {
 				switch (element.type) {

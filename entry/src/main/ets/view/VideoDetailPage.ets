@@ -1,6 +1,12 @@
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import IPlayerManager from '../player/model/IPlayerManager';
+import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
+import { CustomListItem } from '../components/CustomListItem';
+import { CustomItemInfo, ItemActionType, MenuOption } from '../entity/CusItemInfo';
+import { PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import emitter from '@ohos.events.emitter';
+import { PiPManager } from '../player/PiPManager';
+import { window } from '@kit.ArkUI';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import { ConfigurationConstant } from '@kit.AbilityKit';
@@ -43,7 +49,16 @@ struct VideoDetailPage {
   private panelController: PanelController = new PanelController()
   private webviewController: webview.WebviewController = new webview.WebviewController();
 
+  aboutToAppear() {
+    // 播放器控制层"设置"按钮（非全屏）：用简介同款半模态面板展示播放设置
+    PLAYER_SETTINGS_EVENT.on(() => {
+      this.viewModel.panelContentType = 2
+      this.panelController.show()
+    })
+  }
+
   aboutToDisappear() {
+    PLAYER_SETTINGS_EVENT.off()
     this.viewModel.onDestroy();
   }
 
@@ -338,7 +353,7 @@ struct VideoDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
-          .padding({ top: this.viewModel.isFullScreen ? 0 : AnimeState.topRectHeight })
+          .padding({ top: this.viewModel.isFullScreen ? 0 : 12 })
         }
       }.layoutWeight(1)
 
@@ -452,7 +467,8 @@ struct VideoDetailPage {
   @Builder SecondaryContent() {
     Column() {
       Row() {
-        Text(this.viewModel.panelContentType == 0 ? '详情' : '缓存')
+        Text(this.viewModel.panelContentType == 0 ? '详情'
+          : this.viewModel.panelContentType == 1 ? '缓存' : '播放设置')
           .fontColor($r('app.color.color_text_major'))
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
@@ -477,9 +493,12 @@ struct VideoDetailPage {
         .edgeEffect(EdgeEffect.Spring)
         .width('100%')
         .height('100%')
-      } else {
+      } else if (this.viewModel.panelContentType == 1) {
         // 缓存页
         VideoCacheList({ videoDetailInfo: this.viewModel.videoDetailInfo })
+      } else {
+        // 播放设置页
+        this.PlayerSettingsPanel()
       }
     }
     .backgroundColor($r('app.color.background_color'))
@@ -517,6 +536,9 @@ struct VideoDetailPage {
             if (this.viewModel.videoDetailInfo.updateTime) {
               Text(this.viewModel.videoDetailInfo.updateTime).fontSize(12)
             }
+            if (this.airDateText !== '') {
+              Text(this.airDateText).fontSize(12)
+            }
             if (this.viewModel.videoDetailInfo.category) {
               Text(`分类：${this.viewModel.videoDetailInfo.category}`).fontSize(12)
             }
@@ -553,10 +575,177 @@ struct VideoDetailPage {
           .fontSize(12)
           .padding(16)
       }
+      if (this.viewModel.videoDetailInfo.actors) {
+        Header('主演')
+        Text(this.viewModel.videoDetailInfo.actors)
+          .fontColor($r('app.color.color_text_normal'))
+          .fontSize(12)
+          .padding(16)
+      }
+      if (this.viewModel.videoDetailInfo.tags) {
+        Header('标签')
+        Text(this.viewModel.videoDetailInfo.tags)
+          .fontColor($r('app.color.color_text_normal'))
+          .fontSize(12)
+          .padding(16)
+      }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
+  }
+
+  /** 播出年月（详情扩展字段 year/month，任一存在即显示） */
+  private get airDateText(): string {
+    const info = this.viewModel.videoDetailInfo
+    const year = (info.year ?? '').trim()
+    const month = (info.month ?? '').trim()
+    if (year !== '' && month !== '') {
+      return `${year} · ${month}`
+    }
+    return year !== '' ? year : month
+  }
+
+  /** 播放设置面板数据（getter 每次求值，读 appSettings/viewModel 最新值保证选中态同步） */
+  private get settingsItems(): CustomItemInfo[] {
+    return [
+      new CustomItemInfo({
+        id: 'ps_default_player',
+        title: '播放器',
+        subtitle: '切换后从当前进度续播',
+        type: ItemActionType.MENU,
+        value: appSettings.default_player,
+        menuOptions: [
+          new MenuOption('av', 'AVPlayer'),
+          new MenuOption('mpv', 'MPVPlayer'),
+          new MenuOption('ijk', 'IjkPlayer'),
+          new MenuOption('video', 'VideoPlayer'),
+          new MenuOption('red', 'RedPlayer(仅本地)')
+        ],
+        onChange: (value) => {
+          if (appSettings.default_player == value) {
+            return
+          }
+          // 记录当前进度，切换后从该处续播
+          const resumePos = this.playerManager.getCurrentPosition()
+          appSettings.default_player = value as string
+          const eventData: emitter.EventData = { data: { 'resumePos': resumePos } }
+          PLAYER_SWITCH_EVENT.emit(emitter.EventPriority.LOW, eventData)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_video_fit',
+        title: '画面尺寸',
+        type: ItemActionType.MENU,
+        value: String(this.viewModel.videoFit),
+        menuOptions: [
+          new MenuOption(String(VideoFit.Contain), '适应'),
+          new MenuOption(String(VideoFit.Cover), '填充'),
+          new MenuOption(String(VideoFit.Fill), '拉伸'),
+          new MenuOption(String(VideoFit.Fit_16_9), '16:9'),
+          new MenuOption(String(VideoFit.Fit_4_3), '4:3'),
+          new MenuOption(String(VideoFit.Fit_1_1), '1:1')
+        ],
+        onChange: (value) => {
+          this.playerManager.setVideoFit(Number(value) as VideoFit)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_episodes_order',
+        title: '剧集排序',
+        type: ItemActionType.MENU,
+        value: appSettings.episodes_order as string,
+        menuOptions: [new MenuOption('asc', '正序'), new MenuOption('desc', '倒序')],
+        onChange: (value) => {
+          appSettings.episodes_order = value as 'asc' | 'desc'
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_auto_rotate',
+        title: '自动全屏',
+        subtitle: '手机横屏时自动进入全屏',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_sensor_rotate,
+        onChange: (value) => {
+          appSettings.auto_sensor_rotate = value as boolean
+          this.applyAutoRotateOrientation(value as boolean)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_auto_next',
+        title: '自动播放下一集',
+        subtitle: '视频结束后自动播放下一集',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_next_episode,
+        onChange: (value) => {
+          appSettings.auto_play_next_episode = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_auto_play_no_wifi',
+        title: '非Wifi下自动播放',
+        subtitle: '非Wifi环境下不再提醒，自动播放视频',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_on_no_wifi,
+        onChange: (value) => {
+          appSettings.auto_play_on_no_wifi = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_auto_pip',
+        title: '退出播放页自动小窗',
+        subtitle: '返回、导航、后台时自动进入画中画',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_pip_on_exit,
+        onChange: (value) => {
+          appSettings.auto_pip_on_exit = value as boolean
+        }
+      })
+    ].filter((item: CustomItemInfo) => {
+      // 小窗播放仅支持部分播放器后端：选了不支持的后端时隐藏自动小窗开关
+      if (item.id === 'ps_auto_pip') {
+        return PiPManager.isPlayerSupported(appSettings.default_player)
+      }
+      return true
+    })
+  }
+
+  /** 播放设置面板内容（简介同款半模态面板内展示） */
+  @Builder PlayerSettingsPanel() {
+    Scroll() {
+      Column() {
+        ForEach(this.settingsItems, (item: CustomItemInfo) => {
+          CustomListItem({
+            item: item,
+            itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
+          })
+        }, (item: CustomItemInfo) => item.id)
+      }
+      .width('100%')
+      .padding({ top: 4, bottom: 16 })
+      .constraintSize({ minHeight: '100%' })
+    }
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 自动全屏开关联动窗口方向（与播放器控制层面板逻辑一致） */
+  private applyAutoRotateOrientation(isOn: boolean): void {
+    if (this.viewModel.isFullScreen) {
+      return
+    }
+    const windowClass = _AnimeState.window
+    if (!windowClass) {
+      return
+    }
+    const orientation: window.Orientation = isOn
+      ? window.Orientation.AUTO_ROTATION_RESTRICTED
+      : window.Orientation.PORTRAIT
+    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
+      Logger.e('fail', `applyAutoRotateOrientation 设置窗口方向 code=${err.code}`, err)
+    })
   }
 
   /**

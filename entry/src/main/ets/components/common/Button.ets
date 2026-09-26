@@ -42,8 +42,16 @@ export struct ButtonBuilder {
             content: item.name,
             startIcon: item.startIconSrc ? item.startIconSrc : undefined, // MenuItem 的 icon 属性
             symbolStartIcon: item.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolStart)) : undefined,
-            symbolEndIcon: (this.selectedInner == item.value && config.needCheckmark) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+            labelInfo: item.labelInfo,
+            symbolEndIcon: (item.checked || (this.selectedInner == item.value && config.needCheckmark)) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined,
+            builder: this.hasChildren(item) ? (): void => {
+              this.subMenu(item)
+            } : undefined
           }).onClick(() => {
+            // 有二级子菜单的项仅负责展开，不触发动作
+            if (this.hasChildren(item)) {
+              return
+            }
             if (item.value != config.prohibitValue) {
               this.selectedInner = item.value
             }
@@ -51,6 +59,26 @@ export struct ButtonBuilder {
           })
         })
       }
+    }
+  }
+
+  private hasChildren(item: MenuItem): boolean {
+    return item.children !== undefined && item.children.length > 0
+  }
+
+  // 二级子菜单（builder 内容必须以 Menu 为容器，否则渲染异常）
+  @Builder
+  subMenu(item: MenuItem) {
+    Menu() {
+      ForEach(item.children ?? [], (child: MenuItem) => {
+        MenuItem({
+          content: child.name,
+          symbolStartIcon: child.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + child.symbolStart)) : undefined,
+          symbolEndIcon: child.checked ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+        }).onClick(() => {
+          child.action?.()
+        })
+      }, (child: MenuItem): string => child.value.toString())
     }
   }
 
@@ -131,4 +159,7 @@ export interface MenuItem {
   action?: () => void; // 菜单项点击事件
   symbolStart?: string
   startIconSrc?: ResourceStr; // 菜单项图标 (可选)
+  checked?: boolean; // 独立勾选态（优先于 menuSelected 单选勾选）
+  labelInfo?: string; // 右侧标签信息（如当前值）
+  children?: MenuItem[]; // 二级子菜单（存在时点击仅展开，不触发 action）
 }

@@ -1,5 +1,5 @@
 
-import IPlayerManager, { PlayerListener, PlayerStatus } from '../player/model/IPlayerManager';
+import IPlayerManager, { PlayerListener, PlayerStatus, VideoFit } from '../player/model/IPlayerManager';
 import { HISTORY_CHANGED_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -60,6 +60,8 @@ export class VideoDetailViewModel {
   @Trace public state: number = 0;
   @Trace public errorMessage: string = '';
   @Trace public panelContentType: number = 0;
+  /** 当前画面尺寸（供播放设置面板回显选中项） */
+  @Trace public videoFit: number = VideoFit.Contain;
   /** 视频宽高（用于布局判断视频横竖方向） */
   @Trace public videoWidth: number = 0;
   @Trace public videoHeight: number = 0;
@@ -201,7 +203,9 @@ export class VideoDetailViewModel {
           console.error(`VideoDetailViewModel..onFullScreenChanged 未获取WindowClass`)
         }
       },
-    onVideoFitChanged: (videoFit) => videoFit,
+    onVideoFitChanged: (videoFit: VideoFit): void => {
+      this.videoFit = videoFit;
+    },
     onVideoSizeChange: (w: number, h: number): void => {
       this.videoWidth = w;
       this.videoHeight = h;
@@ -249,7 +253,7 @@ export class VideoDetailViewModel {
     try {
       // 获取视频详情
       console.log(`VideoDetailViewModel.playVideo 等待获取视频详情的链接，url：${this.url}`)
-      const info = await dataSourceManager.getVideoDetailInfo(this.url, this.appSettings.episodes_order)
+      const info = await dataSourceManager.getVideoDetailInfo(this.url, this.appSettings.episodes_order, this.sourceKey)
       this.videoDetailInfo = info;
       // 同步当前播放媒体信息到全局状态，供投播元数据展示
       AnimeState.playingTitle = this.videoDetailInfo.title
@@ -359,7 +363,7 @@ export class VideoDetailViewModel {
       this.playerManager.notifyParseState(true);
       try {
         console.log(`VideoDetailViewModel.playVideo 视频剧集链接，link：${episode.link}`)
-        let url = await dataSourceManager.parseVideoUrl(episode.link)
+        let url = await dataSourceManager.parseVideoUrl(episode.link, this.sourceKey)
         console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，url：${url}`)
         // 检查链接是否需要js
         const finalUrl = await this.checkParesVideoLink(url)

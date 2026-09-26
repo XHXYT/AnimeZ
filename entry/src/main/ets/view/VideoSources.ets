@@ -568,7 +568,7 @@ struct SourceItem {
       .layoutWeight(1)
       // 状态标识
       if (this.item.defaultSource) {
-        Text('默认')
+        Text('首页源')
           .fontSize(12)
           .fontColor(Color.White)
           .backgroundColor($r('app.color.primary_color_accent'))

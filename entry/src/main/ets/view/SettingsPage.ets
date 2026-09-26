@@ -22,6 +22,16 @@ struct SettingsPage {
 
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
 
+  /** 列表版本号：页面重新可见时递增，作为 ForEach key 前缀强制重建列表以刷新选中态 */
+  @Local private listVersion: number = 0
+
+  /** 分组结果（@Local 持有，aboutToAppear / onShown 时重建） */
+  @Local private groups: ItemGroupData[] = []
+
+  aboutToAppear(): void {
+    this.groups = makeItemGroups(this.itemList)
+  }
+
   /**
    * 设置项数据（getter 每次求值，读 appSettings 最新值保证选中态同步）
    */
@@ -187,11 +197,6 @@ struct SettingsPage {
     })
   }
 
-  /** 分组结果（供 ForEach 与间距判断复用） */
-  private get groups(): ItemGroupData[] {
-    return makeItemGroups(this.itemList)
-  }
-
   build() {
     NavDestination() {
       // 标题
@@ -226,8 +231,8 @@ struct SettingsPage {
                   Blank().height(16)
                 }
               },
-              // 唯一键生成
-              (group: ItemGroupData) => group.group?.id ?? String(group.items.length)
+              // 唯一键生成（带版本前缀：listVersion 变化时强制重建所有分组以刷新选中态）
+              (group: ItemGroupData) => `${this.listVersion}_${group.group?.id ?? String(group.items.length)}`
             )
           }
           .padding({ left: 16, right: 16, top: 4, bottom: 16 })
@@ -249,6 +254,11 @@ struct SettingsPage {
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
+    .onShown(() => {
+      // 页面重新可见时重建列表，同步在视频源页可能被修改的首页源选中态
+      this.listVersion++
+      this.groups = makeItemGroups(this.itemList)
+    })
     .width('100%')
     .height('100%')
   }

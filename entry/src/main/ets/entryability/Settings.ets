@@ -76,6 +76,50 @@ export class AppConfigs {
    * 退出播放页自动小窗（画中画）
    */
   @Trace auto_pip_on_exit: boolean = false
+  /**
+   * 弹幕开关
+   */
+  @Trace danmaku_enabled: boolean = true
+  /**
+   * 弹幕不透明度 0.25~1
+   */
+  @Trace danmaku_opacity: number = 1.0
+  /**
+   * 弹幕字体缩放 0.5~1.5
+   */
+  @Trace danmaku_font_scale: number = 1.0
+  /**
+   * 弹幕滚动速度系数 0.5~2
+   */
+  @Trace danmaku_speed: number = 1.0
+  /**
+   * 弹幕显示区域占比 0.25~1
+   */
+  @Trace danmaku_area: number = 1.0
+  /**
+   * 搜索：精准搜索（勾选后仅保留标题与关键词完全一致的结果，否则模糊匹配）
+   */
+  @Trace search_precise: boolean = false
+  /**
+   * 搜索：结果屏蔽词（逗号/空格分隔，命中标题即过滤）
+   */
+  @Trace search_block_words: string = ''
+  /**
+   * 搜索：范围类型 all=全部源 group=按分组 source=按源
+   */
+  @Trace search_scope: string = 'all'
+  /**
+   * 搜索：选中的分组列表（JSON 数组字符串，与视频源分组管理同步）
+   */
+  @Trace search_scope_groups: string = ''
+  /**
+   * 搜索：选中的源 key 列表（JSON 数组字符串）
+   */
+  @Trace search_scope_sources: string = ''
+  /**
+   * 搜索：结果展示样式 card=卡片 list=列表 auto=自动（按源扩展字段多数判定）
+   */
+  @Trace search_result_style: string = 'auto'
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -127,6 +171,17 @@ export class AppConfigs {
       (json["video_source_import_overwrite"] as boolean) ?? this.video_source_import_overwrite
     this.auto_pip_on_exit =
       (json["auto_pip_on_exit"] as boolean) ?? this.auto_pip_on_exit
+    this.danmaku_enabled = (json["danmaku_enabled"] as boolean) ?? this.danmaku_enabled
+    this.danmaku_opacity = (json["danmaku_opacity"] as number) ?? this.danmaku_opacity
+    this.danmaku_font_scale = (json["danmaku_font_scale"] as number) ?? this.danmaku_font_scale
+    this.danmaku_speed = (json["danmaku_speed"] as number) ?? this.danmaku_speed
+    this.danmaku_area = (json["danmaku_area"] as number) ?? this.danmaku_area
+    this.search_precise = (json["search_precise"] as boolean) ?? this.search_precise
+    this.search_block_words = (json["search_block_words"] as string) ?? this.search_block_words
+    this.search_scope = (json["search_scope"] as string) ?? this.search_scope
+    this.search_scope_groups = (json["search_scope_groups"] as string) ?? this.search_scope_groups
+    this.search_scope_sources = (json["search_scope_sources"] as string) ?? this.search_scope_sources
+    this.search_result_style = (json["search_result_style"] as string) ?? this.search_result_style
   }
 
   /**
@@ -174,7 +229,10 @@ export class AppConfigs {
     'auto_resume_download_on_wifi', 'need_blur', 'max_downloading_count', 'default_player',
     'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
-    'video_source_import_overwrite', 'auto_pip_on_exit')
+    'video_source_import_overwrite', 'auto_pip_on_exit',
+    'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_speed', 'danmaku_area',
+    'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
+    'search_result_style')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -196,7 +254,18 @@ export class AppConfigs {
         "video_sources_group_filter": this.video_sources_group_filter,
         "video_sources_group_filter_manager": this.video_sources_group_filter_manager,
         "video_source_import_overwrite": this.video_source_import_overwrite,
-        "auto_pip_on_exit": this.auto_pip_on_exit
+        "auto_pip_on_exit": this.auto_pip_on_exit,
+        "danmaku_enabled": this.danmaku_enabled,
+        "danmaku_opacity": this.danmaku_opacity,
+        "danmaku_font_scale": this.danmaku_font_scale,
+        "danmaku_speed": this.danmaku_speed,
+        "danmaku_area": this.danmaku_area,
+        "search_precise": this.search_precise,
+        "search_block_words": this.search_block_words,
+        "search_scope": this.search_scope,
+        "search_scope_groups": this.search_scope_groups,
+        "search_scope_sources": this.search_scope_sources,
+        "search_result_style": this.search_result_style
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -225,6 +294,17 @@ export class AppConfigs {
     this.video_sources_group_filter_manager = ''
     this.video_source_import_overwrite = false
     this.auto_pip_on_exit = false
+    this.danmaku_enabled = true
+    this.danmaku_opacity = 1.0
+    this.danmaku_font_scale = 1.0
+    this.danmaku_speed = 1.0
+    this.danmaku_area = 1.0
+    this.search_precise = false
+    this.search_block_words = ''
+    this.search_scope = 'all'
+    this.search_scope_groups = ''
+    this.search_scope_sources = ''
+    this.search_result_style = 'auto'
     this.isLoading = false
     await this.save()
   }

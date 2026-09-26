@@ -12,13 +12,16 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { VolumeAndBrightnessProgress } from '../components/VolumeAndBrightnessProgress';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { audio } from '@kit.AudioKit';
-import { APP_RESUME_PROGRESS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import { APP_RESUME_PROGRESS_EVENT, PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { CastListener, CastManager } from './CastManager';
 import { PiPManager } from './PiPManager';
 import { AVCastPicker, AVCastPickerState } from '@kit.AVSessionKit';
 import { common } from '@kit.AbilityKit';
+import { DanmakuLayer } from '../danmaku/DanmakuLayer';
+import { DanmakuController } from '../danmaku/DanmakuController';
+import { DanmakuLoadResult, DanmakuLoadStatus } from '../danmaku/DandanplayApi';
 
 interface KeyValue {
   name: string,
@@ -61,6 +64,14 @@ const VIDEO_FIT_LIST: KeyValue[] = [
   { name: '适应', value: VideoFit.Contain }, { name: '填充', value: VideoFit.Cover },
   { name: '拉伸', value: VideoFit.Fill }, { name: '16:9', value: VideoFit.Fit_16_9 },
   { name: '4:3', value: VideoFit.Fit_4_3 }, { name: '1:1', value: VideoFit.Fit_1_1 },
+]
+
+/** 弹幕显示区域选项 */
+const DANMAKU_AREA_LIST: KeyValue[] = [
+  { name: '全部', value: 1.0 },
+  { name: '3/4', value: 0.75 },
+  { name: '半屏', value: 0.5 },
+  { name: '1/4', value: 0.25 },
 ]
 
 enum PanelType {
@@ -110,11 +121,18 @@ export struct VideoPlayerController {
   private hidePanelTimer: number = -1;
   /** @description 屏幕亮度 */
   @Local screenBrightness: number = 0
+  /** @description 本次会话是否调整过窗口亮度（退出播放界面时据此恢复系统默认亮度） */
+  private brightnessTouched: boolean = false
   /** @description 音量和亮度进度条面板是否可见 */
   @Local isVolumeAndBrightnessVisible: boolean = false
   /** @description 播放器控制器的高度和宽度 */
   @Local playerControllerArea: IArea = { width: 0, height: 0 }
   private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager();
+
+  /** @description 弹幕控制中枢 */
+  private danmakuCtrl: DanmakuController = new DanmakuController()
+  /** @description 当前剧集弹幕是否已成功加载（驱动弹幕层挂载） */
+  @Local danmakuLoaded: boolean = false
 
   /** @description 拖动轴向：0未判定 1纵向(音量/亮度) 2横向(进度) */
   private panAxis: number = 0
@@ -167,6 +185,11 @@ export struct VideoPlayerController {
         // 播放结束/出错时终止手势驱动的快退与倍速，防止计时器残留
         this.stopRewind()
         this.stopSpeedBoost()
+        this.danmakuCtrl.onPause()
+        // 同步停止状态到系统播控中心
+        if (!this.isCasting) {
+          this.castManager.updatePlaybackState(false, this.playerManager.getCurrentPosition(), this.currentSpeedValue())
+        }
         // 出错/结束时自动展示控制层，便于查看状态或切换选集（不自动隐藏）
         if (this.showControllerTimer >= 0) {
           clearTimeout(this.showControllerTimer)
@@ -178,12 +201,33 @@ export struct VideoPlayerController {
         if (this.isCasting) {
           // 投播中本端因切集解析后自动开播：推送新资源到远端并暂停本端
           this.pushCurrentEpisodeToCast()
+          this.closeController()
           return
         }
         // 播放开始后时长已知，刷新投播会话元数据
         this.refreshCastSession()
+        // 同步播放状态到系统播控中心
+        this.castManager.updatePlaybackState(true, this.playerManager.getCurrentPosition(), this.currentSpeedValue())
+        // 弹幕时钟随播放启动
+        this.danmakuCtrl.onPlay(this.playerManager.getCurrentPosition())
         // 播放视频后关闭控制面板
         this.closeController()
+      }
+      if (status === PlayerStatus.PAUSE) {
+        // 弹幕时钟随播放暂停
+        this.danmakuCtrl.onPause()
+        if (!this.isCasting) {
+          // 同步暂停状态到系统播控中心
+          this.castManager.updatePlaybackState(false, this.playerManager.getCurrentPosition(), this.currentSpeedValue())
+        }
+        // 本端暂停时固定展示控制层与中部暂停标识（投播中远端仍在播放时除外）
+        if (!(this.isCasting && this.isCastPlaying)) {
+          if (this.showControllerTimer >= 0) {
+            clearTimeout(this.showControllerTimer)
+            this.showControllerTimer = -1
+          }
+          this.showController = true
+        }
       }
       Logger.e('tips', 'PlayerController status=' + status + " playerStatus=" + this.playerStatus)
     },
@@ -193,6 +237,8 @@ export struct VideoPlayerController {
       this.title = episodeList[episodeIndex].desc
       // 切集后刷新投播会话元数据，保证系统投播面板展示最新剧集
       this.refreshCastSession()
+      // 切集后重新匹配加载弹幕
+      this.loadDanmaku()
     },
     onVideoSpeedChanged: (videoSpeed: number) => {
     },
@@ -210,9 +256,11 @@ export struct VideoPlayerController {
         // 投播中进度以远端回传为准
         return
       }
-      // 持续刷新远端起播位置，发起投播时远端从当前进度开播
-      this.castManager.updateProgress(currentTime)
+      // 持续刷新远端起播位置，发起投播时远端从当前进度开播；并节流同步播控中心进度
+      this.castManager.updateProgress(currentTime, this.currentSpeedValue())
       this.setProgress(totalTime, currentTime)
+      // 弹幕进度漂移校正（内部节流）
+      this.danmakuCtrl.onProgress(currentTime)
     },
     onBuffering: (type: media.BufferingInfoType, value: number) => {
       if (this.playerStatus != PlayerStatus.PLAY) {
@@ -267,7 +315,22 @@ export struct VideoPlayerController {
       this.playerManager.start()
     },
     onCastStateChanged: (isPlaying: boolean) => {
+      // 状态回调可能随进度上报重复触发，仅处理真实的状态切换
+      if (this.isCastPlaying === isPlaying) {
+        return
+      }
       this.isCastPlaying = isPlaying
+      if (isPlaying) {
+        // 远端继续播放：恢复控制层 5 秒自动隐藏
+        this.closeController()
+      } else {
+        // 远端暂停：固定展示控制层与中部暂停标识
+        if (this.showControllerTimer >= 0) {
+          clearTimeout(this.showControllerTimer)
+          this.showControllerTimer = -1
+        }
+        this.showController = true
+      }
     },
     onCastProgressChange: (duration: number, position: number) => {
       if (duration > 0) {
@@ -280,6 +343,42 @@ export struct VideoPlayerController {
       // 远端播放结束：自动投播下一集
       if (this.episodeIndex < this.episodeList.length - 1) {
         this.playerManager.selectEpisode(this.episodeIndex + 1)
+      }
+    },
+    onControlPlay: () => {
+      if (this.isCasting) {
+        this.castManager.play()
+        return
+      }
+      if (this.playerStatus == PlayerStatus.PAUSE) {
+        this.playerManager.start()
+      }
+    },
+    onControlPause: () => {
+      if (this.isCasting) {
+        this.castManager.pause()
+        return
+      }
+      if (this.playerStatus == PlayerStatus.PLAY) {
+        this.playerManager.pause()
+      }
+    },
+    onControlSeek: (position: number) => {
+      if (this.isCasting) {
+        this.castLastPos = position
+        this.castManager.seek(position)
+        return
+      }
+      this.playerManager.seekTo(position)
+    },
+    onControlNext: () => {
+      if (this.episodeIndex < this.episodeList.length - 1) {
+        this.playerManager.selectEpisode(this.episodeIndex + 1)
+      }
+    },
+    onControlPrevious: () => {
+      if (this.episodeIndex > 0) {
+        this.playerManager.selectEpisode(this.episodeIndex - 1)
       }
     }
   }
@@ -320,9 +419,14 @@ export struct VideoPlayerController {
     this.audioVolumeManager.off('streamVolumeChange')
     this.stopRewind()
     this.stopSpeedBoost()
+    this.danmakuCtrl.release()
     if (this.seekOverlayTimer >= 0) {
       clearTimeout(this.seekOverlayTimer)
       this.seekOverlayTimer = -1
+    }
+    // 退出播放界面恢复系统默认亮度（-1 表示窗口亮度跟随系统）
+    if (this.brightnessTouched) {
+      this.setScreenBrightness(-1)
     }
     this.castManager.destroy()
   }
@@ -341,6 +445,11 @@ export struct VideoPlayerController {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
+      // 弹幕层（视频之上、控制层之下，触摸穿透）
+      if (appSettings.danmaku_enabled && this.danmakuLoaded) {
+        DanmakuLayer({ controller: this.danmakuCtrl })
+      }
+
       // 音量和亮度面板
       this.VolumeAndBrightnessBuilder()
 
@@ -352,23 +461,49 @@ export struct VideoPlayerController {
         this.VideoController()
       }
 
+      // 暂停时中部暂停标识（点击恢复播放）
+      this.CenterPauseMarkBuilder()
+
       this.RightPanel()
     }
     .width('100%')
     .height('100%')
-    .onClick(() => {
-      if (this.showPanel) {
-        return
-      }
-      this.showController = !this.showController;
-      if (this.showController) {
-        // 控制层出现后启动 5 秒无操作自动隐藏
-        this.closeController()
-      } else if (this.showControllerTimer >= 0) {
-        clearTimeout(this.showControllerTimer)
-        this.showControllerTimer = -1
-      }
-    })
+    .gesture(
+      GestureGroup(GestureMode.Exclusive,
+        TapGesture({ count: 2 })
+          .onAction((event: GestureEvent) => {
+            // 双击切换播放/暂停：锁定或右侧面板打开时禁用
+            if (this.isLocked || this.showPanel) {
+              return
+            }
+            // 控制层可见时，上/下控制栏区域内不触发（留 10px 容差）
+            if (this.isInControlBarArea(event.fingerList[0]?.localY ?? 0)) {
+              return
+            }
+            this.togglePlayPause()
+          }),
+        TapGesture({ count: 1 })
+          .onAction(() => {
+            if (this.showPanel) {
+              return
+            }
+            // 暂停态单击不隐藏控制层，保持常显
+            if (this.isCenterPauseMarkVisible()) {
+              this.showController = true
+              this.closeController()
+              return
+            }
+            this.showController = !this.showController;
+            if (this.showController) {
+              // 控制层出现后启动 5 秒无操作自动隐藏
+              this.closeController()
+            } else if (this.showControllerTimer >= 0) {
+              clearTimeout(this.showControllerTimer)
+              this.showControllerTimer = -1
+            }
+          })
+      )
+    )
     .onTouch(() => {
       // 控制层可见期间的任意触摸（含子组件）都重置自动隐藏计时
       if (this.showController && !this.showPanel) {
@@ -385,20 +520,18 @@ export struct VideoPlayerController {
     .gesture(
       PanGesture({ direction: PanDirection.All })
         .onActionStart((event: GestureEvent) => {
-          // 控制面板锁定/右侧面板打开时禁用手势
-          if (this.isLocked || this.showPanel) {
+          // 控制面板锁定/右侧面板打开/播放出错结束时禁用手势
+          if (this.isLocked || this.showPanel || this.isGestureDisabledByStatus()) {
             return
           }
           this.panAxis = 0
           this.panStartX = event.fingerList[0]?.localX ?? 0;
           this.panStartY = event.fingerList[0]?.localY ?? 0;
           // 控制层可见时，起点落在上/下控制栏区域内则屏蔽本次手势（留 10px 容差）
-          this.gestureBlocked = this.showController
-            && (this.panStartY < this.topBarHeight + 10
-              || this.panStartY > this.playerControllerArea.height - this.bottomBarHeight - 10)
+          this.gestureBlocked = this.isInControlBarArea(this.panStartY)
         })
         .onActionUpdate((event: GestureEvent) => {
-          if (this.isLocked || this.showPanel || this.gestureBlocked) {
+          if (this.isLocked || this.showPanel || this.gestureBlocked || this.isGestureDisabledByStatus()) {
             return
           }
           const currentX = event.fingerList[0]?.localX ?? 0;
@@ -473,6 +606,7 @@ export struct VideoPlayerController {
               this.castManager.seek(this.seekPreviewPos)
             } else {
               this.playerManager.seekTo(this.seekPreviewPos)
+              this.danmakuCtrl.onSeek(this.seekPreviewPos, this.isPlayingNow())
             }
             if (this.seekOverlayTimer >= 0) {
               clearTimeout(this.seekOverlayTimer)
@@ -490,16 +624,14 @@ export struct VideoPlayerController {
     .gesture(
       LongPressGesture({ repeat: false })
         .onAction((event: GestureEvent) => {
-          // 控制面板锁定/右侧面板打开时禁用手势
-          if (this.isLocked || this.showPanel) {
+          // 控制面板锁定/右侧面板打开/播放出错结束时禁用手势
+          if (this.isLocked || this.showPanel || this.isGestureDisabledByStatus()) {
             return
           }
           const x = event.fingerList[0]?.localX ?? 0
           const y = event.fingerList[0]?.localY ?? 0
           // 控制层可见时，上/下控制栏区域内不触发长按手势（留 10px 容差）
-          if (this.showController
-            && (y < this.topBarHeight + 10
-              || y > this.playerControllerArea.height - this.bottomBarHeight - 10)) {
+          if (this.isInControlBarArea(y)) {
             return
           }
           if (x < this.playerControllerArea.width / 2) {
@@ -603,6 +735,8 @@ export struct VideoPlayerController {
     this.currentTime = VideoTimeUtils.stringForTime(this.rewindTargetPos)
     this.progress = duration > 0 ? this.rewindTargetPos / duration * 100 : 0
     this.playerManager.seekTo(this.rewindTargetPos)
+    // 弹幕随快退连续校正（内部按漂移阈值节流）
+    this.danmakuCtrl.onSeek(this.rewindTargetPos, true)
   }
 
   private stopRewind() {
@@ -622,6 +756,8 @@ export struct VideoPlayerController {
     this.speedBeforeBoost = prev ? prev.value : 1.0
     this.isSpeedBoosting = true
     this.playerManager.setSpeed(3.0)
+    // 倍速变化同步到系统播控中心
+    this.castManager.updatePlaybackState(true, this.playerManager.getCurrentPosition(), 3.0)
   }
 
   private stopSpeedBoost() {
@@ -630,11 +766,86 @@ export struct VideoPlayerController {
     }
     this.isSpeedBoosting = false
     this.playerManager.setSpeed(this.speedBeforeBoost)
+    if (!this.isCasting) {
+      this.castManager.updatePlaybackState(this.playerStatus == PlayerStatus.PLAY,
+        this.playerManager.getCurrentPosition(), this.speedBeforeBoost)
+    }
   }
 
   /** 当前是否处于播放中（投播时取远端状态） */
   private isPlayingNow(): boolean {
     return this.isCasting ? this.isCastPlaying : this.playerStatus == PlayerStatus.PLAY
+  }
+
+  /** 当前倍速数值（解析自 currentSpeed 文本） */
+  private currentSpeedValue(): number {
+    const found = VIDEO_SPEED_LIST.find((item: KeyValue) => item.name == this.currentSpeed)
+    return found ? found.value : 1.0
+  }
+
+  /** 控制层可见时，判断 y 坐标是否落在上/下控制栏手势屏蔽区（留 10px 容差） */
+  private isInControlBarArea(y: number): boolean {
+    return this.showController
+      && (y < this.topBarHeight + 10
+        || y > this.playerControllerArea.height - this.bottomBarHeight - 10)
+  }
+
+  /** 播放出错/结束时禁用进度、音量、亮度、长按手势 */
+  private isGestureDisabledByStatus(): boolean {
+    return this.playerStatus == PlayerStatus.ERROR || this.playerStatus == PlayerStatus.DONE
+  }
+
+  /** 双击/点击暂停标识：切换播放/暂停（投播时切换远端，本端仅接受 PLAY/PAUSE 状态） */
+  private togglePlayPause(): void {
+    if (this.isCasting) {
+      if (this.isCastPlaying) {
+        this.castManager.pause()
+      } else {
+        this.castManager.play()
+      }
+      return
+    }
+    if (this.playerStatus == PlayerStatus.PLAY) {
+      this.playerManager.pause()
+    } else if (this.playerStatus == PlayerStatus.PAUSE) {
+      this.playerManager.start()
+    }
+  }
+
+  /** 中部暂停标识是否可见：非锁定/非加载/非解析/无面板，且处于可恢复的暂停态 */
+  private isCenterPauseMarkVisible(): boolean {
+    if (this.isLocked || this.isLoading || this.isParsing || this.showPanel) {
+      return false
+    }
+    if (this.playerStatus == PlayerStatus.IDLE || this.playerStatus == PlayerStatus.INITIALIZED
+      || this.playerStatus == PlayerStatus.PREPARED || this.playerStatus == PlayerStatus.STOP
+      || this.playerStatus == PlayerStatus.DONE || this.playerStatus == PlayerStatus.ERROR) {
+      return false
+    }
+    return !this.isPlayingNow()
+  }
+
+  /** 暂停时中部播放标识（半透明圆形，点击恢复播放，图标与左下角按钮一致） */
+  @Builder
+  CenterPauseMarkBuilder() {
+    if (this.isCenterPauseMarkVisible()) {
+      Column() {
+        Image($r('app.media.ic_play'))
+          .width(36)
+          .height(36)
+          .fillColor(Color.White)
+          .objectFit(ImageFit.Contain)
+      }
+      .width(72)
+      .height(72)
+      .borderRadius(36)
+      .backgroundColor('#66000000')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => {
+        this.togglePlayPause()
+      })
+    }
   }
 
   /** 当前媒体时长（投播时优先取远端回传时长） */
@@ -643,6 +854,43 @@ export struct VideoPlayerController {
       return this.castLastDuration
     }
     return this.playerManager.getDuration() as number
+  }
+
+  /** 为当前剧集匹配并加载弹幕（弹弹play，按番剧标题 + 剧集标题） */
+  private loadDanmaku(): void {
+    if (!appSettings.danmaku_enabled) {
+      this.danmakuLoaded = false
+      return
+    }
+    const animeTitle = AnimeState.playingTitle
+    const episodeTitle = this.title
+    // 加载期间先卸载旧弹幕，避免上一集弹幕错时显示
+    this.danmakuLoaded = false
+    this.danmakuCtrl.load(animeTitle, episodeTitle).then((result: DanmakuLoadResult) => {
+      if (result.status === DanmakuLoadStatus.LOADED) {
+        this.danmakuLoaded = true
+        ToastUtil.showToast({ message: `弹幕已加载 ${result.comments.length} 条` })
+      } else if (result.status === DanmakuLoadStatus.EMPTY) {
+        ToastUtil.showToast({ message: '该集暂无弹幕' })
+      } else {
+        ToastUtil.showToast({ message: '弹幕加载失败，请稍后重试' })
+      }
+    })
+  }
+
+  /** 切换弹幕开关 */
+  private toggleDanmaku(): void {
+    appSettings.danmaku_enabled = !appSettings.danmaku_enabled
+    if (appSettings.danmaku_enabled) {
+      // 已有弹幕数据直接挂载展示，否则重新匹配加载
+      if (this.danmakuCtrl.loadedCount > 0) {
+        this.danmakuLoaded = true
+      } else {
+        this.loadDanmaku()
+      }
+    } else {
+      this.danmakuLoaded = false
+    }
   }
 
   /** 创建/刷新投播 AVSession 与元数据（AVCastPicker 组件依赖已存在的会话拉起设备面板） */
@@ -749,7 +997,13 @@ export struct VideoPlayerController {
           .margin({ left: this.isFullScreen ? 24 : 16, right: this.isFullScreen ? 24 : 16 })
           .objectFit(ImageFit.Contain)
           .onClick(() => {
-            this.showRightPanel(PanelType.PLAYER_SETTINGS)
+            if (this.isFullScreen) {
+              // 全屏：播放区内右侧设置面板
+              this.showRightPanel(PanelType.PLAYER_SETTINGS)
+            } else {
+              // 非全屏：详情页用简介同款半模态面板展示播放设置（含更多设置项）
+              PLAYER_SETTINGS_EVENT.emit()
+            }
           })
       }
       .width('100%')
@@ -825,7 +1079,7 @@ export struct VideoPlayerController {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .alignRules({
-          left: { anchor: '__container__', align: HorizontalAlign.Center },
+          middle: { anchor: '__container__', align: HorizontalAlign.Center },
           center: { anchor: '__container__', align: VerticalAlign.Center}
         })
         .onClick(() => {
@@ -919,6 +1173,7 @@ export struct VideoPlayerController {
                 this.castManager.seek(seekValue)
               } else {
                 this.playerManager.seekTo(seekValue);
+                this.danmakuCtrl.onSeek(seekValue, this.isPlayingNow())
               }
             }
           })
@@ -933,6 +1188,18 @@ export struct VideoPlayerController {
             this.seekBySliderTap(event.x)
           })
         Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
+
+        Text('弹幕')
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .borderWidth(1)
+          .borderColor(appSettings.danmaku_enabled ? $r('app.color.primary_color_accent') : Color.White)
+          .borderRadius(4)
+          .margin({ right: 12 })
+          .fontSize(12)
+          .fontColor(appSettings.danmaku_enabled ? $r('app.color.primary_color_accent') : Color.White)
+          .onClick(() => {
+            this.toggleDanmaku()
+          })
 
         Text(`${this.currentSpeed}X`)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -1048,6 +1315,9 @@ export struct VideoPlayerController {
                 this.castManager.setSpeed(item.value)
               } else {
                 this.playerManager.setSpeed(item.value)
+                // 倍速变化同步到系统播控中心（播控中心进度按倍速推算）
+                this.castManager.updatePlaybackState(this.isPlayingNow(),
+                  this.playerManager.getCurrentPosition(), item.value)
               }
             })
         })
@@ -1194,6 +1464,129 @@ export struct VideoPlayerController {
 
         Row() {
           Column() {
+            Text('弹幕开关')
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Text('通过弹弹play按标题自动匹配')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 2 })
+          }
+          .alignItems(HorizontalAlign.Start)
+
+          Blank()
+
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_enabled })
+            .onChange((isOn: boolean) => {
+              if (appSettings.danmaku_enabled !== isOn) {
+                this.toggleDanmaku()
+              }
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('弹幕不透明度')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_opacity * 100,
+            min: 25,
+            max: 100,
+            step: 5,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_opacity = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('弹幕字体大小')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_font_scale * 100,
+            min: 50,
+            max: 150,
+            step: 5,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_font_scale = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('弹幕滚动速度')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_speed * 100,
+            min: 50,
+            max: 200,
+            step: 10,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_speed = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+        }
+        .width('100%')
+
+        Text('弹幕显示区域')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
+          ForEach(DANMAKU_AREA_LIST, (item: KeyValue) => {
+            Text(item.name)
+              .textAlign(TextAlign.Center)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .padding(6)
+              .backgroundColor((appSettings.danmaku_area == item.value) ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .borderRadius(4)
+              .margin({ bottom: 8 })
+              .width('33%')
+              .maxLines(1)
+              .onClick(() => {
+                appSettings.danmaku_area = item.value
+                this.danmakuCtrl.applyStyle()
+              })
+          })
+        }
+        .width('100%')
+
+        Row() {
+          Column() {
             Text('自动全屏')
               .fontSize(this.isFullScreen ? 16 : 13)
               .fontColor(Color.White)
@@ -1277,6 +1670,12 @@ export struct VideoPlayerController {
     // 先清掉旧计时，避免多个计时器并存导致提前隐藏
     if (this.showControllerTimer >= 0) {
       clearTimeout(this.showControllerTimer)
+    }
+    // 暂停态控制层保持常显，不启动自动隐藏
+    if (this.isCenterPauseMarkVisible()) {
+      this.showController = true
+      this.showControllerTimer = -1
+      return
     }
     this.showControllerTimer = setTimeout(() => {
       // 5s内无操作后隐藏
@@ -1367,6 +1766,7 @@ export struct VideoPlayerController {
       this.castManager.seek(seekValue);
     } else {
       this.playerManager.seekTo(seekValue);
+      this.danmakuCtrl.onSeek(seekValue, this.isPlayingNow());
     }
   }
 
@@ -1415,6 +1815,9 @@ export struct VideoPlayerController {
           return;
         }
       });
+      if (brightness >= 0) {
+        this.brightnessTouched = true;
+      }
     } catch (exception) {
       Logger.e('fail', 'getMainWindowSync', exception);
     }

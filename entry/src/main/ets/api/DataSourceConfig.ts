@@ -6,6 +6,13 @@ export interface SelectorConfig {
   url?: string | { selector: string; postProcess?: ProcessConfig };
   imgUrl?: string | { selector: string; postProcess?: ProcessConfig };
   episode?: string | { selector: string; postProcess?: ProcessConfig };
+  // 可选扩展字段（VideoInfo 挂载，源里有什么配什么）
+  playCount?: string | { selector: string; postProcess?: ProcessConfig };
+  year?: string | { selector: string; postProcess?: ProcessConfig };
+  month?: string | { selector: string; postProcess?: ProcessConfig };
+  director?: string | { selector: string; postProcess?: ProcessConfig };
+  actors?: string | { selector: string; postProcess?: ProcessConfig };
+  tags?: string | { selector: string; postProcess?: ProcessConfig };
 
   // 支持任意字段的复杂配置
   [key: string]: string | { selector: string; postProcess?: ProcessConfig } | undefined;
@@ -75,6 +82,7 @@ export interface CategoryCardConfig {
   itemSelectors: SelectorConfig; // 字段选择器/模板
   urlNeedBaseUrl?: boolean;
   enabledHttps?: boolean;
+  maxItems?: number;        // 显示条数上限（解析前截断，减少主页解析/渲染耗时；完整列表走"更多"）
 }
 
 /** 分类配置接口 */
@@ -118,6 +126,8 @@ export interface DetailConfig {
   titleSelector: string;
   descSelector: string;
   coverSelector: string;
+  // JSON 模式：详情数据在响应中的 JSON 路径，默认 data（支持数组索引，如 PostgREST 数组响应的 0）
+  dataPath?: string;
   // JSON 模式：封面地址后处理（如改写为站点图片代理）
   coverPostProcess?: ProcessConfig;
   episodes: EpisodeConfig;
@@ -126,6 +136,8 @@ export interface DetailConfig {
   directorSelector?: string;
   updateTimeSelector?: string;
   protagonistSelector?: string;
+  // 详情扩展字段（播放量/年份/月份/导演/演员/标签），HTML=CSS选择器 / JSON=字段模板，支持后处理
+  extra?: SelectorConfig;
 }
 
 /** 视频URL配置接口 */
@@ -151,6 +163,16 @@ export interface LoginConfig {
   authValueTemplate?: string;  // 请求头值模板，默认 {token}
 }
 
+/** 搜索验证码配置（MacCMS dsn2 模板站常见：搜索命中验证码页时引导用户输入图片验证码后重放搜索） */
+export interface SearchCaptchaConfig {
+  detectSelector: string;         // 命中该选择器说明搜索响应为验证码页
+  imageUrlSelector: string;       // 验证码图片选择器（selector@attr 形式；选择器部分留空时回退为 detectSelector+@属性，默认 src，仅当判定元素是 img）
+  imageNeedBaseUrl?: boolean;     // 图片地址是否拼接 baseUrl，默认 true
+  imageCacheBustParam?: string;   // 获取图片时附加的随机参数名（如 r），拼接 ?r=随机数避免缓存
+  verifyUrlTemplate: string;      // 验证码提交地址模板（相对 baseUrl 或绝对），{code} 为用户输入占位
+  successContains?: string;       // 提交响应包含该子串视为验证成功（如 "code":1），缺省时仅按重放结果判断
+}
+
 /** 解析配置 */
 export interface ParserConfig {
   // 解析模式：html（默认，CSS选择器）或 json（JSON 路径 + 模板）
@@ -159,6 +181,8 @@ export interface ParserConfig {
   requestHeaders?: Record<string, string>;
   search: {
     videos: VideoConfig;
+    // 搜索验证码配置（可选）
+    captcha?: SearchCaptchaConfig;
   };
   homepage: {
     banner: VideoConfig;
@@ -175,6 +199,8 @@ export interface DataSourceConfig {
   group: string,
   baseUrl: string;
   version: string;
+  author?: string;      // 源作者（导出时随源携带）
+  update_time?: string; // 更新日期（YYYY-MM-DD，编辑保存时自动维护）
   enabled: boolean;
   priority: number;
   description: string

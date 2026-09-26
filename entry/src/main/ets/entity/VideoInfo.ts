@@ -29,6 +29,30 @@ export default interface VideoInfo {
      */
     episode?: string;
     /**
+     * 播放量（可选，如 "1.2万"）
+     */
+    playCount?: string;
+    /**
+     * 播出年份（可选，如 "2012"）
+     */
+    year?: string;
+    /**
+     * 播出月份（可选，如 "04"）
+     */
+    month?: string;
+    /**
+     * 导演（可选）
+     */
+    director?: string;
+    /**
+     * 演员（可选，多个以分隔符连接）
+     */
+    actors?: string;
+    /**
+     * 标签（可选，多个以分隔符连接）
+     */
+    tags?: string;
+    /**
      * 演员信息
      */
     protagonist?: string;

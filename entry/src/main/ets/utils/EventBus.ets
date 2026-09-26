@@ -64,3 +64,8 @@ export const APP_RESUME_PROGRESS_EVENT: Event = new EventImpl(4)
  * 播放器后端切换（data.resumePos 为切换前播放位置毫秒，用于续播）
  */
 export const PLAYER_SWITCH_EVENT: Event = new EventImpl(5)
+
+/**
+ * 打开播放设置面板（非全屏时由播放器控制层发出，详情页用简介同款半模态面板展示）
+ */
+export const PLAYER_SETTINGS_EVENT: Event = new EventImpl(6)

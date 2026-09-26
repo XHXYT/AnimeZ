@@ -6,8 +6,10 @@
 /.hvigor
 /.bitfun
 /.deveco
+/.cache
 .cxx
 /.clangd
 /.clang-format
 /.clang-tidy
 **/.test
+/entry/src/main/resources/rawfile/danmaku_config.json

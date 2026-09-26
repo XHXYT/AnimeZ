@@ -7,8 +7,6 @@ import DisplayUtils from '../../utils/DisplayUtils';
 import Logger from '../../utils/Logger';
 import { DEFAULT_DURATION } from '../../utils/TransitionHelper';
 import { _AnimeState, AnimeState } from '../../entryability/AnimeState';
-
-// --- 导入 mpv-arkts 相关模块 ---
 import { Player, PlayerSurface, Media } from '@mpv-ohos/mpv-arkts';
 
 const DEFAULT_ASPECT = 1.9;

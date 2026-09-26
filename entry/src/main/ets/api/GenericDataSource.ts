@@ -14,13 +14,18 @@ import {
   selectFirst,
   selectTextContent,
   textContent,
+  parse,
 } from '../utils/thirdpart/htmlsoup';
 import { AnyNode, HtmlTag } from '../utils/thirdpart/htmlsoup/parse';
 import {
   CategoryConfig, EpisodeConfig, ParserConfig, RecommendConfig,
-  SelectorConfig, VideoConfig, ProcessConfig, CategoryCardConfig, LoginConfig } from './DataSourceConfig';
+  SelectorConfig, VideoConfig, ProcessConfig, CategoryCardConfig, LoginConfig, SearchCaptchaConfig } from './DataSourceConfig';
 import { ScriptProcessor } from './ScriptProcessor';
 import AuthStore from '../utils/AuthStore';
+import HttpSession from '../utils/HttpSession';
+import { CaptchaBridge } from './CaptchaBridge';
+import { util } from '@kit.ArkTS';
+import { image } from '@kit.ImageKit';
 
 // 扩展SelectorConfig类型以支持更灵活的配置
 type SelectorValue = string | { selector: string; postProcess?: ProcessConfig };
@@ -37,6 +42,8 @@ export default class GenericDataSource implements DataSource {
   private sourceType: 'html' | 'json';
   private requestHeaders?: Record<string, string>;
   private loginConfig?: LoginConfig;
+  // 验证码会话：搜索验证码流程共享 Cookie（首次搜索种下会话，验证通过后同会话重放）
+  private captchaSession: HttpSession = new HttpSession();
 
   constructor(config: any) {
     this.key = config.key;
@@ -111,7 +118,12 @@ export default class GenericDataSource implements DataSource {
           config.videos.urlNeedBaseUrl, config.videos.enabledHttps);
       }
 
-      const doc = await this.parseHtml(url);
+      let doc: AnyNode;
+      if (config.captcha) {
+        doc = await this.searchWithCaptcha(url, config.captcha);
+      } else {
+        doc = await this.parseHtml(url);
+      }
       const list = select(doc, config.videos.listSelector);
 
       // 使用Promise.all并行处理所有视频项
@@ -127,6 +139,87 @@ export default class GenericDataSource implements DataSource {
       Logger.e('fail', 'GenericDataSource 搜索', e);
       return [];
     }
+  }
+
+  /**
+   * 验证码感知搜索：检测到验证码页时，经 UI 桥引导用户输入验证码，
+   * 提交校验成功后用同一会话重放搜索；整个流程复用实例级 captchaSession 保持 Cookie
+   */
+  private async searchWithCaptcha(url: string, captcha: SearchCaptchaConfig): Promise<AnyNode> {
+    const session = this.captchaSession;
+    const doc = parse(await session.getString(url));
+    if (select(doc, captcha.detectSelector).length === 0) {
+      return doc;
+    }
+    Logger.d('tips', `searchWithCaptcha ${this.name} 命中验证码页，引导用户输入`);
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const imageUrl = this.resolveCaptchaImageUrl(doc, captcha);
+      const pixelMap = await session.getImage(this.cacheBust(imageUrl, captcha.imageCacheBustParam));
+      const code = await CaptchaBridge.prompt({
+        sourceName: this.name,
+        pixelMap: pixelMap,
+        refresh: async (): Promise<image.PixelMap> => {
+          return await session.getImage(this.cacheBust(imageUrl, captcha.imageCacheBustParam));
+        }
+      });
+      const verifyTemplate = captcha.verifyUrlTemplate.includes('http')
+        ? captcha.verifyUrlTemplate
+        : this.baseUrl + captcha.verifyUrlTemplate;
+      const verifyResp = await session.postString(verifyTemplate.replace('{code}', encodeURIComponent(code)));
+      if (captcha.successContains && !verifyResp.includes(captcha.successContains)) {
+        Logger.d('tips', `searchWithCaptcha 校验未通过：${verifyResp}`);
+        continue;
+      }
+      const retryDoc = parse(await session.getString(url));
+      if (select(retryDoc, captcha.detectSelector).length === 0) {
+        return retryDoc;
+      }
+      Logger.d('tips', `searchWithCaptcha 重放搜索仍为验证码页（第${attempt + 1}次）`);
+    }
+    throw new Error('验证码校验失败，请稍后重试');
+  }
+
+  /**
+   * 解析验证码图片地址（imageUrlSelector 为 selector@attr 形式；
+   * 选择器部分留空（含仅填 @属性）时回退为 detectSelector + 该属性（默认 src），
+   * 仅当判定元素本身是 img 时生效）
+   */
+  private resolveCaptchaImageUrl(doc: AnyNode, captcha: SearchCaptchaConfig): string {
+    let imageSelector = captcha.imageUrlSelector || '';
+    let parts = imageSelector.split('@');
+    if (parts[0].trim() === '') {
+      const detected = selectFirst(doc, captcha.detectSelector);
+      if (detected && detected.type.toLowerCase() === 'img') {
+        const attr = parts.length > 1 && parts[1].trim() !== '' ? parts[1].trim() : 'src';
+        imageSelector = captcha.detectSelector + '@' + attr;
+        parts = imageSelector.split('@');
+        Logger.d('tips', `searchWithCaptcha imageUrlSelector 未配置，回退为 ${imageSelector}`);
+      }
+    }
+    if (parts.length < 2 || parts[0].trim() === '') {
+      throw new Error('captcha.imageUrlSelector 需为 selector@attr 形式');
+    }
+    const el = selectFirst(doc, parts[0]);
+    const imageUrl = el ? el.attr(parts[1]) : '';
+    if (!imageUrl) {
+      throw new Error('未找到验证码图片');
+    }
+    if (captcha.imageNeedBaseUrl !== false && !imageUrl.includes('http')) {
+      return this.baseUrl + imageUrl;
+    }
+    return imageUrl;
+  }
+
+  /**
+   * 为 URL 附加随机参数避免缓存（验证码图片每次获取都需最新）
+   */
+  private cacheBust(url: string, param?: string): string {
+    if (!param) {
+      return url;
+    }
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}${param}=${Math.random()}`;
   }
 
   async getHomepageData(): Promise<HomepageData> {
@@ -179,11 +272,16 @@ export default class GenericDataSource implements DataSource {
       }
     }
 
-    const url = `${moreUrl}${page <= 0 ? '' : page}`;
-    Logger.e('tips', "CategoryPage #getVideoList parseHtml url = " + url);
+    let pageUrl: string;
+    if (moreUrl.includes('{page}')) {
+      pageUrl = moreUrl.replace('{page}', (page > 0 ? page : 1).toString());
+    } else {
+      pageUrl = `${moreUrl}${page <= 0 ? '' : page}`;
+    }
+    Logger.e('tips', "CategoryPage #getVideoList parseHtml url = " + pageUrl);
 
     try {
-      const doc = await this.parseHtml(url);
+      const doc = await this.parseHtml(pageUrl);
       const videosConfig = this.parserConfig.homepage.category.videos;
       // 优先使用 containerSelector 在整页文档中定位列表容器，
       // 再用 listSelector 在容器内选取条目（避免同选择器在文档层匹配到条目自身）
@@ -286,6 +384,12 @@ export default class GenericDataSource implements DataSource {
         recommends: recommends
       };
 
+      // 详情扩展字段
+      if (config.extra) {
+        await this.applyDetailExtra(info, config.extra,
+          (selector: string) => this.extractSimpleValue(doc, selector));
+      }
+
       return info;
     } catch (e) {
       Logger.e('fail', `获取视频详情`, e);
@@ -385,6 +489,18 @@ export default class GenericDataSource implements DataSource {
       processedUrl = processedUrl.substring(startIndex, endIndex);
     }
 
+    if (postProcess.includes("base64Decode")) {
+      processedUrl = this.base64Decode(processedUrl);
+    }
+
+    if (postProcess.includes("decodeUri")) {
+      try {
+        processedUrl = decodeURIComponent(processedUrl);
+      } catch (e) {
+        Logger.e('fail', 'decodeUri 失败', e);
+      }
+    }
+
     if (postProcess.includes("replaceAll")) {
       const [search, replace] = postProcess
         .replace("replaceAll('", "")
@@ -395,6 +511,21 @@ export default class GenericDataSource implements DataSource {
     }
 
     return processedUrl;
+  }
+
+  /**
+   * Base64 解码（UTF-8），用于 MacCMS player_aaaa encrypt=2 等播放地址解密
+   */
+  private base64Decode(input: string): string {
+    try {
+      const helper = new util.Base64Helper();
+      const bytes = helper.decodeSync(input);
+      const decoder = util.TextDecoder.create('utf-8');
+      return decoder.decodeToString(bytes);
+    } catch (e) {
+      Logger.e('fail', 'base64Decode 失败', e);
+      return input;
+    }
   }
 
   /**
@@ -458,9 +589,46 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
+   * 应用详情扩展字段（播放量/年份/月份/导演/演员/标签）
+   * HTML 模式传 CSS 提取函数，JSON 模式传模板渲染函数
+   */
+  private async applyDetailExtra(info: VideoDetailInfo, extra: SelectorConfig,
+    extract: (selector: string) => Promise<string>): Promise<void> {
+    const entries = Object.entries(extra);
+    for (const entry of entries) {
+      const key = entry[0];
+      const config = entry[1];
+      if (config === undefined || config === null) {
+        continue;
+      }
+      let value = '';
+      if (typeof config === 'string') {
+        value = await extract(config);
+      } else if (config.selector) {
+        value = await extract(config.selector);
+        if (config.postProcess && value) {
+          value = await ScriptProcessor.execute<string>(value, config.postProcess);
+        }
+      }
+      if (value) {
+        this.setDetailExtra(info, key, value);
+      }
+    }
+  }
+
+  private setDetailExtra(info: VideoDetailInfo, key: string, value: string): void {
+    if (key === 'playCount') { info.playCount = value; return; }
+    if (key === 'year') { info.year = value; return; }
+    if (key === 'month') { info.month = value; return; }
+    if (key === 'director') { info.director = value; return; }
+    if (key === 'actors') { info.actors = value; return; }
+    if (key === 'tags') { info.tags = value; return; }
+  }
+
+  /**
    * 提取简单值
    */
-  private async extractSimpleValue(element: HtmlTag, selector: string): Promise<string> {
+  private async extractSimpleValue(element: AnyNode, selector: string): Promise<string> {
     if (selector.includes('@')) {
       // 处理带属性提取的选择器（如 "img@src"）
       const [sel, attr] = selector.split('@');
@@ -503,20 +671,31 @@ export default class GenericDataSource implements DataSource {
 
   /**
    * HTML 模式：处理单个分类卡片（独立请求卡片页面并解析列表）
+   * 失败或解析为空时重试一次（站点偶发限流/超时导致卡片空白）；
+   * 配置 maxItems 时在解析前截断条目，减少主页解析与渲染耗时
    */
   private async processHtmlCategoryCard(card: CategoryCardConfig): Promise<DramaList> {
     let videoList: VideoInfo[] = [];
-    try {
-      const pageUrl = card.url.includes('http') ? card.url : this.baseUrl + card.url;
-      const doc = await this.parseHtml(pageUrl);
-      const listSelector = card.listSelector || card.listPath || '';
-      const items = select(doc, listSelector);
-      videoList = await Promise.all(items.map(async (li) => {
-        return await this.extractVideoInfo(li, card.itemSelectors as ExtendedSelectorConfig,
-          card.urlNeedBaseUrl ?? true, card.enabledHttps ?? true);
-      }));
-    } catch (e) {
-      Logger.e('fail', `解析分类卡片(HTML): ${card.title}`, e);
+    const maxAttempts = 2;
+    for (let attempt = 0; attempt < maxAttempts && videoList.length === 0; attempt++) {
+      try {
+        const pageUrl = card.url.includes('http') ? card.url : this.baseUrl + card.url;
+        const doc = await this.parseHtml(pageUrl);
+        const listSelector = card.listSelector || card.listPath || '';
+        let items = select(doc, listSelector);
+        if (card.maxItems && card.maxItems > 0 && items.length > card.maxItems) {
+          items = items.slice(0, card.maxItems);
+        }
+        videoList = await Promise.all(items.map(async (li) => {
+          return await this.extractVideoInfo(li, card.itemSelectors as ExtendedSelectorConfig,
+            card.urlNeedBaseUrl ?? true, card.enabledHttps ?? true);
+        }));
+      } catch (e) {
+        Logger.e('fail', `解析分类卡片(HTML): ${card.title}`, e);
+        if (attempt < maxAttempts - 1) {
+          await this.sleep(300);
+        }
+      }
     }
     let moreUrl = card.moreUrl || '';
     if (moreUrl && !moreUrl.includes('http')) {
@@ -881,13 +1060,22 @@ export default class GenericDataSource implements DataSource {
 
   private async processJsonCategoryCard(card: CategoryCardConfig): Promise<DramaList> {
     let videoList: VideoInfo[] = [];
-    try {
-      const resp = await this.requestJson(card.url);
-      videoList = await this.parseJsonVideoList(resp, card.listPath,
-        card.itemSelectors as ExtendedSelectorConfig,
-        card.urlNeedBaseUrl ?? false, card.enabledHttps ?? true);
-    } catch (e) {
-      Logger.e('fail', `解析分类卡片(JSON): ${card.title}`, e);
+    const maxAttempts = 2;
+    for (let attempt = 0; attempt < maxAttempts && videoList.length === 0; attempt++) {
+      try {
+        const resp = await this.requestJson(card.url);
+        videoList = await this.parseJsonVideoList(resp, card.listPath,
+          card.itemSelectors as ExtendedSelectorConfig,
+          card.urlNeedBaseUrl ?? false, card.enabledHttps ?? true);
+      } catch (e) {
+        Logger.e('fail', `解析分类卡片(JSON): ${card.title}`, e);
+        if (attempt < maxAttempts - 1) {
+          await this.sleep(300);
+        }
+      }
+    }
+    if (card.maxItems && card.maxItems > 0 && videoList.length > card.maxItems) {
+      videoList = videoList.slice(0, card.maxItems);
     }
     return {
       title: card.title,
@@ -897,12 +1085,23 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
+   * 简单延时（卡片重试间隔）
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      setTimeout((): void => {
+        resolve();
+      }, ms);
+    });
+  }
+
+  /**
    * JSON 模式：获取视频详情（url 即详情接口地址）
    */
   private async getJsonVideoDetail(url: string): Promise<VideoDetailInfo> {
     const config = this.parserConfig.detail;
     const resp = await this.requestJson(url);
-    const data = this.getJsonPath(resp, 'data');
+    const data = this.getJsonPath(resp, config.dataPath || 'data');
     if (!data || typeof data !== 'object') {
       throw new Error('详情数据为空');
     }
@@ -933,7 +1132,7 @@ export default class GenericDataSource implements DataSource {
       .replace(/&quot;/g, '"')
       .trim();
 
-    return {
+    const info: VideoDetailInfo = {
       sourceKey: this.key,
       title: this.renderTemplate(config.titleSelector, data),
       url: url,
@@ -946,6 +1145,14 @@ export default class GenericDataSource implements DataSource {
       episodes: episodes,
       recommends: recommends
     };
+
+    // 详情扩展字段
+    if (config.extra) {
+      await this.applyDetailExtra(info, config.extra,
+        (template: string) => Promise.resolve(this.renderTemplate(template, data)));
+    }
+
+    return info;
   }
 
   /**
@@ -954,11 +1161,17 @@ export default class GenericDataSource implements DataSource {
   private async extractJsonEpisodes(detailData: object): Promise<EpisodeList[]> {
     const config = this.parserConfig.detail.episodes;
     const episodes: EpisodeList[] = [];
-    if (!config.jsonRoutesPath) {
+    if (!config.jsonRoutesPath && !config.jsonListPath) {
       return episodes;
     }
 
-    const routes = this.getJsonPath(detailData, config.jsonRoutesPath);
+    // 单路线模式：未配置路线数组时，详情数据自身作为唯一路线（选集内嵌于详情响应）
+    let routes: any = null;
+    if (config.jsonRoutesPath) {
+      routes = this.getJsonPath(detailData, config.jsonRoutesPath);
+    } else {
+      routes = [detailData];
+    }
     if (!Array.isArray(routes) || routes.length === 0) {
       return episodes;
     }

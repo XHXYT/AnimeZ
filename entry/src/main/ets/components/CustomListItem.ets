@@ -52,7 +52,7 @@ export struct CustomListItem {
           },
           buttons: dialogButtons,
           contentAreaPadding: contentPadding,
-          themeColorMode: appSettings.color_mode + 1,
+          themeColorMode: appSettings.color_mode,
         }),
         autoCancel: true,
         alignment: DialogAlignment.Center,

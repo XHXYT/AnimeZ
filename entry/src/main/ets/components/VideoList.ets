@@ -6,6 +6,7 @@ import { VideoListColumnsTemplate, VideoListColumnsTemplate2, VideoListColumnsCo
 import { CategoryDataSource } from '../entity/CategoryData';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { AnimeState } from '../entryability/AnimeState';
+import { dataSourceManager } from '../api/DataSourceManager';
 
 /**
  * 视频列表
@@ -18,6 +19,8 @@ export struct VideoList {
   @Param isFullList: boolean = true
   @Param videoList: VideoInfo[] | undefined = undefined
   @Param videoListDataSource: CategoryDataSource = new CategoryDataSource([])
+  // 是否在封面左上角显示数据源角标（默认样式同集数角标）
+  @Param showSourceBadge: boolean = false
 
   aboutToAppear(): void {
     if (this.videoList) {
@@ -47,6 +50,8 @@ export struct VideoList {
         .width('100%')
         .columnsGap(8)
         .rowsGap(8)
+        // padding 放在滚动容器内部（同主页做法）：滚动条落在右侧留白处，边缘卡片阴影不被截断
+        .padding(16)
       } else {
         this.RowsLayout()
       }
@@ -113,9 +118,22 @@ export struct VideoList {
               .height('100%')
               .borderRadius({ topLeft: 8, topRight: 8 })
           }
+          // 左上角数据源角标（默认色，字边距与列表样式右下角角标一致）
+          if (this.showSourceBadge && (dataSourceManager.getSourceTitle(item.sourceKey) ?? '') !== '') {
+            Text(dataSourceManager.getSourceTitle(item.sourceKey) ?? '')
+              .fontSize(10)
+              .fontColor($r('sys.color.font_on_primary'))
+              .maxLines(1)
+              .constraintSize({ maxWidth: '80%' })
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .borderRadius(4)
+              .backgroundColor('#99000000')
+              .margin(4)
+          }
         }
         .layoutWeight(1)
         .width('100%')
+        .alignContent(Alignment.TopStart)
         // 番名
         Text(item.title)
           .height(40)

@@ -39,16 +39,18 @@ export struct CategoryView {
 
   }
 
-  // 标题 & 更多
+  // 标题 & 更多（未配置更多页地址时隐藏"更多"入口）
   @Builder Bar(title: string, moreUrl: string) {
     Header(title, () => {
-      const params: VideoCategoryNavigateInfo = {
-        sourceKey: dataSourceManager.getKey(),
-        title: title,
-        url: moreUrl
+      if (moreUrl) {
+        const params: VideoCategoryNavigateInfo = {
+          sourceKey: dataSourceManager.getKey(),
+          title: title,
+          url: moreUrl
+        }
+        AnimeState.pageStack.pushPathByName('CategoryPage', params)
       }
-      AnimeState.pageStack.pushPathByName('CategoryPage', params)
-    }, true)
+    }, moreUrl !== '', moreUrl !== '')
   }
 
 }

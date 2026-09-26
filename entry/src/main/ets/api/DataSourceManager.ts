@@ -283,10 +283,14 @@ class DataSourceManager {
 
   /**
    * 搜索视频
+   * @param sourceKeys 可选，限定参与搜索的数据源 key 列表（为空时按当前搜索策略执行）
    */
-  async search(keyword: string, page: number): Promise<VideoInfo[]> {
+  async search(keyword: string, page: number, sourceKeys?: string[]): Promise<VideoInfo[]> {
     if (!keyword.trim()) {
       return [];
+    }
+    if (sourceKeys && sourceKeys.length > 0) {
+      return await this.searchInSources(keyword, page, sourceKeys);
     }
     try {
       switch (this.searchStrategy) {
@@ -357,8 +361,10 @@ class DataSourceManager {
   /**
    * 获取视频详情
    */
-  async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
-    const source = this.identifyDataSourceByUrl(url);
+  async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc', sourceKey?: string): Promise<VideoDetailInfo> {
+    // 优先按调用方传入的 sourceKey 定位（选集/详情链接与 baseUrl 跨域时仍能正确路由）
+    const source = (sourceKey ? this.dataSources.get(sourceKey) : undefined)
+      ?? this.identifyDataSourceByUrl(url);
     if (!source) {
       throw new Error(`DataSourceManager.getVideoDetailInfo Cannot identify data source for URL: ${url}`);
     }
@@ -376,8 +382,10 @@ class DataSourceManager {
   /**
    * 解析视频链接
    */
-  async parseVideoUrl(link: string): Promise<string> {
-    const source = this.identifyDataSourceByUrl(link);
+  async parseVideoUrl(link: string, sourceKey?: string): Promise<string> {
+    // 优先按调用方传入的 sourceKey 定位（选集链接与 baseUrl 跨域时仍能正确路由）
+    const source = (sourceKey ? this.dataSources.get(sourceKey) : undefined)
+      ?? this.identifyDataSourceByUrl(link);
     if (!source) {
       throw new Error(`DataSourceManager.parseVideoUrl Cannot identify data source for URL: ${link}`);
     }
@@ -648,6 +656,22 @@ class DataSourceManager {
       const parsed = JSON.parse(content);
       // 情况1: DataSourceConfigFile 格式
       if (parsed && typeof parsed === 'object' && parsed.sources && Array.isArray(parsed.sources)) {
+        // 文件级 author/update_time 下沉：补到未自带该字段的源（源级字段优先，应用内编辑与导出均按源级字段读取）
+        const fileAuthor: string = parsed.author;
+        const fileUpdateTime: string = parsed.update_time;
+        const hasFileAuthor = typeof fileAuthor === 'string' && fileAuthor.length > 0;
+        const hasFileUpdateTime = typeof fileUpdateTime === 'string' && fileUpdateTime.length > 0;
+        if (hasFileAuthor || hasFileUpdateTime) {
+          const sources: DataSourceConfig[] = parsed.sources;
+          for (const source of sources) {
+            if (hasFileAuthor && !source.author) {
+              source.author = fileAuthor;
+            }
+            if (hasFileUpdateTime && !source.update_time) {
+              source.update_time = fileUpdateTime;
+            }
+          }
+        }
         return { sources: parsed.sources, version: parsed.version };
       }
       // 情况2: DataSourceConfig 数组格式
@@ -791,6 +815,7 @@ class DataSourceManager {
       for (const existingConfig of this.dataSourceConfigs.values()) {
         existingConfig.defaultSource = false;
       }
+      this.currentDataSourceKey = config.key;
     }
     const dataSource = new GenericDataSource(config);
     this.dataSources.set(config.key, dataSource);
@@ -812,6 +837,7 @@ class DataSourceManager {
           existingConfig.defaultSource = false;
         }
       }
+      this.currentDataSourceKey = config.key;
     }
     // 如果key发生变化，需要先删除旧的
     if (key !== config.key) {
@@ -1130,6 +1156,35 @@ class DataSourceManager {
       Logger.e('tips', `DataSourceManager.saveConfigToSandbox Failed to save configuration to sandbox: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * 在指定的数据源集合内并发搜索，结果按优先级顺序合并去重
+   */
+  private async searchInSources(keyword: string, page: number, sourceKeys: string[]): Promise<VideoInfo[]> {
+    const keySet = new Set<string>(sourceKeys);
+    const sources = this.getPrioritizedDataSources()
+      .filter(ds => ds.isEnabled() && keySet.has(ds.getKey()));
+    if (sources.length === 0) {
+      Logger.w('tips', `DataSourceManager.searchInSources No available source in scope: ${sourceKeys.join(',')}`);
+      return [];
+    }
+    const searchPromises = sources.map(source =>
+    source.search(keyword, page).catch(error => {
+      Logger.e('tips', `DataSourceManager.searchInSources Failed to search ${source.getKey()}: ${error.message}`);
+      return [];
+    })
+    );
+    const results = await Promise.all(searchPromises);
+    const mergedResults: VideoInfo[] = [];
+    const urlSet = new Set<string>();
+    results.flat().forEach(video => {
+      if (!urlSet.has(video.url)) {
+        urlSet.add(video.url);
+        mergedResults.push(video);
+      }
+    });
+    return mergedResults;
   }
 
   /**

@@ -71,7 +71,7 @@ export struct CategoryPage {
       // 图片 + 标题 1
       VideoList({
         videoListDataSource: this.categoryViewModel.categoryDataSource
-      }).padding(16)
+      })
     } else {
       // 详细 0
       Grid() {
