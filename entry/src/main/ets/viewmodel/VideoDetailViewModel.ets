@@ -13,7 +13,6 @@ import EpisodeInfo from '../entity/EpisodeInfo';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
-import { StringUtils } from '../utils/StringUtils';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { window } from '@kit.ArkUI';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
@@ -21,6 +20,7 @@ import { PiPManager, PiPNavigationInfo } from '../player/PiPManager';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
+import { WebVideoResolver } from '../utils/WebVideoResolver';
 
 
 /** 续播定位结果：校正后的剧集索引 + 是否保留播放进度 */
@@ -32,15 +32,6 @@ class ResumeTarget {
 
 @ObservedV2
 export class VideoDetailViewModel {
-
-  /**
-   * 手动点击兜底模式注入的钩子 JS：
-   * 拦截站点自身发起的 resolve XHR，捕获其响应中的真实播放地址，
-   * 经 animeBridge.onLink 桥回传给应用完成原生播放。
-   * 前 10 秒内收到的 403 视为站点残留的自动尝试，忽略不回传。
-   */
-  private static readonly MANUAL_HOOK_JS: string =
-    `(function(){var posted=false;var t0=Date.now();function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};return 'HOOK';})()`;
 
   // 视频详情信息
   @Trace public videoDetailInfo: VideoDetailInfo = {
@@ -165,6 +156,9 @@ export class VideoDetailViewModel {
             this.playVideo(this.episodeListIndex, this.episodeIndex + 1);
           }
         }
+        if (status == PlayerStatus.ERROR) {
+          this.invalidateCurrentEpisodeLink();
+        }
         this.syncPiPAutoStart(status)
       },
       onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
@@ -224,6 +218,26 @@ export class VideoDetailViewModel {
 
   // 历史续播：仅首次进入详情页时携带，消费后立即复位，换集/重试不续播旧位置
   private resumePosition: number = -1;
+
+  /**
+   * 播放出错时失效当前集的解析结果（episode 直链 + 历史记录 + WebVideoResolver 缓存）：
+   * 直链多为带时效的签名地址，播放失败大概率已过期；
+   * 清空后重试会重新走 playVideo 解析分支（缓存条目已删，resolve 必然重新解析）
+   */
+  private invalidateCurrentEpisodeLink(): void {
+    const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex];
+    if (episodeList) {
+      const episode = episodeList.episodes[this.episodeIndex];
+      if (episode && episode.videoUrl) {
+        Logger.e('tips', `播放出错，失效当前集解析结果: ${episode.videoUrl}`);
+        WebVideoResolver.invalidateResolved(episode.videoUrl);
+        episode.videoUrl = undefined;
+      }
+    }
+    if (this.historyInfo) {
+      this.historyInfo.videoUrl = '';
+    }
+  }
 
   // 初始化数据
   public async initialize(params: VideoNavigateInfo) {
@@ -401,108 +415,14 @@ export class VideoDetailViewModel {
 
   /**
    * 检查并解析视频链接
-   * @param url 输入的URL，格式可能为 'selector_|_attribute_|_actual_url' 或直接的URL
+   * 含 _|_ 的网页解析源统一委托全局 WebVideoResolver（串行队列 + 内存缓存 + 自动/手动兜底），
+   * 与离线缓存下载共用同一条解析通道，播放解析过一次后下载可直接复用缓存；
+   * 普通链接原样返回
+   * @param url 输入的URL，格式可能为 'rawLink_|_js' 或直接的URL
    * @returns Promise<string> 返回解析后的视频链接
    */
   private async checkParesVideoLink(url: string): Promise<string> {
-    // 情况一：需要通过JS解析
-    if (url.includes('_|_')) {
-      // 解析输入的URL字符串
-      // 格式: 'rawLink_|_selector@attribute'
-      const rawLink = StringUtils.splitString(url, '_|_').first;
-      const js = StringUtils.splitString(url, '_|_').second;
-
-      if (!rawLink || !js) {
-        console.error('checkParesVideoLink: URL格式错误，无法解析。');
-        return Promise.reject(new Error('Invalid URL format for JS parsing.'));
-      }
-
-      const sep = rawLink.includes('?') ? '&' : '?';
-      let lastErr = 'ERR_UNKNOWN';
-
-      // 阶段一：自动解析，最多2次尝试（_r 参数供页面 JS 区分尝试序号，每次重建 WebView 获取新凭证）
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        AnimeState.webviewManual = false;
-        AnimeState.webJsVideoLink = '';
-        AnimeState.webviewUrl = `${rawLink}${sep}_r=${attempt}`;
-        AnimeState.runJs = js;
-        // src 变化不会触发已存在的 Web 组件重新加载，必须重建组件
-        AnimeState.showWebView = false;
-        await this.sleep(300);
-        AnimeState.showWebView = true;
-        console.info(`checkParesVideoLink: 自动解析第${attempt}次尝试，目标URL: ${AnimeState.webviewUrl}`);
-
-        const result = await this.waitWebViewResult(25000);
-        if (result.includes('http') && !result.startsWith('ERR_')) {
-          console.info(`checkParesVideoLink: 成功获取JS链接: ${result}`);
-          this.finishWebView();
-          return result;
-        }
-        lastErr = result;
-        // 仅凭证失败(403)时换帧率参数再试一次，其它错误直接进入手动兜底
-        if (!lastErr.startsWith('ERR_HTTP_403')) {
-          break;
-        }
-      }
-
-      // 阶段二：自动解析失败，进入手动点击兜底模式（显示真实页面，用户点击播放后捕获站点自身解析结果）
-      console.info(`checkParesVideoLink: 自动解析失败(${lastErr})，进入手动点击模式`);
-      let reason = '自动解析未能获取播放地址';
-      if (lastErr.startsWith('ERR_HTTP_403')) {
-        reason = '站点播放凭证校验未通过';
-      } else if (lastErr === 'ERR_TIMEOUT') {
-        reason = '自动解析超时';
-      }
-      AnimeState.webviewManualReason = `${reason} · ${lastErr}`;
-      AnimeState.webviewManual = true;
-      AnimeState.webJsVideoLink = '';
-      AnimeState.webviewUrl = `${rawLink}${sep}_m=${Date.now()}`;
-      AnimeState.runJs = VideoDetailViewModel.MANUAL_HOOK_JS;
-      AnimeState.showWebView = false;
-      await this.sleep(300);
-      AnimeState.showWebView = true;
-
-      const manualResult = await this.waitWebViewResult(120000);
-      this.finishWebView();
-      if (manualResult.includes('http') && !manualResult.startsWith('ERR_')) {
-        console.info(`checkParesVideoLink: 手动模式成功获取链接: ${manualResult}`);
-        return manualResult;
-      }
-      console.error(`checkParesVideoLink: 手动模式解析失败: ${manualResult}`);
-      return Promise.reject(new Error(`播放地址解析失败: ${manualResult}`));
-    } else {
-      // 情况二：直接返回输入的URL
-      console.info(`checkParesVideoLink: 直接返回URL: ${url}`);
-      return url;
-    }
-  }
-
-  /**
-   * 轮询等待 WebView JS 结果（runJavaScript 返回值或 animeBridge 桥回调写入 webJsVideoLink）
-   * @param timeoutMs 超时时间
-   * @returns 回传内容（http 链接或 ERR_ 错误串），超时返回 'ERR_TIMEOUT'
-   */
-  private async waitWebViewResult(timeoutMs: number): Promise<string> {
-    const startTime = Date.now();
-    while (true) {
-      const jsLink = AnimeState.webJsVideoLink;
-      if (jsLink && jsLink !== '') {
-        return jsLink;
-      }
-      if (Date.now() - startTime > timeoutMs) {
-        AnimeState.showWebView = false;
-        console.error('waitWebViewResult: 等待JS结果超时。');
-        return 'ERR_TIMEOUT';
-      }
-      await this.sleep(500);
-    }
-  }
-
-  /** 收尾：隐藏 WebView 并复位手动模式标志 */
-  private finishWebView(): void {
-    AnimeState.showWebView = false;
-    AnimeState.webviewManual = false;
-    AnimeState.webviewManualReason = '';
+    return WebVideoResolver.resolve(url)
   }
 
   /**

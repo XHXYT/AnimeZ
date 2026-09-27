@@ -121,7 +121,8 @@ export struct VideoCacheList {
             .setSourceKey(this.videoDetailInfo.sourceKey)
             .setTaskName(episode.desc)
             .setFileName('index.m3u8')
-            .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext))
+            .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext)
+              + DownloadDirHelper.sanitizeDirName(this.videoDetailInfo.title) + '/')
             .build()
           task.start()
         }

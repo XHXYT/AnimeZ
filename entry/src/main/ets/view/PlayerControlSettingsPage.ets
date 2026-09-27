@@ -209,7 +209,9 @@ struct PlayerControlSettingsPage {
             .constraintSize({
               minHeight: '100%'
             })
-          }.scrollBar(BarState.Off)
+          }
+          .contentEndOffset(56)
+          .scrollBar(BarState.Off)
           .edgeEffect(EdgeEffect.Spring)
         }
         .layoutWeight(1)

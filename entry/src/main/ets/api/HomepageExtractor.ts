@@ -167,6 +167,27 @@ export async function extractBannerFromHtml(html: string, baseUrl: string, sourc
 }
 
 /**
+ * 视频列表页解析：parse 整页 HTML，先定位列表容器再提取条目
+ * （同 GenericDataSource.getVideoList 解析部分：containerSelector 缺省时用 listSelector 定位容器）
+ */
+export async function extractVideoListFromHtml(html: string, baseUrl: string, sourceKey: string,
+  config: VideoConfig): Promise<VideoInfo[]> {
+  const doc = parse(html);
+  const containerSelector = config.containerSelector || config.listSelector;
+  const drama = selectFirst(doc, containerSelector);
+  if (!drama) {
+    return [];
+  }
+  const elements = select(drama, config.listSelector);
+  const videos: VideoInfo[] = [];
+  for (const li of elements) {
+    videos.push(await extractVideoInfoFromNode(li, config.itemSelectors as ExtendedSelectorConfig,
+      baseUrl, sourceKey, config.urlNeedBaseUrl, config.enabledHttps));
+  }
+  return videos;
+}
+
+/**
  * 卡片模式：解析单个卡片页面并提取条目（maxItems 截断，同 processHtmlCategoryCard 解析部分）
  */
 export async function extractCardItemsFromHtml(html: string, baseUrl: string, sourceKey: string,

@@ -14,6 +14,8 @@ import { permissionManage } from '../utils/PermissionManage';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 import SQLite from '../db/SQLite';
+import { initConcurrentTasks } from '../api/ConcurrentTasks';
+import { initWebVideoResolver } from '../utils/WebVideoResolver';
 
 
 export default class EntryAbility extends UIAbility {
@@ -66,6 +68,10 @@ export default class EntryAbility extends UIAbility {
     };
 
     async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
+        // 注册 taskpool 并发任务（.ets 定义 -> TaskRegistry 注入，供 .ts 数据源层调用）
+        initConcurrentTasks()
+        // 注册 WebView 视频链接解析器（.ets 定义 -> WebResolveRegistry 注入，供 .ts 下载层调用）
+        initWebVideoResolver()
         // 关闭应用接续 -> 在特定的页面才打开
         this.context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
             console.log(`setMissionContinueState: ${JSON.stringify(result)}`)

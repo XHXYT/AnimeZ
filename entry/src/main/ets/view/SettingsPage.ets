@@ -104,24 +104,27 @@ struct SettingsPage {
         type: ItemActionType.MENU,
         value: appSettings.download_location,
         menuOptions: [
-          new MenuOption('sandbox', '应用沙箱目录'),
-          new MenuOption('public', '公共下载目录')
+          new MenuOption('sandbox', '应用沙箱'),
+          new MenuOption('public', '公共下载')
         ],
         onChange: (value) => {
           if (value === DownloadLocationType.PUBLIC) {
-            if (DownloadDirHelper.ensurePublicDir(this.context)) {
-              appSettings.download_location = DownloadLocationType.PUBLIC
-              ToastUtil.showToast({ message: '新任务将下载到公共下载目录(Download/应用包名)' })
-            } else {
-              ToastUtil.showToast({ message: '公共下载目录不可用，仍使用应用沙箱目录' })
-            }
+            // 首次需经 DOWNLOAD 模式静默授权，异步确认后再生效
+            DownloadDirHelper.ensurePublicDir(this.context).then((dir: string) => {
+              if (dir) {
+                appSettings.download_location = DownloadLocationType.PUBLIC
+                ToastUtil.showToast({ message: '新任务将下载到公共下载目录(Download/应用包名)' })
+              } else {
+                ToastUtil.showToast({ message: '公共下载目录不可用，仍使用应用沙箱目录' })
+              }
+              // 刷新列表选中态（公共目录不可用时回显沙箱）
+              this.listVersion++
+              this.groups = makeItemGroups(this.itemList)
+            })
           } else {
             appSettings.download_location = DownloadLocationType.SANDBOX
             ToastUtil.showToast({ message: '新任务将下载到应用沙箱目录' })
           }
-          // 刷新列表选中态（公共目录不可用时回显沙箱）
-          this.listVersion++
-          this.groups = makeItemGroups(this.itemList)
         }
       }),
 

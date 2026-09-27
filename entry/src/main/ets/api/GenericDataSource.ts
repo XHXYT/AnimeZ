@@ -23,7 +23,7 @@ import { ScriptProcessor } from './ScriptProcessor';
 import AuthStore from '../utils/AuthStore';
 import HttpSession from '../utils/HttpSession';
 import { CaptchaBridge } from './CaptchaBridge';
-import { homepageBannerParseInTask, homepageCardParseInTask, parseHomepageInTask } from './HomepageParseTask';
+import { getConcurrentTaskFns } from './TaskRegistry';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
 
@@ -241,14 +241,14 @@ export default class GenericDataSource implements DataSource {
       if (cards && cards.length > 0) {
         // 卡片模式：每个卡片独立请求自己的页面，解析在子线程
         const [bannerList, categoryList] = await Promise.all([
-          homepageBannerParseInTask(homepageHtml, this.baseUrl, this.key, config.banner),
+          getConcurrentTaskFns().homepageBannerParseInTask(homepageHtml, this.baseUrl, this.key, config.banner),
           Promise.all(cards.map(card => this.processHtmlCategoryCard(card)))
         ]);
         return { bannerList, categoryList };
       }
 
       // 同页模式：banner 与分类在同一首页文档中
-      return await parseHomepageInTask(homepageHtml, this.baseUrl, this.key, config.banner, config.category);
+      return await getConcurrentTaskFns().parseHomepageInTask(homepageHtml, this.baseUrl, this.key, config.banner, config.category);
     } catch (e) {
       Logger.e('fail', `获取主页数据`, e);
       throw e;
@@ -285,35 +285,13 @@ export default class GenericDataSource implements DataSource {
     Logger.e('tips', "CategoryPage #getVideoList parseHtml url = " + pageUrl);
 
     try {
-      const doc = await this.parseHtml(pageUrl);
-      const videosConfig = this.parserConfig.homepage.category.videos;
-      // 优先使用 containerSelector 在整页文档中定位列表容器，
-      // 再用 listSelector 在容器内选取条目（避免同选择器在文档层匹配到条目自身）
-      const containerSelector = videosConfig.containerSelector || videosConfig.listSelector;
-      const drama = selectFirst(doc, containerSelector);
-
-      if (!drama) {
-        return [];
-      }
-
-      return await this.parseVideoList(drama, this.parserConfig.homepage.category.videos);
+      // 网络请求留在主线程（异步不阻塞 UI），parse + 字段提取移入 taskpool 子线程
+      const html = await HttpUtils.getString(pageUrl);
+      return await getConcurrentTaskFns().videoListParseInTask(html, this.baseUrl, this.key, this.parserConfig.homepage.category.videos);
     } catch (e) {
       Logger.e('fail', `获取视频列表`, e);
       throw e
     }
-  }
-
-  private async parseVideoList(drama: HtmlTag, config: VideoConfig): Promise<VideoInfo[]> {
-    const elements = select(drama, config.listSelector);
-    Logger.e('tips', 'parseHtml elements=' + elements.length);
-
-    // 并行处理所有视频项
-    const videoPromises = elements.map(async (li) => {
-      Logger.e('tips', "parseHtml el=" + li);
-      return await this.extractVideoInfo(li, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
-    });
-
-    return await Promise.all(videoPromises);
   }
 
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
@@ -655,7 +633,7 @@ export default class GenericDataSource implements DataSource {
       try {
         const pageUrl = card.url.includes('http') ? card.url : this.baseUrl + card.url;
         const html = await HttpUtils.getString(pageUrl);
-        videoList = await homepageCardParseInTask(html, this.baseUrl, this.key, card);
+        videoList = await getConcurrentTaskFns().homepageCardParseInTask(html, this.baseUrl, this.key, card);
       } catch (e) {
         Logger.e('fail', `解析分类卡片(HTML): ${card.title}`, e);
         if (attempt < maxAttempts - 1) {

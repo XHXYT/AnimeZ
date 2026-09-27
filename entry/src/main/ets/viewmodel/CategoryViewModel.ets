@@ -33,7 +33,6 @@ export class CategoryViewModel {
     this.state = ViewState.LOADING
     try {
       const data = await dataSourceManager.getVideoList(this.url, 0)
-      Logger.d('CategoryViewModel', '#loadFirstPage list=' + JSON.stringify(data))
       this.state = ViewState.CONTENT
       this.categoryDataSource.pushData(data)
     } catch (err) {

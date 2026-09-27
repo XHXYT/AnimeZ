@@ -6,11 +6,13 @@ import M3U8Utils from './M3U8Utils';
 import DownloadTaskInfo from '../download/DownloadTaskInfo';
 import { FileDownloadTask, GroupDownloadTask } from '../download/FileDownloadTask';
 import fs from '@ohos.file.fs';
-import fio from '@ohos/fileio-extra';
 import Logger from '../Logger';
 import TaskManager from '../download/core/TaskManager';
 import { Downloader } from '../download/Downloader';
 import { CryptoJS } from '@ohos/crypto-js'
+import Task from '../download/core/Task';
+import { TaskStatus, TaskStatusObserver } from '../download/core/Task';
+import { getWebResolveFns } from '../download/WebResolveRegistry';
 
 class M3U8DownloadTaskBuilder extends DownloadTaskBuilder<M3U8DownloadTask> {
 
@@ -67,14 +69,68 @@ export default class M3U8Downloader extends Downloader<M3U8DownloadTask> {
 export class M3U8DownloadTask extends GroupDownloadTask {
   private readonly taskDir
   readonly videoInfo: M3U8VideoInfo = new M3U8VideoInfo()
+  /**
+   * 强制重新初始化标志：网页解析源的播放地址为带签名的临时链接，
+   * 分片下载报错（如403过期）后置位，下次 start 时清空已有分片并重新解析
+   */
+  private forceReInit: boolean = false
 
   constructor(manager: TaskManager, taskInfo: DownloadTaskInfo) {
     super(manager, new M3U8SegmentTaskManager(), taskInfo)
     this.taskDir = this.getDownloadDir() + CryptoJS.MD5(taskInfo.originalUrl).toString() + '/'
+    // 自监听状态：网页解析源出错后标记强制重新初始化
+    this.statusManager.addObserver({
+      onStatusChanged: (task: Task, oldStatus: TaskStatus, status: TaskStatus) => {
+        if (status == TaskStatus.ERROR && this.isWebParseTask()) {
+          this.forceReInit = true
+        }
+      }
+    })
+  }
+
+  /** 是否为需要WebView网页解析的视频源（原始链接形如 'rawLink_|_js'） */
+  private isWebParseTask(): boolean {
+    return this.taskInfo.originalUrl.includes('_|_')
+  }
+
+  /**
+   * 覆写：强制重新初始化时视为未准备完成，使 start 走重新解析流程
+   */
+  isPrepared(): boolean {
+    return !this.forceReInit && this.taskInfo.prepared
+  }
+
+  /**
+   * 清空已有分片子任务（内存队列、数据库行、已下载分片文件）并重置父任务累计进度
+   */
+  private clearChildTasks(): void {
+    const children: Task[] = this.childTaskManager.tasks.splice(0, this.childTaskManager.tasks.length)
+    for (let child of children) {
+      // 分片文件与数据库行异步清理，不阻塞重新解析
+      child.doDelete()
+      this.childTaskManager.taskInfoRepository.delete(child.taskInfo)
+        .then((result) => {
+          Logger.d(this, 'clearChildTasks delete info result=' + result)
+        })
+        .catch((e) => {
+          Logger.d(this, 'clearChildTasks delete info failed! e=' + JSON.stringify(e))
+        })
+    }
+    // 子任务进度会沿父任务逐级累加，必须一并重置
+    this.taskInfo.totalWorkload = 0
+    this.taskInfo.completeWorkload = 0
+    this.taskInfo.taskProgress = 0
+    this.videoInfo.m3u8 = null
   }
 
   doDelete() {
     fs.rmdir(this.taskDir)
+    // 回收空的番剧名文件夹（downloadDir 即番剧名目录），仍有其他剧集时忽略
+    try {
+      fs.rmdir(this.getDownloadDir())
+    } catch (e) {
+      // 目录非空或无权限：保留
+    }
   }
 
   getLocalM3U8Path(): string {
@@ -87,9 +143,9 @@ export class M3U8DownloadTask extends GroupDownloadTask {
   async doRestore(): Promise<void> {
     Logger.d(this, 'doRestore')
     let infoPath = this.taskDir + 'video.info'
-    Logger.d(this, 'doRestore infoPath=' + infoPath + ' exists=' + fio.pathExistsSync(infoPath))
+    Logger.d(this, 'doRestore infoPath=' + infoPath + ' exists=' + fs.accessSync(infoPath))
 
-    if (!fio.pathExistsSync(infoPath)) {
+    if (!fs.accessSync(infoPath)) {
       if (this.taskInfo.prepared) {
         this.taskInfo.prepared = false
       }
@@ -104,6 +160,10 @@ export class M3U8DownloadTask extends GroupDownloadTask {
     this.videoInfo.sourceKey = info.sourceKey
     this.videoInfo.m3u8 = info.m3u8
     Logger.d(this, 'doRestore videoInfo=' + JSON.stringify(this.videoInfo))
+    // 网页解析源上次运行出错（如签名链接过期）：恢复时直接标记强制重新解析
+    if (this.isWebParseTask() && this.taskInfo.status == TaskStatus.ERROR) {
+      this.forceReInit = true
+    }
   }
 
   /**
@@ -116,8 +176,11 @@ export class M3U8DownloadTask extends GroupDownloadTask {
         Logger.d(this, 'doInit initM3u8 result=' + result)
         // 初始化完成
         this.taskInfo.prepared = true;
-        // 继续下载任务
-        this.process()
+        // 初始化期间任务可能已被暂停或删除（网页解析耗时较长），此时不再自动继续
+        if (this.getStatus() == TaskStatus.PREPARING) {
+          // 继续下载任务
+          this.process()
+        }
       })
       .catch((e) => {
         Logger.d(this, 'M3U8Utils e=' + JSON.stringify(e))
@@ -136,9 +199,18 @@ export class M3U8DownloadTask extends GroupDownloadTask {
    */
   private async initTask(): Promise<number> {
 
-    Logger.d(this, 'initTask taskDir=' + this.taskDir + ' exists=' + fio.pathExistsSync(this.taskDir))
-    if (!fio.pathExistsSync(this.taskDir)) {
-      fio.mkdirsSync(this.taskDir)
+    Logger.d(this, 'initTask taskDir=' + this.taskDir + ' exists=' + fs.accessSync(this.taskDir))
+    if (!fs.accessSync(this.taskDir)) {
+      fs.mkdirSync(this.taskDir, true)
+    }
+
+    // 上次出错（如签名链接403过期）后的重试：清空已有分片并跳过缓存强制重新解析
+    const skipCache = this.forceReInit
+    if (this.forceReInit) {
+      Logger.d(this, 'initTask forceReInit: clear child tasks and re-resolve url')
+      this.forceReInit = false
+      this.taskInfo.prepared = false
+      this.clearChildTasks()
     }
 
     let result = await this.saveVideoInfo()
@@ -149,8 +221,10 @@ export class M3U8DownloadTask extends GroupDownloadTask {
     Logger.d(this, 'initTask url=' + this.taskInfo.url)
     if (this.taskInfo.url) {
       if (this.taskInfo.url.includes('_|_')) {
-        // 该类链接需要WebView网页交互解析出真实播放地址，后台下载任务无法获取
-        throw new Error('该视频源需要网页解析播放地址，暂不支持离线缓存')
+        // 网页交互解析源：经全局WebView（WebVideoResolver）解析出真实播放地址，失败原样抛错
+        Logger.d(this, 'initTask resolve web video url, skipCache=' + skipCache)
+        this.taskInfo.url = await getWebResolveFns().resolveWebVideoUrl(this.taskInfo.url, skipCache)
+        Logger.d(this, 'initTask resolved url=' + this.taskInfo.url)
       }
       // 初始化m3u8信息
       return await this.initM3u8()
@@ -180,7 +254,7 @@ export class M3U8DownloadTask extends GroupDownloadTask {
       throw new Error('m3u8 parse failed!')
     }
 
-    Logger.d(this, 'initM3u8 taskDir exists=' + fio.pathExistsSync(this.taskDir))
+    Logger.d(this, 'initM3u8 taskDir exists=' + fs.accessSync(this.taskDir))
     // 保存m3u8信息
     let result = await this.saveVideoInfo()
 

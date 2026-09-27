@@ -7,6 +7,7 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { TabBarHeight, TabBarPosition, TabBarVertical, TabBarWidth } from '../utils/breakpoint/BreakPoint';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { WebParseOverlay } from '../components/WebParseOverlay';
 
 @Entry
 @ComponentV2
@@ -53,39 +54,46 @@ struct Index {
 
 
   build() {
-    Navigation(AnimeState.pageStack) {
-      Tabs({
-        barPosition: TabBarPosition(AnimeState.widthBp, AnimeState.heightBp),
-        controller: this.controller
-      }) {
-        TabContent() {
-          HomePage()
-        }
-        .tabBar(this.TabBarBuilder(0, '首页', $r('app.media.ic_homepage'), $r('app.media.ic_homepage_selected')))
-        .onWillShow(() => {
-          AnimeState.currentIndex = 0
+    Stack() {
+      Navigation(AnimeState.pageStack) {
+        Tabs({
+          barPosition: TabBarPosition(AnimeState.widthBp, AnimeState.heightBp),
+          controller: this.controller
+        }) {
+          TabContent() {
+            HomePage()
+          }
+          .tabBar(this.TabBarBuilder(0, '首页', $r('app.media.ic_homepage'), $r('app.media.ic_homepage_selected')))
+          .onWillShow(() => {
+            AnimeState.currentIndex = 0
+          })
+          TabContent() {
+            MyPage()
+          }
+          .tabBar(this.TabBarBuilder(1, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected')))
+          .onWillShow(() => {
+            AnimeState.currentIndex = 1
+          })
+        }.layoutWeight(1)
+        .barMode(BarMode.Fixed)
+        .vertical(TabBarVertical(AnimeState.widthBp, AnimeState.heightBp))
+        .barWidth(TabBarWidth(AnimeState.widthBp, AnimeState.heightBp))
+        .barHeight(TabBarHeight(AnimeState.widthBp, AnimeState.heightBp))
+        .onChange((index: number) => {
+          AnimeState.currentIndex = index
         })
-        TabContent() {
-          MyPage()
-        }
-        .tabBar(this.TabBarBuilder(1, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected')))
-        .onWillShow(() => {
-          AnimeState.currentIndex = 1
-        })
-      }.layoutWeight(1)
-      .barMode(BarMode.Fixed)
-      .vertical(TabBarVertical(AnimeState.widthBp, AnimeState.heightBp))
-      .barWidth(TabBarWidth(AnimeState.widthBp, AnimeState.heightBp))
-      .barHeight(TabBarHeight(AnimeState.widthBp, AnimeState.heightBp))
-      .onChange((index: number) => {
-        AnimeState.currentIndex = index
-      })
-    }.hideToolBar(true)
-    .backgroundColor($r('app.color.background_color_accent'))
-    .mode(NavigationMode.Stack)
-    .width('100%').height('100%')
-    .foregroundBlurStyle(appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,
-      { colorMode: ThemeColorMode.SYSTEM, adaptiveColor: AdaptiveColor.DEFAULT, scale: 0.3 })
+      }.hideToolBar(true)
+      .backgroundColor($r('app.color.background_color_accent'))
+      .mode(NavigationMode.Stack)
+      .width('100%').height('100%')
+      .foregroundBlurStyle(appSettings.need_blur ? BlurStyle.Thin : BlurStyle.NONE,
+        { colorMode: ThemeColorMode.SYSTEM, adaptiveColor: AdaptiveColor.DEFAULT, scale: 0.3 })
+
+      // 全局 WebView 解析悬浮层（顶层，平时不渲染任何节点）
+      WebParseOverlay()
+    }
+    .width('100%')
+    .height('100%')
   }
 
   private controller: TabsController = new TabsController()
