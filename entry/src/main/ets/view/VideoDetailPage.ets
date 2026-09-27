@@ -2,7 +2,7 @@ import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
 import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import { CustomListItem } from '../components/CustomListItem';
-import { CustomItemInfo, ItemActionType, MenuOption } from '../entity/CusItemInfo';
+import { CustomItemInfo, ItemActionType, MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
 import { PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { PiPManager } from '../player/PiPManager';
@@ -647,7 +647,31 @@ struct VideoDetailPage {
           new MenuOption(String(VideoFit.Fit_1_1), '1:1')
         ],
         onChange: (value) => {
+          // 同步持久化到全局设置，下次进入播放页沿用
+          appSettings.video_fit = Number(value) as VideoFit
           this.playerManager.setVideoFit(Number(value) as VideoFit)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_double_tap_seek_forward',
+        title: '双击快进秒数',
+        subtitle: '双击播放器右侧区域快进的秒数',
+        type: ItemActionType.MENU,
+        value: String(appSettings.double_tap_seek_forward),
+        menuOptions: makeSeekSecondsOptions(),
+        onChange: (value) => {
+          appSettings.double_tap_seek_forward = Number(value)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_double_tap_seek_rewind',
+        title: '双击快退秒数',
+        subtitle: '双击播放器左侧区域快退的秒数',
+        type: ItemActionType.MENU,
+        value: String(appSettings.double_tap_seek_rewind),
+        menuOptions: makeSeekSecondsOptions(),
+        onChange: (value) => {
+          appSettings.double_tap_seek_rewind = Number(value)
         }
       }),
       new CustomItemInfo({

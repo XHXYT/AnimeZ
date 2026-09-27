@@ -7,6 +7,7 @@ import Logger from '../utils/Logger';
 import { downloadViewModel } from '../viewmodel/DownloadViewModel';
 import StateView, { ViewState } from '../components/StateView';
 import TitleBar, { TitleBarButton } from '../components/TitleBar';
+import { MenuItem } from '../components/common/Button';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AnimeState } from '../entryability/AnimeState';
 
@@ -39,8 +40,10 @@ struct DownloadManagerPage {
           buttons: this.editButtons
         })
         if (downloadViewModel.state == ViewState.CONTENT) {
-          // 功能行
-          this.FunctionBar()
+          // 功能行（仅全部完成后展示缓存计数）
+          if (downloadViewModel.isAllComplete) {
+            this.FunctionBar()
+          }
           // 下载列表
           DownloadManagerList({
             tasks: downloadViewModel.tasks,
@@ -88,42 +91,90 @@ struct DownloadManagerPage {
         action: () => {
           downloadViewModel.selectionManager.toggleSelectionMode()
         }
+      },
+      {
+        symbol: 'square_grid_2x2',
+        iconSize: 24,
+        menuItems: this.moreMenuItems
       }
     ]
+  }
+
+  /**
+   * 右上角更多菜单项
+   */
+  private get moreMenuItems(): MenuItem[] {
+    return [
+      {
+        name: '全部开始',
+        value: 'start_all',
+        symbolStart: 'play',
+        action: () => {
+          downloadViewModel.startAll()
+        }
+      },
+      {
+        name: '全部暂停',
+        value: 'pause_all',
+        symbolStart: 'pause',
+        action: () => {
+          downloadViewModel.pauseAll()
+        }
+      },
+      {
+        name: '重试所有失败',
+        value: 'retry_failed',
+        symbolStart: 'arrow_clockwise',
+        action: () => {
+          downloadViewModel.retryAllFailedTasks()
+        }
+      },
+      {
+        name: '清空下载',
+        value: 'clear_all',
+        symbolStart: 'trash',
+        action: () => {
+          this.showClearAllConfirm()
+        }
+      }
+    ]
+  }
+
+  /**
+   * 清空下载二次确认弹窗
+   */
+  private showClearAllConfirm() {
+    ToastUtil.showAlertDialog(
+      {
+        title: '清空下载',
+        message: `确认清空全部${downloadViewModel.taskCount}项下载任务？已缓存的视频文件将一并删除，该操作不可恢复。`,
+        primaryButton: {
+          value: '取消',
+          action: () => {
+          }
+        },
+        secondaryButton: {
+          value: '清空',
+          fontColor: Color.Red,
+          action: () => {
+            downloadViewModel.clearAllTasks()
+          }
+        }
+      }, 'DownloadManagerPage')
   }
 
   @Builder
   FunctionBar() {
     Row() {
-      if (downloadViewModel.isAllComplete) {
-        Text() {
-          Span(`${downloadViewModel.taskCount} `)
-            .fontSize(14)
-            .fontColor($r('app.color.primary_color'))
-          Span('已缓存')
-            .fontSize(14)
-            .fontColor($r('app.color.color_text_major'))
-        }
-        .height(32)
-      } else {
-        Row() {
-          Text(downloadViewModel.canPauseAll ? '全部暂停' : '全部开始')
-            .margin({ right: 4 })
-            .fontSize(12)
-            .fontColor(downloadViewModel.selectMode ? $r('app.color.color_text_minor') : $r('app.color.color_text_major'))
-          Image(downloadViewModel.canPauseAll ? $r('app.media.ic_pause') : $r('app.media.ic_download2'))
-            .width(26)
-            .height(26)
-            .fillColor(downloadViewModel.selectMode ? $r('app.color.color_text_minor') : $r('app.color.color_text_major'))
-        }
-        .padding({ top: 8, bottom: 8 })
-        .onClick(() => {
-          if (downloadViewModel.selectMode) {
-            return
-          }
-          downloadViewModel.toggleAll()
-        })
+      Text() {
+        Span(`${downloadViewModel.taskCount} `)
+          .fontSize(14)
+          .fontColor($r('app.color.primary_color'))
+        Span('已缓存')
+          .fontSize(14)
+          .fontColor($r('app.color.color_text_major'))
       }
+      .height(32)
     }
     .justifyContent(FlexAlign.End)
     .padding({ left: 16, right: 16 })
@@ -448,7 +499,9 @@ struct DownloadManagerList {
                 link: task.getOriginalUrl(),
                 videoUrl: task.getLocalM3U8Path()
               }
-              AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", episode, true)
+              // LocalVideoPlayerPage 期望参数为 { episode: EpisodeInfo }，直接传对象会取到 undefined
+              let params: Record<string, EpisodeInfo> = { 'episode': episode }
+              AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", params, true)
             }
           })
           .gesture(LongPressGesture({ repeat: false })

@@ -216,3 +216,10 @@ export function makeItemGroups(data: CustomItemInfo[]): ItemGroupData[] {
     return result;
   }, []);
 }
+
+/**
+ * 双击快进/快退秒数可选项（播放设置面板与全局设置共用）
+ */
+export function makeSeekSecondsOptions(): MenuOption[] {
+  return [5, 10, 15, 20, 30, 60].map((sec: number): MenuOption => new MenuOption(String(sec), `${sec} 秒`))
+}

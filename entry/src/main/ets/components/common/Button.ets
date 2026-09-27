@@ -102,6 +102,7 @@ function ButtonContent(config: ButtonConfig) {
         else if (config.symbolSrc) {
           SymbolGlyph($r('sys.symbol.' + config.symbolSrc))
             .fontSize(config.iconSize || 24)
+            .fontWeight(FontWeight.Medium)
             .fontColor([config.fontColor || Color.Transparent])
         }
       }

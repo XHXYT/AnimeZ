@@ -51,6 +51,11 @@
       "buildFunction": "SettingsPageBuilder"
     },
     {
+      "name": "PlayerControlSettingsPage",
+      "pageSourceFile": "src/main/ets/view/PlayerControlSettingsPage.ets",
+      "buildFunction": "PlayerControlSettingsPageBuilder"
+    },
+    {
       "name": "VideoCollectionPage",
       "pageSourceFile": "src/main/ets/view/VideoCollectionPage.ets",
       "buildFunction": "VideoCollectionPageBuilder"

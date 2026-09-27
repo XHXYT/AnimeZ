@@ -42,7 +42,14 @@ export struct IjkVideoPlayer {
       if (this.destroyed) {
         return
       }
-      this.ijkPlayer.setDataSource(url);
+      // 本地沙箱文件：显式 file:// 协议并放开含 file 的白名单，否则 ffmpeg 无法打开本地路径
+      let playUrl = url
+      if (url.startsWith('/')) {
+        playUrl = 'file://' + url
+        this.ijkPlayer.setDataSourceHeader(new Map<string, string>())
+      }
+      Logger.e('tips', 'IjkVideoPlayer setDataSource: ' + playUrl)
+      this.ijkPlayer.setDataSource(playUrl);
       this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
     },
 

@@ -37,7 +37,6 @@ export class HistoryViewModel {
     const list = await this.getDB().queryAllByAccessTimeDesc()
     if (list) {
       this.historyList = list
-      console.log(`HistoryViewModel #loadHistoryList 历史记录项：${JSON.stringify(this.historyList)}`)
     }
   }
 

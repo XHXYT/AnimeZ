@@ -46,7 +46,11 @@ export struct AVideoPlayer {
 
     },
     onEpisodeChanged: (episodeList: EpisodeInfo[], episodeIndex: number) => {
-      this.videoUrl = episodeList[episodeIndex].videoUrl as string
+      // 剧集可能缺失（路由参数无效等），空判避免崩溃
+      const episode = episodeList[episodeIndex]
+      if (episode && episode.videoUrl) {
+        this.videoUrl = episode.videoUrl as string
+      }
     },
     onVideoSpeedChanged: (videoSpeed: number) => {
       this.videoSpeed = videoSpeed;

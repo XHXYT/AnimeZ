@@ -101,6 +101,7 @@ export class M3U8DownloadTask extends GroupDownloadTask {
     let info = JSON.parse(text);
     this.videoInfo.pageLink = info.pageLink
     this.videoInfo.coverUrl = info.coverUrl
+    this.videoInfo.sourceKey = info.sourceKey
     this.videoInfo.m3u8 = info.m3u8
     Logger.d(this, 'doRestore videoInfo=' + JSON.stringify(this.videoInfo))
   }
@@ -120,7 +121,7 @@ export class M3U8DownloadTask extends GroupDownloadTask {
       })
       .catch((e) => {
         Logger.d(this, 'M3U8Utils e=' + JSON.stringify(e))
-        this.statusManager.onError(JSON.stringify(e))
+        this.statusManager.onError(this.getErrorMessage(e))
       })
   }
 
@@ -144,10 +145,13 @@ export class M3U8DownloadTask extends GroupDownloadTask {
     Logger.d(this, 'initTask saveVideoInfo result=' + result)
 
     // 解析真实的m3u8链接
-    this.taskInfo.url = await dataSourceManager.getDataSource(this.videoInfo.sourceKey)
-      .parseVideoUrl(this.taskInfo.originalUrl)
+    this.taskInfo.url = await dataSourceManager.parseVideoUrl(this.taskInfo.originalUrl, this.videoInfo.sourceKey)
     Logger.d(this, 'initTask url=' + this.taskInfo.url)
     if (this.taskInfo.url) {
+      if (this.taskInfo.url.includes('_|_')) {
+        // 该类链接需要WebView网页交互解析出真实播放地址，后台下载任务无法获取
+        throw new Error('该视频源需要网页解析播放地址，暂不支持离线缓存')
+      }
       // 初始化m3u8信息
       return await this.initM3u8()
     }
@@ -161,8 +165,15 @@ export class M3U8DownloadTask extends GroupDownloadTask {
     if (this.taskInfo.prepared) {
       return 0
     }
-    // m3u8解析
-    this.videoInfo.m3u8 = await M3U8Utils.parse(null, this.taskInfo.url)
+    // 探测内容类型：m3u8播放列表 或 直链媒体文件（mp4等）
+    let content = await M3U8Utils.fetchM3U8Content(this.taskInfo.url)
+    if (content != null) {
+      // m3u8解析
+      this.videoInfo.m3u8 = await M3U8Utils.parse(null, this.taskInfo.url, content)
+    } else {
+      // 直链媒体文件：构造单分片m3u8，复用分片下载与本地播放链路
+      this.videoInfo.m3u8 = M3U8Utils.buildSingleSegmentM3u8(this.taskInfo.url)
+    }
     Logger.d(this, 'initM3u8 videoInfo=' + JSON.stringify(this.videoInfo))
 
     if (!this.videoInfo.m3u8 || this.videoInfo.m3u8.segmentList.length == 0) {
@@ -195,7 +206,7 @@ export class M3U8DownloadTask extends GroupDownloadTask {
         this.childTaskManager.startAll()
       })
       .catch((e) => {
-        this.statusManager.onError(JSON.stringify(e))
+        this.statusManager.onError(this.getErrorMessage(e))
       })
   }
 

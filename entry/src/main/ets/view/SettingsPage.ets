@@ -10,6 +10,8 @@ import Logger from '../utils/Logger'
 import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
 import { AnimeState } from '../entryability/AnimeState'
 import { PiPManager } from '../player/PiPManager'
+import { DownloadDirHelper, DownloadLocationType } from '../utils/DownloadDirHelper'
+import { ToastUtil } from '../utils/ToastUtils'
 
 // 系统路由
 @Builder
@@ -95,9 +97,45 @@ struct SettingsPage {
           appSettings.video_source_import_overwrite = value as boolean
         }
       }),
+      new CustomItemInfo({
+        id: 'download_location',
+        title: '下载保存位置',
+        subtitle: '新任务保存位置，不影响已有任务',
+        type: ItemActionType.MENU,
+        value: appSettings.download_location,
+        menuOptions: [
+          new MenuOption('sandbox', '应用沙箱目录'),
+          new MenuOption('public', '公共下载目录')
+        ],
+        onChange: (value) => {
+          if (value === DownloadLocationType.PUBLIC) {
+            if (DownloadDirHelper.ensurePublicDir(this.context)) {
+              appSettings.download_location = DownloadLocationType.PUBLIC
+              ToastUtil.showToast({ message: '新任务将下载到公共下载目录(Download/应用包名)' })
+            } else {
+              ToastUtil.showToast({ message: '公共下载目录不可用，仍使用应用沙箱目录' })
+            }
+          } else {
+            appSettings.download_location = DownloadLocationType.SANDBOX
+            ToastUtil.showToast({ message: '新任务将下载到应用沙箱目录' })
+          }
+          // 刷新列表选中态（公共目录不可用时回显沙箱）
+          this.listVersion++
+          this.groups = makeItemGroups(this.itemList)
+        }
+      }),
 
       // 播放组
       new CustomItemInfo({ id: 'group_play', title: '播放', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'player_control',
+        title: '播放控制',
+        subtitle: '快捷手势与键盘快捷键',
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("PlayerControlSettingsPage", '')
+        }
+      }),
       new CustomItemInfo({
         id: 'default_player',
         title: '默认播放器',
@@ -165,6 +203,77 @@ struct SettingsPage {
         value: appSettings.auto_pip_on_exit,
         onChange: (value) => {
           appSettings.auto_pip_on_exit = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'danmaku_enabled',
+        title: '弹幕开关',
+        subtitle: '通过弹弹play按标题自动匹配',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.danmaku_enabled,
+        onChange: (value) => {
+          appSettings.danmaku_enabled = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'danmaku_opacity',
+        title: '弹幕不透明度',
+        type: ItemActionType.MENU,
+        value: String(appSettings.danmaku_opacity),
+        menuOptions: [
+          new MenuOption('0.25', '25%'),
+          new MenuOption('0.5', '50%'),
+          new MenuOption('0.75', '75%'),
+          new MenuOption('1', '100%')
+        ],
+        onChange: (value) => {
+          appSettings.danmaku_opacity = Number(value)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'danmaku_font_scale',
+        title: '弹幕字体大小',
+        type: ItemActionType.MENU,
+        value: String(appSettings.danmaku_font_scale),
+        menuOptions: [
+          new MenuOption('0.5', '50%'),
+          new MenuOption('0.75', '75%'),
+          new MenuOption('1', '100%'),
+          new MenuOption('1.25', '125%'),
+          new MenuOption('1.5', '150%')
+        ],
+        onChange: (value) => {
+          appSettings.danmaku_font_scale = Number(value)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'danmaku_speed',
+        title: '弹幕滚动速度',
+        type: ItemActionType.MENU,
+        value: String(appSettings.danmaku_speed),
+        menuOptions: [
+          new MenuOption('0.5', '0.5x'),
+          new MenuOption('1', '1x'),
+          new MenuOption('1.5', '1.5x'),
+          new MenuOption('2', '2x')
+        ],
+        onChange: (value) => {
+          appSettings.danmaku_speed = Number(value)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'danmaku_area',
+        title: '弹幕显示区域',
+        type: ItemActionType.MENU,
+        value: String(appSettings.danmaku_area),
+        menuOptions: [
+          new MenuOption('1', '全部'),
+          new MenuOption('0.75', '3/4'),
+          new MenuOption('0.5', '半屏'),
+          new MenuOption('0.25', '1/4')
+        ],
+        onChange: (value) => {
+          appSettings.danmaku_area = Number(value)
         }
       }),
 

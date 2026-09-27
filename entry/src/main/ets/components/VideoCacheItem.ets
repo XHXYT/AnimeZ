@@ -6,6 +6,8 @@ import EpisodeInfo from '../entity/EpisodeInfo'
 import Logger from '../utils/Logger'
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import { ToastUtil } from '../utils/ToastUtils';
+import { common } from '@kit.AbilityKit';
+import { DownloadDirHelper } from '../utils/DownloadDirHelper';
 
 @ComponentV2
 export struct VideoCacheItem {
@@ -102,9 +104,10 @@ export struct VideoCacheItem {
           .with(this.episodeInfo.link)
           .setPageLink(this.videoDetailInfo.url)
           .setCoverUrl(this.videoDetailInfo.coverUrl)
+          .setSourceKey(this.videoDetailInfo.sourceKey)
           .setTaskName(this.episodeInfo.desc)
           .setFileName('index.m3u8')
-          .setDownloadDir(this.getUIContext().getHostContext()!.filesDir + "/download/")
+          .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext))
           .build()
         this.downloadTask.start()
       } else {

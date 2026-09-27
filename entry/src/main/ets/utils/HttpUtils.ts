@@ -1,4 +1,3 @@
-import Logger from './Logger';
 import http from '@ohos.net.http';
 import { parse } from './thirdpart/htmlsoup';
 import { AnyNode } from './thirdpart/htmlsoup/parse';
@@ -47,10 +46,9 @@ export default class HttpUtils {
             expectDataType: http.HttpDataType.STRING,
             header: header
         })
-        // Logger.d('HttpUtils.getString', `响应Code = ${resp.responseCode}`)
+        httpRequest.destroy()
         if (resp.result) {
-           Logger.d('HttpUtils.getString', 'resp.result = ' + JSON.stringify(resp.result, null, 2).includes('art-video'))
-           return resp.result as string
+            return resp.result as string
         } else {
             throw new Error(resp.responseCode.toString())
         }
@@ -81,6 +79,7 @@ export default class HttpUtils {
             header: header,
             extraData: body
         })
+        httpRequest.destroy()
         if (resp.result) {
             return resp.result as string
         } else {

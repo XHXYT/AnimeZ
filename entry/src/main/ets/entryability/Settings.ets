@@ -3,6 +3,7 @@ import { SortType } from "../viewmodel/VideoSourcesViewModel"
 import { preferenceUtil } from "../utils/PreferenceUtil"
 import Logger from "../utils/Logger"
 import { _AnimeState } from "./AnimeState"
+import { VideoFit } from "../player/model/IPlayerManager"
 
 const SETTINGS_KEY = 'app_settings'
 
@@ -97,6 +98,22 @@ export class AppConfigs {
    */
   @Trace danmaku_area: number = 1.0
   /**
+   * 画面尺寸（VideoFit），默认为 适应
+   */
+  @Trace video_fit: VideoFit = VideoFit.Contain
+  /**
+   * 双击播放器右侧区域快进的秒数，默认 10 秒
+   */
+  @Trace double_tap_seek_forward: number = 10
+  /**
+   * 双击播放器左侧区域快退的秒数，默认 10 秒
+   */
+  @Trace double_tap_seek_rewind: number = 10
+  /**
+   * 播放器键盘快捷键覆盖（JSON Record<string, number>，空串=全部默认值）
+   */
+  @Trace player_shortcuts: string = ''
+  /**
    * 搜索：精准搜索（勾选后仅保留标题与关键词完全一致的结果，否则模糊匹配）
    */
   @Trace search_precise: boolean = false
@@ -120,6 +137,10 @@ export class AppConfigs {
    * 搜索：结果展示样式 card=卡片 list=列表 auto=自动（按源扩展字段多数判定）
    */
   @Trace search_result_style: string = 'auto'
+  /**
+   * 下载保存位置 sandbox=应用沙箱目录 public=公共下载目录(Download/包名/)
+   */
+  @Trace download_location: string = 'sandbox'
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -176,12 +197,17 @@ export class AppConfigs {
     this.danmaku_font_scale = (json["danmaku_font_scale"] as number) ?? this.danmaku_font_scale
     this.danmaku_speed = (json["danmaku_speed"] as number) ?? this.danmaku_speed
     this.danmaku_area = (json["danmaku_area"] as number) ?? this.danmaku_area
+    this.video_fit = (json["video_fit"] as VideoFit) ?? this.video_fit
+    this.double_tap_seek_forward = (json["double_tap_seek_forward"] as number) ?? this.double_tap_seek_forward
+    this.double_tap_seek_rewind = (json["double_tap_seek_rewind"] as number) ?? this.double_tap_seek_rewind
+    this.player_shortcuts = (json["player_shortcuts"] as string) ?? this.player_shortcuts
     this.search_precise = (json["search_precise"] as boolean) ?? this.search_precise
     this.search_block_words = (json["search_block_words"] as string) ?? this.search_block_words
     this.search_scope = (json["search_scope"] as string) ?? this.search_scope
     this.search_scope_groups = (json["search_scope_groups"] as string) ?? this.search_scope_groups
     this.search_scope_sources = (json["search_scope_sources"] as string) ?? this.search_scope_sources
     this.search_result_style = (json["search_result_style"] as string) ?? this.search_result_style
+    this.download_location = (json["download_location"] as string) ?? this.download_location
   }
 
   /**
@@ -231,8 +257,9 @@ export class AppConfigs {
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
     'video_source_import_overwrite', 'auto_pip_on_exit',
     'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_speed', 'danmaku_area',
+    'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
-    'search_result_style')
+    'search_result_style', 'download_location')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -260,12 +287,17 @@ export class AppConfigs {
         "danmaku_font_scale": this.danmaku_font_scale,
         "danmaku_speed": this.danmaku_speed,
         "danmaku_area": this.danmaku_area,
+        "video_fit": this.video_fit,
+        "double_tap_seek_forward": this.double_tap_seek_forward,
+        "double_tap_seek_rewind": this.double_tap_seek_rewind,
+        "player_shortcuts": this.player_shortcuts,
         "search_precise": this.search_precise,
         "search_block_words": this.search_block_words,
         "search_scope": this.search_scope,
         "search_scope_groups": this.search_scope_groups,
         "search_scope_sources": this.search_scope_sources,
-        "search_result_style": this.search_result_style
+        "search_result_style": this.search_result_style,
+        "download_location": this.download_location
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -299,12 +331,17 @@ export class AppConfigs {
     this.danmaku_font_scale = 1.0
     this.danmaku_speed = 1.0
     this.danmaku_area = 1.0
+    this.video_fit = VideoFit.Contain
+    this.double_tap_seek_forward = 10
+    this.double_tap_seek_rewind = 10
+    this.player_shortcuts = ''
     this.search_precise = false
     this.search_block_words = ''
     this.search_scope = 'all'
     this.search_scope_groups = ''
     this.search_scope_sources = ''
     this.search_result_style = 'auto'
+    this.download_location = 'sandbox'
     this.isLoading = false
     await this.save()
   }

@@ -22,6 +22,8 @@ import { common } from '@kit.AbilityKit';
 import { DanmakuLayer } from '../danmaku/DanmakuLayer';
 import { DanmakuController } from '../danmaku/DanmakuController';
 import { DanmakuLoadResult, DanmakuLoadStatus } from '../danmaku/DandanplayApi';
+import { MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
+import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findActionByKeyCode } from '../utils/PlayerShortcuts';
 
 interface KeyValue {
   name: string,
@@ -36,6 +38,17 @@ class PlayerOption {
   constructor(name: string, value: string) {
     this.name = name
     this.value = value
+  }
+}
+
+/** 快捷手势说明条目 */
+class GestureGuideItem {
+  name: string = ''
+  desc: string = ''
+
+  constructor(name: string, desc: string) {
+    this.name = name
+    this.desc = desc
   }
 }
 
@@ -79,7 +92,8 @@ enum PanelType {
   NONE = 0,
   SPEED = 1,
   EPISODES = 2,
-  PLAYER_SETTINGS = 3
+  PLAYER_SETTINGS = 3,
+  GESTURE_HELP = 4
 
 }
 
@@ -177,6 +191,9 @@ export struct VideoPlayerController {
   /** @description 本次手势起点落在控制栏区域内，屏蔽手势 */
   private gestureBlocked: boolean = false
 
+  /** @description 键盘按住中的按键（防按住自动重复触发） */
+  private heldKeyCodes: Set<number> = new Set<number>()
+
   private readonly playerListenerVC: PlayerListener = {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
@@ -248,6 +265,8 @@ export struct VideoPlayerController {
     onFullScreenChanged: (isFullScreen: boolean) => {
       console.log('VideoPlayerController #onFullScreenChanged isFullScreen：', isFullScreen)
       this.isFullScreen = isFullScreen
+      // 全屏切换后重新持有焦点，保证键盘快捷键可用
+      this.requestPlayerFocus()
     },
     onVideoSizeChange: (w: number, h: number) => {
     },
@@ -472,39 +491,44 @@ export struct VideoPlayerController {
       GestureGroup(GestureMode.Exclusive,
         TapGesture({ count: 2 })
           .onAction((event: GestureEvent) => {
-            // 双击切换播放/暂停：锁定或右侧面板打开时禁用
+            // 双击快进/快退/播放暂停：锁定或右侧面板打开时禁用
             if (this.isLocked || this.showPanel) {
               return
             }
-            // 控制层可见时，上/下控制栏区域内不触发（留 10px 容差）
-            if (this.isInControlBarArea(event.fingerList[0]?.localY ?? 0)) {
+            // 播放出错/结束时禁用
+            if (this.isGestureDisabledByStatus()) {
               return
             }
-            this.togglePlayPause()
+            const x = event.fingerList[0]?.localX ?? 0
+            const y = event.fingerList[0]?.localY ?? 0
+            // 控制层可见时，上/下控制栏区域内不触发（留 10px 容差）
+            if (this.isInControlBarArea(y)) {
+              return
+            }
+            // 屏幕三等分：左1/3双击快退，右1/3双击快进（秒数可在播放设置与全局设置中调整），中间双击切换播放/暂停
+            const third = this.playerControllerArea.width / 3
+            if (x < third) {
+              this.seekByDoubleTap(true)
+            } else if (x > third * 2) {
+              this.seekByDoubleTap(false)
+            } else {
+              this.togglePlayPause()
+            }
           }),
         TapGesture({ count: 1 })
           .onAction(() => {
             if (this.showPanel) {
               return
             }
-            // 暂停态单击不隐藏控制层，保持常显
-            if (this.isCenterPauseMarkVisible()) {
-              this.showController = true
-              this.closeController()
-              return
-            }
-            this.showController = !this.showController;
-            if (this.showController) {
-              // 控制层出现后启动 5 秒无操作自动隐藏
-              this.closeController()
-            } else if (this.showControllerTimer >= 0) {
-              clearTimeout(this.showControllerTimer)
-              this.showControllerTimer = -1
-            }
+            this.toggleControllerVisibility()
           })
       )
     )
-    .onTouch(() => {
+    .onTouch((event: TouchEvent) => {
+      // 触摸播放区（含子组件）时确保控制层根节点持有焦点，键盘快捷键可用
+      if (event.type === TouchType.Down) {
+        this.requestPlayerFocus()
+      }
       // 控制层可见期间的任意触摸（含子组件）都重置自动隐藏计时
       if (this.showController && !this.showPanel) {
         this.closeController()
@@ -517,6 +541,14 @@ export struct VideoPlayerController {
         height: newValue.height as number
       }
     })
+    .id('playerControllerRoot')
+    .focusable(true)
+    .focusOnTouch(true)
+    .onAppear(() => {
+      // 首次挂载即持有焦点，外接键盘可直接使用快捷键
+      this.requestPlayerFocus()
+    })
+    .onKeyEventDispatch((event: KeyEvent): boolean => this.handlePlayerKeyEvent(event))
     .gesture(
       PanGesture({ direction: PanDirection.All })
         .onActionStart((event: GestureEvent) => {
@@ -711,6 +743,43 @@ export struct VideoPlayerController {
     return `快退 ${-deltaSec} 秒`
   }
 
+  /** 双击左/右半区：快退/快进指定秒数（秒数可在播放设置与全局设置中调整） */
+  private seekByDoubleTap(isRewind: boolean): void {
+    const duration = this.effectiveDuration()
+    if (duration <= 0) {
+      return
+    }
+    const deltaSec = isRewind ? appSettings.double_tap_seek_rewind : appSettings.double_tap_seek_forward
+    if (deltaSec <= 0) {
+      return
+    }
+    const basePos = this.isCasting ? this.castLastPos : this.playerManager.getCurrentPosition()
+    const target = this.getValidValue(basePos + (isRewind ? -deltaSec : deltaSec) * 1000, 0, duration)
+    if (target == basePos) {
+      return
+    }
+    if (this.isCasting) {
+      this.castLastPos = target
+      this.castManager.seek(target)
+    } else {
+      this.playerManager.seekTo(target)
+      this.danmakuCtrl.onSeek(target, this.isPlayingNow())
+    }
+    // 立即刷新进度显示，并短暂显示快进/快退提示浮层
+    this.seekDragStartPos = basePos
+    this.seekPreviewPos = target
+    this.progress = target / duration * 100
+    this.currentTime = VideoTimeUtils.stringForTime(target)
+    this.isSeekDragging = true
+    if (this.seekOverlayTimer >= 0) {
+      clearTimeout(this.seekOverlayTimer)
+    }
+    this.seekOverlayTimer = setTimeout(() => {
+      this.isSeekDragging = false
+      this.seekOverlayTimer = -1
+    }, 600)
+  }
+
   /** 长按左半屏：以 2x 速率连续快退（播放器不支持倒放，用循环后退跳转实现） */
   private startRewind() {
     if (this.isCasting) {
@@ -809,6 +878,116 @@ export struct VideoPlayerController {
       this.playerManager.pause()
     } else if (this.playerStatus == PlayerStatus.PAUSE) {
       this.playerManager.start()
+    }
+  }
+
+  /** 单击/快捷键：切换控制层显示隐藏（暂停态保持常显） */
+  private toggleControllerVisibility(): void {
+    // 暂停态不隐藏控制层，保持常显
+    if (this.isCenterPauseMarkVisible()) {
+      this.showController = true
+      this.closeController()
+      return
+    }
+    this.showController = !this.showController;
+    if (this.showController) {
+      // 控制层出现后启动 5 秒无操作自动隐藏
+      this.closeController()
+    } else if (this.showControllerTimer >= 0) {
+      clearTimeout(this.showControllerTimer)
+      this.showControllerTimer = -1
+    }
+  }
+
+  /** 请求播放器控制层根节点获得焦点（键盘快捷键依赖焦点接收按键） */
+  private requestPlayerFocus(): void {
+    try {
+      this.getUIContext().getFocusController().requestFocus('playerControllerRoot')
+    } catch (e) {
+      Logger.e('fail', 'requestFocus playerControllerRoot', e)
+    }
+  }
+
+  /** 键盘快捷键分发：锁定/右侧面板打开时不拦截；绑定键返回 true 消费事件 */
+  private handlePlayerKeyEvent(event: KeyEvent): boolean {
+    if (this.isLocked || this.showPanel) {
+      return false
+    }
+    const action: string = findActionByKeyCode(event.keyCode)
+    if (action === '') {
+      return false
+    }
+    // 播放出错/结束时与手势保持一致：仅保留控制层与全屏切换
+    if (this.isGestureDisabledByStatus()
+      && action !== 'toggle_controller' && action !== 'toggle_fullscreen') {
+      return false
+    }
+    if (event.type === KeyType.Down) {
+      // 按住产生的重复 Down 事件只处理一次
+      if (this.heldKeyCodes.has(event.keyCode)) {
+        return true
+      }
+      this.heldKeyCodes.add(event.keyCode)
+      this.executeShortcut(action)
+    } else {
+      this.heldKeyCodes.delete(event.keyCode)
+      if (action === 'rewind_hold') {
+        this.stopRewind()
+      } else if (action === 'speed_boost') {
+        this.stopSpeedBoost()
+      }
+    }
+    return true
+  }
+
+  /** 执行快捷键动作 */
+  private executeShortcut(action: string): void {
+    if (action === 'play_pause') {
+      this.togglePlayPause()
+    } else if (action === 'seek_forward') {
+      this.seekByDoubleTap(false)
+    } else if (action === 'seek_rewind') {
+      this.seekByDoubleTap(true)
+    } else if (action === 'rewind_hold') {
+      this.startRewind()
+    } else if (action === 'speed_boost') {
+      this.startSpeedBoost()
+    } else if (action === 'volume_up') {
+      this.adjustVolumeByStep(1)
+    } else if (action === 'volume_down') {
+      this.adjustVolumeByStep(-1)
+    } else if (action === 'brightness_up') {
+      this.adjustBrightnessByStep(0.05)
+    } else if (action === 'brightness_down') {
+      this.adjustBrightnessByStep(-0.05)
+    } else if (action === 'toggle_controller') {
+      this.toggleControllerVisibility()
+    } else if (action === 'toggle_fullscreen') {
+      this.toggleFullScreenByKey()
+    }
+  }
+
+  /** 键盘步进调节音量（0-15，联动音量面板） */
+  private adjustVolumeByStep(delta: number): void {
+    this.isLeftSideGesture = false
+    this.volume = this.getValidValue(this.volume + delta, 0, 15)
+  }
+
+  /** 键盘步进调节亮度（0-1，步进 0.05，联动亮度面板） */
+  private adjustBrightnessByStep(delta: number): void {
+    this.screenBrightness = this.getValidValue(this.screenBrightness + delta, 0.0, 1.0)
+    this.setScreenBrightness(this.screenBrightness)
+    this.isLeftSideGesture = true
+    this.isVolumeAndBrightnessVisible = true
+    this.setHidePanelTimer()
+  }
+
+  /** 快捷键切换全屏 */
+  private toggleFullScreenByKey(): void {
+    if (this.playerManager.isFullScreen()) {
+      this.playerManager.exitFullScreen()
+    } else {
+      this.playerManager.enterFullScreen()
     }
   }
 
@@ -987,6 +1166,16 @@ export struct VideoPlayerController {
                 return
               }
               PiPManager.requestPiP()
+            })
+        }
+        // 快捷手势说明（仅全屏，点击查看手势区域示意并可直接调整双击快进/快退秒数）
+        if (this.isFullScreen) {
+          SymbolGlyph($r('sys.symbol.questionmark_circle'))
+            .fontSize(24)
+            .fontColor([Color.White])
+            .margin({ left: 24 })
+            .onClick(() => {
+              this.showRightPanel(PanelType.GESTURE_HELP)
             })
         }
         // 播放设置
@@ -1280,6 +1469,8 @@ export struct VideoPlayerController {
           this.EpisodeList()
         } else if (this.rightPanelType == PanelType.PLAYER_SETTINGS) {
           this.PlayerSettings()
+        } else if (this.rightPanelType == PanelType.GESTURE_HELP) {
+          this.GestureHelpPanel()
         }
       }
     }
@@ -1456,6 +1647,8 @@ export struct VideoPlayerController {
                 //              })
               .maxLines(1)
               .onClick(() => {
+                // 同步持久化到全局设置，下次进入播放页沿用
+                appSettings.video_fit = item.value
                 this.playerManager.setVideoFit(item.value)
               })
           })
@@ -1644,6 +1837,151 @@ export struct VideoPlayerController {
     .backgroundColor('#80000000')
   }
 
+  /** 快捷手势说明条目（实时读取双击快进/快退秒数设置） */
+  private get gestureGuides(): GestureGuideItem[] {
+    return [
+      new GestureGuideItem('单击', '显示 / 隐藏控制层'),
+      new GestureGuideItem('双击左侧 1/3', `快退 ${appSettings.double_tap_seek_rewind} 秒`),
+      new GestureGuideItem('双击中间 1/3', '播放 / 暂停'),
+      new GestureGuideItem('双击右侧 1/3', `快进 ${appSettings.double_tap_seek_forward} 秒`),
+      new GestureGuideItem('长按左半屏', '2X 连续快退'),
+      new GestureGuideItem('长按右半屏', '3X 临时倍速'),
+      new GestureGuideItem('横向拖动', '调节播放进度'),
+      new GestureGuideItem('左半屏上下拖动', '调节亮度'),
+      new GestureGuideItem('右半屏上下拖动', '调节音量')
+    ]
+  }
+
+  /** 键盘快捷键说明条目（实时读取快捷键配置，可在 设置-播放控制 中修改） */
+  private get shortcutGuides(): GestureGuideItem[] {
+    return SHORTCUT_DEFS.map((def: ShortcutDef): GestureGuideItem =>
+      new GestureGuideItem(def.label, PlayerShortcuts.getShortcutLabel(def.action)))
+  }
+
+  /** 快捷手势说明面板：展示手势区域示意，并可直接调整双击快进/快退秒数 */
+  @Builder GestureHelpPanel() {
+    Scroll() {
+      Column({ space: this.isFullScreen ? 16 : 8 }) {
+        Text('快捷手势')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        ForEach(this.gestureGuides, (item: GestureGuideItem) => {
+          Row() {
+            Text(item.name)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .maxLines(1)
+            Blank()
+            Text(item.desc)
+              .fontColor('#99ffffff')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .maxLines(1)
+              .margin({ left: 12 })
+          }
+          .width('100%')
+        }, (item: GestureGuideItem) => `${item.name}_${item.desc}`)
+
+        Divider()
+          .strokeWidth(1)
+          .color('#33ffffff')
+          .margin({ top: 4, bottom: 4 })
+
+        Text('双击快进秒数')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
+          ForEach(makeSeekSecondsOptions(), (item: MenuOption) => {
+            Text(item.title ?? item.value)
+              .textAlign(TextAlign.Center)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .padding(6)
+              .backgroundColor((appSettings.double_tap_seek_forward == Number(item.value))
+                ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .borderRadius(4)
+              .margin({ bottom: 8 })
+              .width('33%')
+              .maxLines(1)
+              .onClick(() => {
+                appSettings.double_tap_seek_forward = Number(item.value)
+              })
+          }, (item: MenuOption) => item.value)
+        }
+        .width('100%')
+
+        Text('双击快退秒数')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
+          ForEach(makeSeekSecondsOptions(), (item: MenuOption) => {
+            Text(item.title ?? item.value)
+              .textAlign(TextAlign.Center)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .padding(6)
+              .backgroundColor((appSettings.double_tap_seek_rewind == Number(item.value))
+                ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .borderRadius(4)
+              .margin({ bottom: 8 })
+              .width('33%')
+              .maxLines(1)
+              .onClick(() => {
+                appSettings.double_tap_seek_rewind = Number(item.value)
+              })
+          }, (item: MenuOption) => item.value)
+        }
+        .width('100%')
+
+        Divider()
+          .strokeWidth(1)
+          .color('#33ffffff')
+          .margin({ top: 4, bottom: 4 })
+
+        Text('键盘快捷键')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        ForEach(this.shortcutGuides, (item: GestureGuideItem) => {
+          Row() {
+            Text(item.name)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .maxLines(1)
+            Blank()
+            Text(item.desc)
+              .fontColor('#99ffffff')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .maxLines(1)
+              .margin({ left: 12 })
+          }
+          .width('100%')
+        }, (item: GestureGuideItem) => `${item.name}_${item.desc}`)
+
+        Text('快捷键可在 设置 - 播放控制 中修改')
+          .fontSize(this.isFullScreen ? 10 : 9)
+          .fontColor('#66ffffff')
+          .width('100%')
+      }
+      .padding(this.isFullScreen ? 16 : 8)
+      .width('100%')
+      .constraintSize({
+        minHeight: '100%'
+      })
+    }
+    .edgeEffect(EdgeEffect.Spring)
+    .height('100%')
+    .width(this.isFullScreen ? '30%' : '45%')
+    .scale({ x: this.rightPanelScale, centerX: '100%' })
+    .backgroundColor('#80000000')
+  }
+
   /**
    * 自动全屏开关联动窗口方向：
    * 开启 → 跟随传感器旋转（横屏时由媒体查询自动触发全屏）；
@@ -1721,6 +2059,8 @@ export struct VideoPlayerController {
           this.rightPanelType = PanelType.NONE
           // 控制层重新出现，启动 5 秒无操作自动隐藏
           this.closeController()
+          // 面板关闭后重新持有焦点，键盘快捷键继续可用
+          this.requestPlayerFocus()
         }
       },
       () => {

@@ -9,6 +9,7 @@ import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel } from './AppContinueModel';
 import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
 import { AnimeState } from '../entryability/AnimeState';
+import { appSettings } from '../entryability/Settings';
 
 /**
  * 播放器管理（总）
@@ -27,6 +28,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private totalTime: number = 0
   private currentTime: number = 0
   private videoSpeed: number = 1.0
+  /** 当前画面尺寸：初始取全局设置，播放中变更时暂存，新监听者注册时下发 */
+  private videoFit: VideoFit = appSettings.video_fit
 
   private playAfterInit: boolean = false
 
@@ -304,6 +307,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   setVideoFit(videoFit: VideoFit) {
+    this.videoFit = videoFit
     this.listeners.forEach((l) => {
       l.onVideoFitChanged(videoFit)
     })
@@ -398,6 +402,13 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
     if (this.episodeList.length != 0) {
       listener.onEpisodeChanged(this.episodeList, this.episodeIndex)
+    }
+    // 下发当前画面尺寸（初始来自全局设置），保证新挂载的播放器后端/面板立即同步
+    listener.onVideoFitChanged(this.videoFit)
+    // 仅在全屏中回放：切换播放器后端时新挂载的组件/控制层错过 enterFullScreen 事件，
+    // 需同步全屏状态；非全屏时不回放，避免页面级监听者（如退出全屏即 pop）被误触发
+    if (this.fullScreenMode) {
+      listener.onFullScreenChanged(true)
     }
   }
 

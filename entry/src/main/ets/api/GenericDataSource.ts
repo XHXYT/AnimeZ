@@ -10,7 +10,6 @@ import HttpUtils from '../utils/HttpUtils';
 import DataSource from './DataSource';
 import {
   select,
-  selectAttributeValue,
   selectFirst,
   selectTextContent,
   textContent,
@@ -24,6 +23,7 @@ import { ScriptProcessor } from './ScriptProcessor';
 import AuthStore from '../utils/AuthStore';
 import HttpSession from '../utils/HttpSession';
 import { CaptchaBridge } from './CaptchaBridge';
+import { homepageBannerParseInTask, homepageCardParseInTask, parseHomepageInTask } from './HomepageParseTask';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
 
@@ -234,17 +234,21 @@ export default class GenericDataSource implements DataSource {
         return { bannerList, categoryList };
       }
 
-      console.log(`获取主页配置：${JSON.stringify(config)}`)
-      const doc = await this.parseHtml(this.baseUrl)
-      console.log(`网页doc已获取`)
+      // HTML 模式：网络请求留在主线程（异步不阻塞 UI），
+      // parse + 字段提取整体移入 taskpool 子线程，避免大页面解析卡住主线程
+      const cards = config.category?.cards;
+      const homepageHtml = await HttpUtils.getString(this.baseUrl);
+      if (cards && cards.length > 0) {
+        // 卡片模式：每个卡片独立请求自己的页面，解析在子线程
+        const [bannerList, categoryList] = await Promise.all([
+          homepageBannerParseInTask(homepageHtml, this.baseUrl, this.key, config.banner),
+          Promise.all(cards.map(card => this.processHtmlCategoryCard(card)))
+        ]);
+        return { bannerList, categoryList };
+      }
 
-      // 并行处理banner和category
-      const [bannerList, categoryList] = await Promise.all([
-        this.extractBannerList(doc, config.banner),
-        this.extractHtmlCategoryList(doc, config.category)
-      ]);
-
-      return { bannerList, categoryList };
+      // 同页模式：banner 与分类在同一首页文档中
+      return await parseHomepageInTask(homepageHtml, this.baseUrl, this.key, config.banner, config.category);
     } catch (e) {
       Logger.e('fail', `获取主页数据`, e);
       throw e;
@@ -641,38 +645,8 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
-   * 提取Banner列表
-   */
-  private async extractBannerList(doc: AnyNode, config: VideoConfig): Promise<VideoInfo[]> {
-    if (!config) return [];
-
-    const list = select(doc, config.listSelector);
-    console.log(`解析到的BannerList数目：${list.length}`)
-
-    // 并行处理所有banner项
-    const bannerPromises = list.map(async (li) => {
-      return await this.extractVideoInfo(li, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
-    });
-
-    return await Promise.all(bannerPromises);
-  }
-
-  /**
-   * HTML 模式：提取分类列表
-   * 配置了 cards 时每个卡片独立请求自己的页面；否则回退到首页同页解析
-   */
-  private async extractHtmlCategoryList(doc: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList[]> {
-    const cards = categoriesConfig?.cards;
-    if (cards && cards.length > 0) {
-      return await Promise.all(cards.map(card => this.processHtmlCategoryCard(card)));
-    }
-    return await this.extractCategoryList(doc, categoriesConfig);
-  }
-
-  /**
-   * HTML 模式：处理单个分类卡片（独立请求卡片页面并解析列表）
-   * 失败或解析为空时重试一次（站点偶发限流/超时导致卡片空白）；
-   * 配置 maxItems 时在解析前截断条目，减少主页解析与渲染耗时
+   * HTML 模式：处理单个分类卡片（请求留在主线程，页面解析在 taskpool 子线程）
+   * 失败或解析为空时重试一次（站点偶发限流/超时导致卡片空白）
    */
   private async processHtmlCategoryCard(card: CategoryCardConfig): Promise<DramaList> {
     let videoList: VideoInfo[] = [];
@@ -680,16 +654,8 @@ export default class GenericDataSource implements DataSource {
     for (let attempt = 0; attempt < maxAttempts && videoList.length === 0; attempt++) {
       try {
         const pageUrl = card.url.includes('http') ? card.url : this.baseUrl + card.url;
-        const doc = await this.parseHtml(pageUrl);
-        const listSelector = card.listSelector || card.listPath || '';
-        let items = select(doc, listSelector);
-        if (card.maxItems && card.maxItems > 0 && items.length > card.maxItems) {
-          items = items.slice(0, card.maxItems);
-        }
-        videoList = await Promise.all(items.map(async (li) => {
-          return await this.extractVideoInfo(li, card.itemSelectors as ExtendedSelectorConfig,
-            card.urlNeedBaseUrl ?? true, card.enabledHttps ?? true);
-        }));
+        const html = await HttpUtils.getString(pageUrl);
+        videoList = await homepageCardParseInTask(html, this.baseUrl, this.key, card);
       } catch (e) {
         Logger.e('fail', `解析分类卡片(HTML): ${card.title}`, e);
         if (attempt < maxAttempts - 1) {
@@ -705,64 +671,6 @@ export default class GenericDataSource implements DataSource {
       title: card.title,
       moreUrl: moreUrl,
       videoList: videoList
-    };
-  }
-
-  /**
-   * 提取分类列表
-   */
-  private async extractCategoryList(doc: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList[]> {
-    if (!categoriesConfig) return [];
-
-    const titles = select(doc, categoriesConfig.titles);
-    const videoLists = select(doc, categoriesConfig.videoLists);
-    const count = Math.min(titles.length, videoLists.length);
-    console.log(`GenericDataSource.extractCategoryList 解析到的标题数：${titles.length}, 番剧列表数：${videoLists.length}, 最后取值：${count}`)
-
-    const categoryPromises = [];
-    for (let i = 0; i < count; i++) {
-      const title = titles[i];
-      const list = videoLists[i];
-
-      categoryPromises.push(this.processCategoryItem(title, list, categoriesConfig));
-    }
-
-    return await Promise.all(categoryPromises);
-  }
-
-  /**
-   * 处理单个分类项
-   */
-  private async processCategoryItem(title: AnyNode, list: AnyNode, categoriesConfig: CategoryConfig): Promise<DramaList> {
-    const lis = select(list, categoriesConfig.videos.listSelector);
-    console.log(`解析到CategoryList番剧数目：${lis.length}`)
-
-    // 并行处理所有视频项
-    const videoPromises = lis.map(async (li) => {
-      return await this.extractVideoInfo(li, categoriesConfig.videos.itemSelectors as ExtendedSelectorConfig, categoriesConfig.videos.urlNeedBaseUrl, categoriesConfig.videos.enabledHttps);
-    });
-
-    const videos = await Promise.all(videoPromises);
-
-    // 解析更多链接
-    let rawMoreUrl = await this.selectAttribute(title, categoriesConfig.moreUrl);
-    if (rawMoreUrl.startsWith('http://')) {
-      rawMoreUrl = 'https://' + rawMoreUrl.substring(7);
-    }
-
-    // 提取原始项标题
-    const rawTitle = await this.selectText(title, categoriesConfig.title);
-    console.log(`GenericDataSource.extractCategoryList 原始项标题: ${rawTitle}`)
-
-    // 使用更通用的正则表达式，同时处理开头和结尾的情况, 过滤掉"更多"等杂质
-    const cleanTitle = rawTitle.replace(/^\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*|\s*(更多|More|查看更多|View All|全部)\s*[»→...->>>>]*\s*$/g, '').trim();
-    console.log(`GenericDataSource.extractCategoryList 过滤后项标题: ${cleanTitle}`)
-
-    // 推送目录列表
-    return {
-      title: cleanTitle,
-      moreUrl: categoriesConfig.moreUrlNeedBaseUrl ? (this.baseUrl + rawMoreUrl) : rawMoreUrl,
-      videoList: videos
     };
   }
 

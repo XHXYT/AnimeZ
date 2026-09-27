@@ -113,13 +113,44 @@ export class DownloadViewModel {
   }
 
   /**
-   * 全部暂停/全部开始
+   * 全部开始：仅开始已暂停或失败的任务
    */
-  public toggleAll() {
-    if (this.canPauseAll) {
-      DOWNLOADER.pauseAll()
-    } else {
-      DOWNLOADER.startAll()
+  public startAll() {
+    this.tasks.forEach((task: M3U8DownloadTask) => {
+      let status = task.getStatus()
+      if (status == TaskStatus.PAUSED || status == TaskStatus.ERROR) {
+        task.start()
+      }
+    })
+  }
+
+  /**
+   * 全部暂停
+   */
+  public pauseAll() {
+    DOWNLOADER.pauseAll()
+  }
+
+  /**
+   * 重试所有失败任务
+   */
+  public retryAllFailedTasks() {
+    this.tasks.forEach((task: M3U8DownloadTask) => {
+      if (task.getStatus() == TaskStatus.ERROR) {
+        task.start()
+      }
+    })
+  }
+
+  /**
+   * 清空所有下载任务
+   */
+  public clearAllTasks() {
+    DOWNLOADER.tasks.slice().forEach((task: M3U8DownloadTask) => {
+      task.delete()
+    })
+    if (this.selectionManager.isSelectionMode()) {
+      this.selectionManager.toggleSelectionMode()
     }
   }
 

@@ -1,4 +1,5 @@
 import { media } from "@kit.MediaKit"
+import fs from '@ohos.file.fs'
 import Logger from "../../utils/Logger";
 import { IPlayer } from '../model/IPlayer';
 import IPlayerManager, { PlayerStatus } from "../model/IPlayerManager";
@@ -11,9 +12,23 @@ export class AVPlayerWrapper {
   private readonly avPlayer: media.AVPlayer
   private surfaceId: string = ''
   private playUrl: string = ''
+  /** 本地文件句柄：AVPlayer播放本地文件时独占fd，需保持打开直至reset/release */
+  private localFile: fs.File | null = null
 
   constructor(avPlayer: media.AVPlayer) {
     this.avPlayer = avPlayer
+  }
+
+  /** 关闭持有的本地文件句柄（播放器已reset/release后调用） */
+  private closeLocalFile() {
+    if (this.localFile) {
+      try {
+        fs.closeSync(this.localFile)
+      } catch (e) {
+        Logger.e('tips', 'closeLocalFile error: ' + JSON.stringify(e))
+      }
+      this.localFile = null
+    }
   }
 
   async init(manager: IPlayerManager, surfaceId: string): Promise<void> {
@@ -39,6 +54,29 @@ export class AVPlayerWrapper {
             this.avPlayer.url = fdUrl;
             Logger.e('tips', 'setDataSource from FD: ' + fdUrl);
             return;
+          }
+          // 本地沙箱文件：AVPlayer仅支持fd://，需打开文件句柄（播放期间独占fd）
+          if (urlOrFd.startsWith('/')) {
+            this.closeLocalFile()
+            const file = await fs.open(urlOrFd, fs.OpenMode.READ_ONLY)
+            this.localFile = file
+            this.playUrl = urlOrFd
+            if (urlOrFd.endsWith('.m3u8')) {
+              // 本地m3u8（官方指导-情况五）：fdUrl + APPLICATION_M3U8构造mediaSource。
+              // 注意：官方场景为m3u8内引用在线分片；本地分片能否解析依赖系统能力，失败会走error状态
+              const fdUrl = `fd://${file.fd}?offset=0&size=0`
+              const headers: Record<string, string> = {}
+              const mediaSource: media.MediaSource = media.createMediaSourceWithUrl(fdUrl, headers)
+              mediaSource.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
+              const playbackStrategy: media.PlaybackStrategy = { preferredBufferDuration: 20 }
+              await this.avPlayer.setMediaSource(mediaSource, playbackStrategy)
+              Logger.e('tips', 'setDataSource from local m3u8: ' + urlOrFd + ' -> ' + fdUrl)
+              return
+            }
+            const fdUrl = `fd://${file.fd}`
+            this.avPlayer.url = fdUrl
+            Logger.e('tips', 'setDataSource from local file: ' + urlOrFd + ' -> ' + fdUrl)
+            return
           }
           // 网络视频，统一使用 avPlayer.url
           Logger.d('setDataSource from URL (Official Way): ' + urlOrFd);
@@ -89,13 +127,18 @@ export class AVPlayerWrapper {
       },
       reset: async () => {
         Logger.e('tips', 'setDataSource reset')
-        return this.avPlayer.reset().catch(() => {
+        return this.avPlayer.reset().then(() => {
+          // reset后播放器不再占用本地fd，及时释放
+          this.closeLocalFile()
+        }).catch(() => {
           console.log(`AVPlayer 视频重置失败`)
         })
       },
       release: async () => {
         Logger.e('tips', 'setDataSource release')
-        return this.avPlayer.release().catch(() => {
+        return this.avPlayer.release().then(() => {
+          this.closeLocalFile()
+        }).catch(() => {
           console.log(`AVPlayer 资源释放失败`)
         })
       },
@@ -141,17 +184,23 @@ export class AVPlayerWrapper {
           if (!avPlayer.surfaceId) {
             avPlayer.surfaceId = this.surfaceId;
           }
-          // 在 initialized 回调设置最小化的播放策略
+          // 在 initialized 回调设置最小化的播放策略；
+          // prepare 必须无条件执行：策略失败（如本地源/已随setMediaSource设置）时不能跳过，
+          // 否则播放器停留在 INITIALIZED，界面永远显示"线路解析中"
           try {
             await avPlayer.setPlaybackStrategy({
               preferredBufferDurationForPlaying: 0.3,
               preferredBufferDuration: 20,
             });
             console.log('提示：', 'Minimal PlaybackStrategy set successfully in stateChange.');
-            this.avPlayer.prepare()
           } catch (error) {
             Logger.e('fail', 'Failed to set PlaybackStrategy in stateChange: ', error);
             // 不抛出错误，让播放器尝试不带策略继续
+          }
+          try {
+            this.avPlayer.prepare()
+          } catch (error) {
+            Logger.e('fail', 'prepare in stateChange failed: ', error);
           }
           manager.setStatus(PlayerStatus.INITIALIZED)
           break;

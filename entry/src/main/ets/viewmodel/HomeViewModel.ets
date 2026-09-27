@@ -31,10 +31,8 @@ export class HomeViewModel {
     this.state = ViewState.LOADING
     dataSourceManager.getHomepageData()
       .then((data) => {
-        Logger.e('tips', 'loadNextPage list=' + JSON.stringify(data))
         this.bannerList = data.bannerList
         this.categoryList = data.categoryList
-        Logger.e('tips', 'categoryList=' + JSON.stringify(data.categoryList))
         this.state = ViewState.CONTENT
       })
       .catch((e: Error) => {

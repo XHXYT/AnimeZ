@@ -3,6 +3,9 @@ import Logger from '../Logger';
 import M3u8, { M3u8Segment } from '../../entity/m3u8/M3U8';
 import HttpUtils from '../HttpUtils';
 import fs from '@ohos.file.fs';
+import http from '@ohos.net.http';
+
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 // base hls tag:
 const PLAYLIST_HEADER = "#EXTM3U"; // must
@@ -45,6 +48,71 @@ const REGEX_ATTR_BYTERANGE = new RegExp("BYTERANGE=\"(\\d+(?:@\\d+)?)\\b\"");
  * 参考
  */
 export default class M3U8Utils {
+
+    /**
+     * 探测链接内容：m3u8播放列表返回其完整内容；直链媒体文件（如mp4）返回null。
+     * 通过Range请求只取首部内容判断，避免把整段视频当作m3u8拉入内存
+     * @param videoUrl 视频链接
+     */
+    static async fetchM3U8Content(videoUrl: string): Promise<string | null> {
+        const httpRequest = http.createHttp()
+        try {
+            const resp: http.HttpResponse = await httpRequest.request(videoUrl, {
+                method: http.RequestMethod.GET,
+                readTimeout: 20000,
+                connectTimeout: 20000,
+                expectDataType: http.HttpDataType.STRING,
+                header: {
+                    'user-agent': USER_AGENT,
+                    'range': 'bytes=0-1023'
+                }
+            })
+            if (resp.responseCode >= 400) {
+                throw new Error('request error! responseCode is ' + resp.responseCode)
+            }
+            const contentType = ((resp.header['content-type'] as string) ?? '').toLowerCase()
+            const body = (resp.result ?? '') as string
+            Logger.d(this, 'fetchM3U8Content code=' + resp.responseCode + ' contentType=' + contentType
+                + ' len=' + body.length)
+            if (body.trimStart().startsWith(PLAYLIST_HEADER)) {
+                // 是m3u8播放列表：若被Range截断（206），需要完整拉取
+                if (resp.responseCode == http.ResponseCode.PARTIAL) {
+                    return await HttpUtils.getString(videoUrl)
+                }
+                return body
+            }
+            if (contentType.includes('mpegurl')) {
+                // content-type表明是m3u8，完整拉取后交给parse解析
+                return await HttpUtils.getString(videoUrl)
+            }
+            // 非m3u8内容开头且非m3u8类型：视为直链媒体文件
+            Logger.d(this, 'fetchM3U8Content not a playlist, treat as direct media file')
+            return null
+        } finally {
+            httpRequest.destroy()
+        }
+    }
+
+    /**
+     * 将直链媒体文件（如mp4）构造成单分片m3u8，复用分片下载与本地播放链路
+     * @param videoUrl 直链媒体文件地址
+     */
+    static buildSingleSegmentM3u8(videoUrl: string): M3u8 {
+        let m3u8 = new M3u8()
+        m3u8.url = videoUrl
+        m3u8.version = 3
+        m3u8.sequence = 0
+        m3u8.duration = 0
+        m3u8.isLive = false
+        let seg = new M3u8Segment()
+        seg.url = videoUrl
+        let name = DownloadUtils.guessFileName(videoUrl)
+        seg.name = name ? name : 'video.mp4'
+        seg.segIndex = 0
+        seg.duration = 0
+        m3u8.segmentList.push(seg)
+        return m3u8
+    }
 
     /**
      * 从链接中解析m3u8信息
@@ -266,7 +334,6 @@ export default class M3U8Utils {
      * @param path
      */
     static async saveM3U8LocalInfo(m3u8: M3u8, path: string): Promise<number> {
-
         let content = PLAYLIST_HEADER + '\n' + TAG_VERSION + ":" + m3u8.version + "\n"
         content += TAG_MEDIA_SEQUENCE + ":" + m3u8.sequence + "\n"
         content += TAG_TARGET_DURATION + ":" + m3u8.duration + "\n"
@@ -305,7 +372,72 @@ export default class M3U8Utils {
         let file = await fs.open(path, fs.OpenMode.CREATE | fs.OpenMode.WRITE_ONLY);
         return fs.write(file.fd, content, {encoding: 'utf-8'})
     }
-    
+
+    /**
+     * 解析本地m3u8文件：单分片且未加密时返回分片文件的绝对路径（可直接作为媒体文件播放），
+     * 其余情况（多分片/加密）返回null，需交给支持本地HLS的播放器后端按m3u8播放。
+     * @param m3u8Path 本地index.m3u8文件路径
+     */
+    static async resolveLocalPlayableFile(m3u8Path: string): Promise<string | null> {
+        try {
+            if (!m3u8Path || !m3u8Path.endsWith('.m3u8')) {
+                return null
+            }
+            let exists = false
+            try {
+                exists = fs.accessSync(m3u8Path)
+            } catch (e) {
+                return null
+            }
+            if (!exists) {
+                Logger.e('fail', 'resolveLocalPlayableFile m3u8 not exists: ' + m3u8Path)
+                return null
+            }
+            const content = await fs.readText(m3u8Path, { encoding: 'utf-8' })
+            const segments: string[] = []
+            let hasKey = false
+            let start = 0
+            while (start <= content.length) {
+                let end = content.indexOf('\n', start)
+                if (end < 0) {
+                    end = content.length
+                }
+                const line = content.substring(start, end).trim()
+                if (line.length > 0) {
+                    if (line.startsWith(TAG_KEY)) {
+                        hasKey = true
+                    } else if (!line.startsWith('#')) {
+                        segments.push(line)
+                    }
+                }
+                if (end >= content.length) {
+                    break
+                }
+                start = end + 1
+            }
+            Logger.d(this, 'resolveLocalPlayableFile segments=' + segments.length + ' hasKey=' + hasKey)
+            if (hasKey || segments.length !== 1) {
+                return null
+            }
+            let segPath = segments[0]
+            if (!segPath.startsWith('/')) {
+                const dir = m3u8Path.substring(0, m3u8Path.lastIndexOf('/') + 1)
+                segPath = dir + segPath
+            }
+            try {
+                if (fs.accessSync(segPath)) {
+                    return segPath
+                }
+            } catch (e) {
+                Logger.e('fail', 'resolveLocalPlayableFile segment not exists: ' + segPath)
+            }
+            return null
+        } catch (e) {
+            Logger.e('fail', 'resolveLocalPlayableFile error: ' + JSON.stringify(e))
+            return null
+        }
+    }
+
     static parseStringAttr(line, re: RegExp): string {
         let match = re.exec(line)
         Logger.d(this, 'match=' + match + " len=" + match.length)

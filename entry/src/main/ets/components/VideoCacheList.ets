@@ -8,6 +8,8 @@ import Logger from '../utils/Logger';
 import M3U8Downloader, { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import { TaskManagerObserver } from '../utils/download/core/TaskManager';
 import { AnimeState } from '../entryability/AnimeState';
+import { common } from '@kit.AbilityKit';
+import { DownloadDirHelper } from '../utils/DownloadDirHelper';
 
 @ComponentV2
 export struct VideoCacheList {
@@ -116,9 +118,10 @@ export struct VideoCacheList {
             .with(episode.link)
             .setPageLink(this.videoDetailInfo.url)
             .setCoverUrl(this.videoDetailInfo.coverUrl)
+            .setSourceKey(this.videoDetailInfo.sourceKey)
             .setTaskName(episode.desc)
             .setFileName('index.m3u8')
-            .setDownloadDir(this.getUIContext().getHostContext()!.filesDir + "/download/")
+            .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext))
             .build()
           task.start()
         }
