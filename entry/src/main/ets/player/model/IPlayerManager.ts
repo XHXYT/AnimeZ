@@ -121,6 +121,9 @@ export default interface IPlayerManager {
   /** 通知监听者链接解析开始/结束（驱动控制面板加载圈，与播放状态解耦） */
   notifyParseState: (parsing: boolean) => void
 
+  /** 当前是否处于链接解析阶段（供晚挂载的组件补同步解析态） */
+  isParsing: () => boolean
+
   /** 底层播放器 seek 完成回调（AVPlayer seekDone / IJK onSeekComplete），用于关闭 seek 加载圈 */
   notifySeekDone: () => void
 

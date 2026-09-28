@@ -1,8 +1,8 @@
-﻿import { DataSourceConfig, SelectorConfig, CategoryCardConfig } from "../api/DataSourceConfig"
-import { EditField, EditToggleField, VideoSourceDetailViewModel } from "../viewmodel/VideoSourceDetailViewModel"
-import TitleBar from "../components/TitleBar"
-import { ToastUtil } from "../utils/ToastUtils"
-import { AnimeState } from "../entryability/AnimeState"
+﻿import { DataSourceConfig, SelectorConfig, CategoryCardConfig } from "../../../api/DataSourceConfig"
+import { EditField, EditToggleField, VideoSourceDetailViewModel } from "../../../viewmodel/VideoSourceDetailViewModel"
+import TitleBar from "../../../components/TitleBar"
+import { ToastUtil } from "../../../utils/ToastUtils"
+import { AnimeState } from "../../../entryability/AnimeState"
 
 // 系统路由 - 视频源详情
 @Builder

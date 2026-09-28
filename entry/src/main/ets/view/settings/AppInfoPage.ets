@@ -1,12 +1,12 @@
 
-import TitleBar from '../components/TitleBar'
+import TitleBar from '../../components/TitleBar'
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
-import { CustomListItem } from '../components/CustomListItem';
-import { CustomItemInfo, ItemActionType } from '../entity/CusItemInfo';
-import { ToastUtil } from '../utils/ToastUtils';
-import { AppSettings } from '../entryability/Settings';
-import { GoToWeb } from '../utils/GoOutWeb';
-import { AnimeState } from '../entryability/AnimeState';
+import { SettingsGroupList, SettingsListCardMode } from '../../components/SettingsGroupList';
+import { CustomItemInfo, ItemActionType } from '../../entity/CusItemInfo';
+import { ToastUtil } from '../../utils/ToastUtils';
+import { AppSettings } from '../../entryability/Settings';
+import { GoToWeb } from '../../utils/GoOutWeb';
+import { AnimeState } from '../../entryability/AnimeState';
 
 // 系统路由 - 应用信息
 @Builder
@@ -119,26 +119,12 @@ struct AppInfoPage {
             .fontSize(14)
             .fontColor($r('app.color.color_text_minor'))
             .margin({ top: 8, bottom: 56 })
-          ForEach(
-            this.appInfo,
-            (item: CustomItemInfo, index) => {
-              Column() {
-                CustomListItem({
-                  item: item,
-                  itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-                })
-              }
-              .backgroundColor($r('app.color.background_color'))
-              .borderRadius({
-                topLeft: index === 0 ? 16 : 0,
-                topRight: index === 0 ? 16: 0,
-                bottomLeft: index === this.appInfo.length - 1 ? 16: 0,
-                bottomRight: index === this.appInfo.length - 1 ? 16: 0
-              })
-            },
-            // 唯一键生成
-            (item: CustomItemInfo) => item.id
-          )
+          SettingsGroupList({
+            items: this.appInfo,
+            cardMode: SettingsListCardMode.CONNECTED,
+            contentPadding: { left: 0, right: 0, top: 0, bottom: 0 },
+            scrollable: false
+          })
         }
         .clip(true)
         .padding(16)

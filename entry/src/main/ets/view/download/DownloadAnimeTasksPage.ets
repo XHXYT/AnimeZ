@@ -1,20 +1,34 @@
-import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
-import { TaskStatus } from '../utils/download/core/Task';
-import Logger from '../utils/Logger';
-import { downloadViewModel } from '../viewmodel/DownloadViewModel';
-import TitleBar, { TitleBarButton } from '../components/TitleBar';
-import StateView, { ViewState } from '../components/StateView';
-import { MenuItem } from '../components/common/Button';
-import { ToastUtil } from '../utils/ToastUtils';
-import { AnimeState } from '../entryability/AnimeState';
-import EpisodeInfo from '../entity/EpisodeInfo';
+import { OnSelectChangeObserver, SelectionManager } from '../../utils/SelectionManager';
+import { M3U8DownloadTask } from '../../utils/m3u8/M3U8Downloader';
+import { TaskStatus } from '../../utils/download/core/Task';
+import Logger from '../../utils/Logger';
+import { downloadViewModel } from '../../viewmodel/DownloadViewModel';
+import TitleBar, { TitleBarButton } from '../../components/TitleBar';
+import StateView, { ViewState } from '../../components/StateView';
+import { MenuItem } from '../../components/common/Button';
+import { CollapsibleSection } from '../../components/common/CollapsibleSection';
+import { ToastUtil } from '../../utils/ToastUtils';
+import { AnimeState } from '../../entryability/AnimeState';
+import EpisodeInfo from '../../entity/EpisodeInfo';
 import { DownloadItem } from './DownloadManagerPage';
 
 // 系统路由 - 番剧下载任务页
 @Builder
 export function DownloadAnimeTasksPageBuilder(name: string, param: Object) {
   DownloadAnimeTasksPage()
+}
+
+/**
+ * 番剧内的线路分组：同一线路（downloadDir 中的线路子目录）的下载任务为一节
+ */
+class AnimeRouteSection {
+  /** 线路名（目录名；空串表示未分线路的旧任务，不显示节标题） */
+  readonly title: string
+  readonly tasks: M3U8DownloadTask[] = []
+
+  constructor(title: string) {
+    this.title = title
+  }
 }
 
 /**
@@ -60,6 +74,32 @@ struct DownloadAnimeTasksPage {
     return list
   }
 
+  /** 按线路（downloadDir 相对番剧目录的子目录）分节展示；无线路层的旧任务归入无名节 */
+  @Computed
+  get routeSections(): AnimeRouteSection[] {
+    const sections: AnimeRouteSection[] = []
+    const sectionMap: Map<string, AnimeRouteSection> = new Map<string, AnimeRouteSection>()
+    for (let task of this.animeTasks) {
+      let route = ''
+      const dir: string = task.taskInfo.downloadDir
+      if (dir.length > this.dir.length && dir.startsWith(this.dir)) {
+        let rel = dir.substring(this.dir.length)
+        if (rel.endsWith('/')) {
+          rel = rel.substring(0, rel.length - 1)
+        }
+        route = rel
+      }
+      let section = sectionMap.get(route)
+      if (!section) {
+        section = new AnimeRouteSection(route)
+        sectionMap.set(route, section)
+        sections.push(section)
+      }
+      section.tasks.push(task)
+    }
+    return sections
+  }
+
   private readonly selectionObserver: OnSelectChangeObserver<M3U8DownloadTask> = {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectionMode = isSelectionMode
@@ -93,7 +133,7 @@ struct DownloadAnimeTasksPage {
         })
         if (this.animeTasks.length > 0) {
           AnimeTaskList({
-            tasks: this.animeTasks,
+            sections: this.routeSections,
             selectionManager: this.selectionManager
           })
             .layoutWeight(1)
@@ -318,50 +358,27 @@ struct DownloadAnimeTasksPage {
 }
 
 /**
- * 番剧任务列表
+ * 番剧任务列表：按线路分节展示，节可折叠（色条方向与折叠过程同步动画，复用 CollapsibleSection）
  */
 @ComponentV2
 struct AnimeTaskList {
 
-  @Require @Param tasks: M3U8DownloadTask[]
+  @Require @Param sections: AnimeRouteSection[]
   @Require @Param selectionManager: SelectionManager<M3U8DownloadTask>
 
   build() {
     Column() {
       List() {
-        ForEach(this.tasks, (task: M3U8DownloadTask) => {
+        ForEach(this.sections, (section: AnimeRouteSection) => {
           ListItem() {
-            DownloadItem({ selectionManager: this.selectionManager, task: task })
-          }
-          .onClick(() => {
-            Logger.d(this, 'isSelectionMode=' + this.selectionManager.isSelectionMode())
-            if (this.selectionManager.isSelectionMode()) {
-              this.selectionManager.toggleSelectItem(task)
-              return
-            }
-            if (task.isComplete()) {
-              let episode: EpisodeInfo = {
-                title: task.getTaskName() || '',
-                desc: task.getTaskName() || '',
-                link: task.getOriginalUrl(),
-                videoUrl: task.getLocalM3U8Path()
+            CollapsibleSection({
+              title: section.title,
+              content: (): void => {
+                this.SectionTasks(section)
               }
-              // LocalVideoPlayerPage 期望参数为 { episode: EpisodeInfo }，直接传对象会取到 undefined
-              let params: Record<string, EpisodeInfo> = { 'episode': episode }
-              AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", params, true)
-            }
-          })
-          .gesture(LongPressGesture({ repeat: false })
-            .onAction((event) => {
-              Logger.d(this, 'onLongPress')
-              // 长按多选
-              if (!this.selectionManager.isSelectionMode()) {
-                this.selectionManager.toggleSelectionMode()
-              }
-              this.selectionManager.toggleSelectItem(task)
             })
-          )
-        }, (task: M3U8DownloadTask) => String(task.getTaskId()))
+          }
+        }, (section: AnimeRouteSection) => section.title)
       }
       .edgeEffect(EdgeEffect.Spring)
       .width('100%')
@@ -369,5 +386,40 @@ struct AnimeTaskList {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 单个线路节内的任务列表（在父组件上下文执行，捕获外层 ForEach 的 section） */
+  @Builder SectionTasks(section: AnimeRouteSection) {
+    ForEach(section.tasks, (task: M3U8DownloadTask) => {
+      DownloadItem({ selectionManager: this.selectionManager, task: task })
+        .onClick(() => {
+          Logger.d(this, 'isSelectionMode=' + this.selectionManager.isSelectionMode())
+          if (this.selectionManager.isSelectionMode()) {
+            this.selectionManager.toggleSelectItem(task)
+            return
+          }
+          if (task.isComplete()) {
+            let episode: EpisodeInfo = {
+              title: task.getTaskName() || '',
+              desc: task.getTaskName() || '',
+              link: task.getOriginalUrl(),
+              videoUrl: task.getLocalM3U8Path()
+            }
+            // LocalVideoPlayerPage 期望参数为 { episode: EpisodeInfo }，直接传对象会取到 undefined
+            let params: Record<string, EpisodeInfo> = { 'episode': episode }
+            AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", params, true)
+          }
+        })
+        .gesture(LongPressGesture({ repeat: false })
+          .onAction((event) => {
+            Logger.d(this, 'onLongPress')
+            // 长按多选
+            if (!this.selectionManager.isSelectionMode()) {
+              this.selectionManager.toggleSelectionMode()
+            }
+            this.selectionManager.toggleSelectItem(task)
+          })
+        )
+    }, (task: M3U8DownloadTask) => String(task.getTaskId()))
   }
 }

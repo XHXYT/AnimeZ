@@ -20,6 +20,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private episodeList: EpisodeInfo[] = []
   private episodeIndex: number = 0
   private readonly listeners: PlayerListener[] = []
+  /** 当前是否处于链接解析阶段（晚挂载的组件据此补同步加载圈状态） */
+  private parsing: boolean = false
   private status: number = PlayerStatus.IDLE
   private fullScreenMode: boolean = false
   /** 自由窗口模式下通过 maximize 进入的全屏，退出时需 recover 恢复自由窗口 */
@@ -339,9 +341,14 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   notifyParseState(parsing: boolean) {
+    this.parsing = parsing
     for (let listener of this.listeners) {
       listener.onParseStateChanged?.(parsing)
     }
+  }
+
+  isParsing(): boolean {
+    return this.parsing
   }
 
   getStatus() {

@@ -24,14 +24,16 @@ export class WebVideoResolver {
 
   /**
    * 手动点击兜底模式注入的钩子 JS：
-   * 拦截站点自身发起的 resolve XHR，捕获其响应中的真实播放地址，
-   * 同时通用嗅探 XHR/fetch 中的 .m3u8 请求地址（适用于 hls.js/MSE 型播放器，
-   * 其 video.src 为 blob: 无法直接读取），
+   * 1. 拦截站点自身发起的 resolve XHR，捕获其响应中的真实播放地址；
+   * 2. 通用嗅探 XHR/fetch 中的 .m3u8 请求地址（适用于 hls.js/MSE 型播放器，
+   *    其 video.src 为 blob: 无法直接读取）；
+   * 3. 轮询 Artplayer 实例与 video 直链：部分解析页（如 wuzhoupai VIP）解出的
+   *    直链不含 .m3u8/.mp4 扩展名，纯网络嗅探无法命中，播放器建好即取其 url；
    * 经 animeBridge.onLink 桥回传给应用完成原生播放。
    * 前 10 秒内收到的 403 视为站点残留的自动尝试，忽略不回传。
    */
   private static readonly MANUAL_HOOK_JS: string =
-    `(function(){var posted=false;var t0=Date.now();function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}function sniff(u){try{u=String(u);if(u.indexOf('http')===0&&u.indexOf('.m3u8')>=0){post(u);}}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{sniff(u);if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};var of=window.fetch;window.fetch=function(){try{var a=arguments[0];sniff(typeof a==='string'?a:((a&&a.url)||''));}catch(e){}return of.apply(this,arguments);};return 'HOOK';})()`;
+    `(function(){var posted=false;var t0=Date.now();function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}function sniff(u){try{u=String(u);if(u.indexOf('http')===0&&u.indexOf('.m3u8')>=0){post(u);}}catch(e){}}function urlOk(u){if(typeof u!=='string'){return '';}if(u.indexOf('https://')===0||u.indexOf('http://')===0){return u;}return '';}function pollTry(){try{var A=window.Artplayer||window.ArtPlayer;if(A&&A.instances&&A.instances.length){for(var i=0;i<A.instances.length;i++){var a=A.instances[i];var u=(a&&a.option&&typeof a.option.url==='string')?a.option.url:'';var h=(a&&a.hls&&typeof a.hls.url==='string')?a.hls.url:'';var r=urlOk(u)||urlOk(h);if(r){post(r);return;}}}}catch(e){}try{var v=document.querySelector('video');if(v){var s=urlOk(v.currentSrc||v.src);if(s){post(s);return;}}}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{sniff(u);if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};var of=window.fetch;window.fetch=function(){try{var a=arguments[0];sniff(typeof a==='string'?a:((a&&a.url)||''));}catch(e){}return of.apply(this,arguments);};var iv=setInterval(function(){if(posted){clearInterval(iv);return;}pollTry();},500);setTimeout(function(){clearInterval(iv);},110000);return 'HOOK';})()`;
 
   /** 解析结果缓存（key 为原始 _|_ 链接），内存级，应用重启失效 */
   private static cache: Map<string, ResolvedLinkEntry> = new Map();

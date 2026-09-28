@@ -1,14 +1,14 @@
-import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
-import { TaskStatus, TaskStatusObserver } from '../utils/download/core/Task';
-import TaskObserver from '../utils/download/core/TaskObserver';
-import { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
-import Logger from '../utils/Logger';
-import { AnimeDownloadGroup, downloadViewModel } from '../viewmodel/DownloadViewModel';
-import StateView, { ViewState } from '../components/StateView';
-import TitleBar, { TitleBarButton } from '../components/TitleBar';
-import { MenuItem } from '../components/common/Button';
-import { ToastUtil } from '../utils/ToastUtils';
-import { AnimeState } from '../entryability/AnimeState';
+import { OnSelectChangeObserver, SelectionManager } from '../../utils/SelectionManager';
+import { TaskStatus, TaskStatusObserver } from '../../utils/download/core/Task';
+import TaskObserver from '../../utils/download/core/TaskObserver';
+import { M3U8DownloadTask } from '../../utils/m3u8/M3U8Downloader';
+import Logger from '../../utils/Logger';
+import { AnimeDownloadGroup, downloadViewModel } from '../../viewmodel/DownloadViewModel';
+import StateView, { ViewState } from '../../components/StateView';
+import TitleBar, { TitleBarButton } from '../../components/TitleBar';
+import { MenuItem } from '../../components/common/Button';
+import { ToastUtil } from '../../utils/ToastUtils';
+import { AnimeState } from '../../entryability/AnimeState';
 import { common } from '@kit.AbilityKit';
 
 // 系统路由 - 下载管理页

@@ -1,20 +1,18 @@
 
-import TitleBar, { TitleBarButton } from '../components/TitleBar'
-import { CustomListItem } from '../components/CustomListItem'
+import TitleBar, { TitleBarButton } from '../../components/TitleBar'
+import { SettingsGroupList } from '../../components/SettingsGroupList'
 import {
   CustomItemInfo,
   ItemActionType,
-  ItemGroupData,
   MenuOption,
-  makeItemGroups,
   makeSeekSecondsOptions
-} from '../entity/CusItemInfo'
-import { appSettings } from '../entryability/Settings'
-import { AnimeState } from '../entryability/AnimeState'
-import { ToastUtil } from '../utils/ToastUtils'
-import Logger from '../utils/Logger'
-import { VideoFit } from '../player/model/IPlayerManager'
-import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findShortcutConflict } from '../utils/PlayerShortcuts'
+} from '../../entity/CusItemInfo'
+import { appSettings } from '../../entryability/Settings'
+import { AnimeState } from '../../entryability/AnimeState'
+import { ToastUtil } from '../../utils/ToastUtils'
+import Logger from '../../utils/Logger'
+import { VideoFit } from '../../player/model/IPlayerManager'
+import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findShortcutConflict } from '../../utils/PlayerShortcuts'
 import { KeyCode } from '@kit.InputKit'
 
 // 系统路由
@@ -26,18 +24,11 @@ export function PlayerControlSettingsPageBuilder(name: string, param: Object) {
 @ComponentV2
 struct PlayerControlSettingsPage {
 
-  /** 列表版本号：配置变化时递增，作为 ForEach key 前缀强制重建列表以刷新选中态 */
+  /** 列表版本号：配置变化时递增，作为列表重建前缀强制刷新选中态 */
   @Local private listVersion: number = 0
-
-  /** 分组结果（@Local 持有，aboutToAppear / 配置变化时重建） */
-  @Local private groups: ItemGroupData[] = []
 
   /** 正在捕获按键的快捷键 action，空串表示非捕获状态 */
   @Local private capturingAction: string = ''
-
-  aboutToAppear(): void {
-    this.groups = makeItemGroups(this.itemList)
-  }
 
   /**
    * 设置项数据（getter 每次求值，读 appSettings / 快捷键配置最新值保证选中态同步）
@@ -115,7 +106,6 @@ struct PlayerControlSettingsPage {
   /** 重建列表（配置变化后刷新选中态） */
   private refreshList(): void {
     this.listVersion++
-    this.groups = makeItemGroups(this.itemList)
   }
 
   /** 请求页面根节点获得焦点（捕获按键依赖焦点接收键盘事件） */
@@ -172,47 +162,8 @@ struct PlayerControlSettingsPage {
           // 标题
           TitleBar({ title: '播放控制', buttons: this.titleBarButtons })
           // 内容
-          Scroll() {
-            Column() {
-              ForEach(
-                this.groups,
-                (group: ItemGroupData, index) => {
-                  Column() {
-                    if (group.group) {
-                      this.GroupHeader(group.group.title)
-                    }
-                    // 设置项
-                    ForEach(
-                      group.items,
-                      (item: CustomItemInfo) => {
-                        CustomListItem({
-                          item: item,
-                          itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-                        })
-                      },
-                      (item: CustomItemInfo) => item.id
-                    )
-                  }
-                  .backgroundColor($r('app.color.background_color'))
-                  .borderRadius(16)
-
-                  if (index < this.groups.length - 1) {
-                    Blank().height(16)
-                  }
-                },
-                // 唯一键生成（带版本前缀：listVersion 变化时强制重建所有分组以刷新选中态）
-                (group: ItemGroupData) => `${this.listVersion}_${group.group?.id ?? String(group.items.length)}`
-              )
-            }
-            .padding({ left: 16, right: 16, top: 4, bottom: 16 })
-            .width('100%')
-            .constraintSize({
-              minHeight: '100%'
-            })
-          }
-          .contentEndOffset(56)
-          .scrollBar(BarState.Off)
-          .edgeEffect(EdgeEffect.Spring)
+          SettingsGroupList({ items: this.itemList, version: this.listVersion, contentEndOffset: 56 })
+            .layoutWeight(1)
         }
         .layoutWeight(1)
         .padding({ top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20 })
@@ -266,27 +217,6 @@ struct PlayerControlSettingsPage {
     .onClick(() => {
       this.capturingAction = ''
     })
-  }
-
-  /**
-   * 分组标题（保持原色条视觉）
-   */
-  @Builder
-  GroupHeader(title: ResourceStr) {
-    Row() {
-      Row()
-        .backgroundColor($r('app.color.primary_color'))
-        .height(14)
-        .width(6)
-        .margin({ right: 2 })
-        .borderRadius(4)
-      Text(title)
-        .fontColor($r('app.color.color_text_major'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-    }
-    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-    .width('100%')
   }
 
 }

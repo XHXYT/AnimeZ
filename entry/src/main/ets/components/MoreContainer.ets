@@ -1,6 +1,6 @@
 
 import { CustomItemInfo, ItemActionType } from '../entity/CusItemInfo';
-import { CustomListItem } from '../components/CustomListItem';
+import { SettingsGroupList } from './SettingsGroupList';
 import { Header } from './common/Header';
 import { AnimeState } from '../entryability/AnimeState';
 
@@ -56,20 +56,10 @@ export struct More {
       // 标题
       Header('更多', undefined, false, false)
       // 列表
-      Column() {
-        ForEach(
-          this.moreItems,
-          (item: CustomItemInfo) => {
-            CustomListItem({
-              item: item,
-              itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-            })
-          },
-          (item: CustomItemInfo) => item.id
-        )
-      }
-      .backgroundColor($r('app.color.background_color'))
-      .borderRadius(16)
+      SettingsGroupList({
+        items: this.moreItems,
+        contentPadding: { left: 0, right: 0, top: 0, bottom: 0 }
+      })
     }
   }
 }

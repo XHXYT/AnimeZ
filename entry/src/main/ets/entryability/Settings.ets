@@ -144,7 +144,7 @@ export class AppConfigs {
   /**
    * 下载区分剧集路线：开启后任务目录为 番剧名/线路名/，关闭后为 番剧名/；仅影响新任务
    */
-  @Trace download_separate_route: boolean = false
+  @Trace download_separate_route: boolean = true
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false

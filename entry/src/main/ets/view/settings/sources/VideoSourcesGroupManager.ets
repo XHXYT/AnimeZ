@@ -1,5 +1,5 @@
-import TitleBar from '../components/TitleBar'
-import { VideoSourcesViewModel } from '../viewmodel/VideoSourcesViewModel'
+import TitleBar from '../../../components/TitleBar'
+import { VideoSourcesViewModel } from '../../../viewmodel/VideoSourcesViewModel'
 import { CustomContentDialog } from '@kit.ArkUI'
 import { BusinessError } from '@kit.BasicServicesKit'
 

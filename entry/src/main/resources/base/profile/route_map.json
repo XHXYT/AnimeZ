@@ -12,12 +12,12 @@
     },
     {
       "name": "DownloadManagerPage",
-      "pageSourceFile": "src/main/ets/view/DownloadManagerPage.ets",
+      "pageSourceFile": "src/main/ets/view/download/DownloadManagerPage.ets",
       "buildFunction": "DownloadManagerPageBuilder"
     },
     {
       "name": "DownloadAnimeTasksPage",
-      "pageSourceFile": "src/main/ets/view/DownloadAnimeTasksPage.ets",
+      "pageSourceFile": "src/main/ets/view/download/DownloadAnimeTasksPage.ets",
       "buildFunction": "DownloadAnimeTasksPageBuilder"
     },
     {
@@ -27,38 +27,43 @@
     },
     {
       "name": "VideoSources",
-      "pageSourceFile": "src/main/ets/view/VideoSources.ets",
+      "pageSourceFile": "src/main/ets/view/settings/sources/VideoSources.ets",
       "buildFunction": "VideoSourcesBuilder"
     },
     {
       "name": "VideoSourceDetail",
-      "pageSourceFile": "src/main/ets/view/VideoSourceDetail.ets",
+      "pageSourceFile": "src/main/ets/view/settings/sources/VideoSourceDetail.ets",
       "buildFunction": "VideoSourceDetailBuilder"
     },
     {
       "name": "AboutMePage",
-      "pageSourceFile": "src/main/ets/view/AboutMePage.ets",
+      "pageSourceFile": "src/main/ets/view/settings/AboutMePage.ets",
       "buildFunction": "AboutMePageBuilder"
     },
     {
       "name": "AppInfoPage",
-      "pageSourceFile": "src/main/ets/view/AppInfoPage.ets",
+      "pageSourceFile": "src/main/ets/view/settings/AppInfoPage.ets",
       "buildFunction": "AppInfoPageBuilder"
     },
     {
       "name": "LocalVideoPlayerPage",
-      "pageSourceFile": "src/main/ets/view/LocalVideoPlayerPage.ets",
+      "pageSourceFile": "src/main/ets/view/download/LocalVideoPlayerPage.ets",
       "buildFunction": "LocalVideoPlayerPageBuilder"
     },
     {
       "name": "SettingsPage",
-      "pageSourceFile": "src/main/ets/view/SettingsPage.ets",
+      "pageSourceFile": "src/main/ets/view/settings/SettingsPage.ets",
       "buildFunction": "SettingsPageBuilder"
     },
     {
       "name": "PlayerControlSettingsPage",
-      "pageSourceFile": "src/main/ets/view/PlayerControlSettingsPage.ets",
+      "pageSourceFile": "src/main/ets/view/settings/PlayerControlSettingsPage.ets",
       "buildFunction": "PlayerControlSettingsPageBuilder"
+    },
+    {
+      "name": "DanmakuSettingsPage",
+      "pageSourceFile": "src/main/ets/view/settings/DanmakuSettingsPage.ets",
+      "buildFunction": "DanmakuSettingsPageBuilder"
     },
     {
       "name": "VideoCollectionPage",

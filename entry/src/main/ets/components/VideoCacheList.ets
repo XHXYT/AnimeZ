@@ -11,6 +11,9 @@ import { AnimeState } from '../entryability/AnimeState';
 import { common } from '@kit.AbilityKit';
 import { DownloadDirHelper } from '../utils/DownloadDirHelper';
 import { ToastUtil } from '../utils/ToastUtils';
+import { appSettings } from '../entryability/Settings';
+import { sortEpisodesByNumber } from '../utils/SortUtils';
+import { CollapsibleSection } from './common/CollapsibleSection';
 
 @ComponentV2
 export struct VideoCacheList {
@@ -31,42 +34,44 @@ export struct VideoCacheList {
         Scroll() {
           Column() {
             ForEach(this.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
-              Column() {
-                // TODO 展开和折叠、单个下载列表缓存全部
-                Row() {
-                  Row()
-                    .height(14)
-                    .width(6)
-                    .margin({ right: 2 })
-                    .borderRadius(4)
-                    .backgroundColor($r('app.color.primary_color'))
-                  Text(episodeList.title)
-                    .fontColor($r('app.color.color_text_major'))
-                    .fontSize(16)
-                  Blank()
-                  Text('缓存全部')
-                    .fontSize(12)
-                    .padding(8)
-                    .borderRadius(6)
-                    .onClick(() => {
-                      this.downloadAll(episodeList)
-                    })
+              if (episodeList.title != '') {
+                CollapsibleSection({
+                  title: episodeList.title,
+                  headerEnd: (): void => {
+                    this.CacheSectionHeaderEnd(episodeList)
+                  },
+                  content: (): void => {
+                    this.CacheSectionGrid(episodeList)
+                  }
+                })
+              } else {
+                // 无名线路：无节标题可折叠，保留排序开关与缓存全部
+                Column() {
+                  Row() {
+                    Row()
+                      .height(14)
+                      .width(6)
+                      .margin({ right: 2 })
+                      .borderRadius(4)
+                      .backgroundColor($r('app.color.primary_color'))
+                    Blank()
+                    this.EpisodeOrderToggle()
+                    Text('缓存全部')
+                      .fontSize(12)
+                      .padding(8)
+                      .borderRadius(6)
+                      .onClick(() => {
+                        this.downloadAll(episodeList)
+                      })
+                  }
+                  .padding({ left: 16, top: 16, right: 16, bottom: 4 })
+                  .width('100%')
+                  this.CacheSectionGrid(episodeList)
                 }
-                .padding({ left: 16, top: 16, right: 16, bottom: 8 })
                 .width('100%')
-
-                Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-                  ForEach(episodeList.episodes, (item: EpisodeInfo, episodeIndex: number) => {
-                    VideoCacheItem({ videoDetailInfo: this.videoDetailInfo, episodeInfo: item, routeTitle: episodeList.title })
-                      .width('22%')
-                      .margin({ bottom: 8, right: (episodeIndex + 1) % 4 == 0 ? 0 : '4%' })
-                  })
-                }
-                .margin({ top: 8 })
-                .padding({ left: 16, right: 16 })
+                .alignItems(HorizontalAlign.Start)
               }
-              .alignItems(HorizontalAlign.Start)
-            })
+            }, (episodeList: EpisodeList, episodeListIndex: number) => episodeListIndex + '-' + episodeList.title)
           }
           .alignItems(HorizontalAlign.Start)
           .constraintSize({
@@ -98,6 +103,53 @@ export struct VideoCacheList {
     }
     .width('100%')
     .layoutWeight(1)
+  }
+
+  /** 剧集排序快捷开关：与详情页/播放器共用全局设置，切换后各处同步重排 */
+  @Builder EpisodeOrderToggle() {
+    Row({ space: 4 }) {
+      SymbolGlyph(appSettings.episodes_order === 'asc'
+        ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+        .fontSize(12)
+        .fontColor([$r('app.color.color_text_normal')])
+      Text(appSettings.episodes_order === 'asc' ? '正序' : '倒序')
+        .fontColor($r('app.color.color_text_normal'))
+        .fontSize(12)
+    }
+    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    .borderRadius(14)
+    .backgroundColor($r('app.color.background_color_accent'))
+    .onClick(() => {
+      appSettings.episodes_order = appSettings.episodes_order === 'asc' ? 'desc' : 'asc'
+    })
+  }
+
+  /** 节标题行右侧内容：排序开关 + 缓存全部（在父组件上下文执行，捕获外层 ForEach 的线路数据） */
+  @Builder CacheSectionHeaderEnd(episodeList: EpisodeList) {
+    Row({ space: 8 }) {
+      this.EpisodeOrderToggle()
+      Text('缓存全部')
+        .fontSize(12)
+        .padding(8)
+        .borderRadius(6)
+        .onClick(() => {
+          this.downloadAll(episodeList)
+        })
+    }
+  }
+
+  /** 单条线路的缓存剧集网格，按全局正倒序设置排列（在父组件上下文执行，捕获外层 ForEach 的线路数据） */
+  @Builder CacheSectionGrid(episodeList: EpisodeList) {
+    Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
+      ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order),
+        (item: EpisodeInfo, episodeIndex: number) => {
+          VideoCacheItem({ videoDetailInfo: this.videoDetailInfo, episodeInfo: item, routeTitle: episodeList.title })
+            .width('22%')
+            .margin({ bottom: 8, right: (episodeIndex + 1) % 4 == 0 ? 0 : '4%' })
+        }, (item: EpisodeInfo) => item.link)
+    }
+    .margin({ top: 8 })
+    .padding({ left: 16, right: 16 })
   }
 
   /**

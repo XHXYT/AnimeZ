@@ -1,7 +1,7 @@
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
 import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
-import { CustomListItem } from '../components/CustomListItem';
+import { SettingsGroupList, SettingsListCardMode } from '../components/SettingsGroupList';
 import { CustomItemInfo, ItemActionType, MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
 import { PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
@@ -24,6 +24,7 @@ import EpisodeList from '../entity/EpisodeList';
 import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import { Header } from '../components/common/Header';
+import { CollapsibleSection } from '../components/common/CollapsibleSection';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { VideoCacheList } from '../components/VideoCacheList';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
@@ -573,21 +574,11 @@ struct VideoDetailPage {
 
   /** 播放设置面板内容（简介同款半模态面板内展示） */
   @Builder PlayerSettingsPanel() {
-    Scroll() {
-      Column() {
-        ForEach(this.settingsItems, (item: CustomItemInfo) => {
-          CustomListItem({
-            item: item,
-            itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-          })
-        }, (item: CustomItemInfo) => item.id)
-      }
-      .width('100%')
-      .padding({ top: 4, bottom: 16 })
-      .constraintSize({ minHeight: '100%' })
-    }
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
+    SettingsGroupList({
+      items: this.settingsItems,
+      cardMode: SettingsListCardMode.NONE,
+      contentPadding: { left: 0, right: 0, top: 4, bottom: 16 }
+    })
     .width('100%')
     .height('100%')
   }
@@ -610,89 +601,112 @@ struct VideoDetailPage {
   }
 
   /**
-   * 视频剧集列表
+   * 视频剧集列表：按线路分节，节标题可折叠（复用 CollapsibleSection）
    */
   @Builder EpisodeList() {
     ForEach(this.viewModel.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
-      Column() {
-        Row() {
-          Row()
-            .height(14)
-            .width(6)
-            .margin({ right: 2 })
-            .borderRadius(4)
-            .backgroundColor($r('app.color.primary_color'))
-          Text(episodeList.title)
-            .fontColor($r('app.color.color_text_major'))
-            .fontSize(16)
-            .fontWeight(500)
-          Blank()
-          // 剧集排序快捷开关：点击切换正序/倒序，列表实时重排
-          Row({ space: 4 }) {
-            SymbolGlyph(appSettings.episodes_order === 'asc'
-              ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-              .fontSize(12)
-              .fontColor([$r('app.color.color_text_normal')])
-            Text(appSettings.episodes_order === 'asc' ? '正序' : '倒序')
-              .fontColor($r('app.color.color_text_normal'))
-              .fontSize(12)
+      if (episodeList.title != '') {
+        CollapsibleSection({
+          title: episodeList.title,
+          headerEnd: (): void => {
+            this.EpisodeOrderToggle()
+          },
+          content: (): void => {
+            this.EpisodeSectionGrid(episodeList, episodeListIndex)
           }
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(14)
-          .backgroundColor($r('app.color.background_color_accent'))
-          .onClick(() => {
-            appSettings.episodes_order = appSettings.episodes_order === 'asc' ? 'desc' : 'asc'
-          })
+        })
+      } else {
+        // 无名线路：无节标题可折叠，保留排序开关原样式
+        Column() {
+          this.EpisodeOrderHeader()
+          this.EpisodeSectionGrid(episodeList, episodeListIndex)
         }
         .width('100%')
-        .padding({ left: 16, top: 16, right: 16, bottom: 4 })
-        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
-          ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo) => {
-            Text(item.title)
-              .textAlign(TextAlign.Center)
-              .backgroundColor(
-                (this.viewModel.episodeListIndex == episodeListIndex
-                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
-                  ? '#bb3366ff' : $r('app.color.background_color_accent')
-              )
-              .fontColor(
-                (this.viewModel.episodeListIndex == episodeListIndex
-                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
-                  ? Color.White : $r('app.color.color_text_major')
-              )
-              .fontSize(12)
-              .padding({ top: 8, bottom: 8 })
-              .borderRadius(6)
-              .borderWidth(
-                (this.viewModel.episodeListIndex == episodeListIndex
-                  && episodeList.episodes[this.viewModel.episodeIndex] === item)
-                  ? 0 : 1.5
-              )
-              .borderColor($r('app.color.background_color_accent'))
-              .margin({ bottom: 8, right: '2%' })
-              .width(this.viewModel.isFullScreen ? '17%' : '18%')
-              .maxLines(1)
-              .onClick(() => {
-                // 显示顺序可能被排序打乱，按剧集对象映射回规范索引
-                const canonicalIdx = episodeList.episodes.indexOf(item)
-                if (this.viewModel.episodeListIndex == episodeListIndex
-                  && this.viewModel.episodeIndex == canonicalIdx) {
-                  return;
-                }
-                this.viewModel.historyInfo.videoProgress = 0;
-                this.viewModel.historyInfo.currentTime = 0;
-                this.viewModel.historyInfo.totalTime = 0;
-                this.viewModel.playVideo(episodeListIndex, canonicalIdx);
-              })
-          })
-        }
-        .width('100%')
-        .margin({ top: 8 })
-        .padding({ left: 16, right: 16 })
+        .alignItems(HorizontalAlign.Start)
       }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
+    }, (episodeList: EpisodeList, episodeListIndex: number) => episodeListIndex + '-' + episodeList.title)
+  }
+
+  /** 剧集排序快捷开关：点击切换正序/倒序，列表实时重排（全局设置，缓存页/播放器同步） */
+  @Builder EpisodeOrderToggle() {
+    Row({ space: 4 }) {
+      SymbolGlyph(appSettings.episodes_order === 'asc'
+        ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+        .fontSize(12)
+        .fontColor([$r('app.color.color_text_normal')])
+      Text(appSettings.episodes_order === 'asc' ? '正序' : '倒序')
+        .fontColor($r('app.color.color_text_normal'))
+        .fontSize(12)
+    }
+    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    .borderRadius(14)
+    .backgroundColor($r('app.color.background_color_accent'))
+    .onClick(() => {
+      appSettings.episodes_order = appSettings.episodes_order === 'asc' ? 'desc' : 'asc'
     })
+  }
+
+  /** 无名线路的排序头：色条 + 排序开关（不可折叠） */
+  @Builder EpisodeOrderHeader() {
+    Row() {
+      Row()
+        .height(14)
+        .width(6)
+        .margin({ right: 2 })
+        .borderRadius(4)
+        .backgroundColor($r('app.color.primary_color'))
+      Blank()
+      this.EpisodeOrderToggle()
+    }
+    .width('100%')
+    .padding({ left: 16, top: 16, right: 16, bottom: 4 })
+  }
+
+  /** 单条线路的剧集网格（在父组件上下文执行，捕获外层 ForEach 的线路数据） */
+  @Builder EpisodeSectionGrid(episodeList: EpisodeList, episodeListIndex: number) {
+    Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
+      ForEach(sortEpisodesByNumber(episodeList.episodes, appSettings.episodes_order), (item: EpisodeInfo) => {
+        Text(item.title)
+          .textAlign(TextAlign.Center)
+          .backgroundColor(
+            (this.viewModel.episodeListIndex == episodeListIndex
+              && episodeList.episodes[this.viewModel.episodeIndex] === item)
+              ? '#bb3366ff' : $r('app.color.background_color_accent')
+          )
+          .fontColor(
+            (this.viewModel.episodeListIndex == episodeListIndex
+              && episodeList.episodes[this.viewModel.episodeIndex] === item)
+              ? Color.White : $r('app.color.color_text_major')
+          )
+          .fontSize(12)
+          .padding({ top: 8, bottom: 8 })
+          .borderRadius(6)
+          .borderWidth(
+            (this.viewModel.episodeListIndex == episodeListIndex
+              && episodeList.episodes[this.viewModel.episodeIndex] === item)
+              ? 0 : 1.5
+          )
+          .borderColor($r('app.color.background_color_accent'))
+          .margin({ bottom: 8, right: '2%' })
+          .width(this.viewModel.isFullScreen ? '17%' : '18%')
+          .maxLines(1)
+          .onClick(() => {
+            // 显示顺序可能被排序打乱，按剧集对象映射回规范索引
+            const canonicalIdx = episodeList.episodes.indexOf(item)
+            if (this.viewModel.episodeListIndex == episodeListIndex
+              && this.viewModel.episodeIndex == canonicalIdx) {
+              return;
+            }
+            this.viewModel.historyInfo.videoProgress = 0;
+            this.viewModel.historyInfo.currentTime = 0;
+            this.viewModel.historyInfo.totalTime = 0;
+            this.viewModel.playVideo(episodeListIndex, canonicalIdx);
+          })
+      }, (item: EpisodeInfo) => item.link)
+    }
+    .width('100%')
+    .margin({ top: 8 })
+    .padding({ left: 16, right: 16 })
   }
 
   /**

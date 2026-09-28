@@ -1,9 +1,9 @@
 
-import TitleBar from '../components/TitleBar'
-import { AnimeState } from '../entryability/AnimeState';
-import { CustomListItem } from '../components/CustomListItem';
-import { CustomItemInfo, ItemActionType } from '../entity/CusItemInfo';
-import { ToastUtil } from '../utils/ToastUtils';
+import TitleBar from '../../components/TitleBar'
+import { AnimeState } from '../../entryability/AnimeState';
+import { SettingsGroupList } from '../../components/SettingsGroupList';
+import { CustomItemInfo, ItemActionType } from '../../entity/CusItemInfo';
+import { ToastUtil } from '../../utils/ToastUtils';
 
 /** 关于作者页分组（头部信息 + 通用行） */
 interface AuthorSection {
@@ -140,6 +140,17 @@ struct AboutMePage {
     }
   ]
 
+  /** 单个作者分区的设置项（分组头 + 该分区条目） */
+  private sectionItems(section: AuthorSection): CustomItemInfo[] {
+    const items: CustomItemInfo[] = [
+      new CustomItemInfo({ id: `${section.key}_header`, title: section.title, type: ItemActionType.GROUP })
+    ]
+    for (const item of section.items) {
+      items.push(item)
+    }
+    return items
+  }
+
   build() {
     NavDestination() {
       TitleBar({title: '关于作者'})
@@ -169,36 +180,11 @@ struct AboutMePage {
                 .constraintSize({
                   maxWidth: '80%'
                 })
-              Column() {
-                if (group.title) {
-                  Row() {
-                    Row()
-                      .backgroundColor($r('app.color.primary_color'))
-                      .height(14)
-                      .width(6)
-                      .margin({ right: 2 })
-                      .borderRadius(4)
-                    Text(group.title)
-                      .fontColor($r('app.color.color_text_major'))
-                      .fontSize(16)
-                      .fontWeight(FontWeight.Bold)
-                    Blank()
-                  }
-                  .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-                  .width('100%')
-                }
-
-                ForEach(
-                  group.items,
-                  (item: CustomItemInfo) => {
-                    CustomListItem({
-                      item: item,
-                      itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-                    })
-                  }, (item: CustomItemInfo) => item.id)
-              }
-              .backgroundColor($r('app.color.background_color'))
-              .borderRadius(16)
+              SettingsGroupList({
+                items: this.sectionItems(group),
+                contentPadding: { left: 0, right: 0, top: 0, bottom: 0 },
+                scrollable: false
+              })
 
               if (index < this.aboutMe.length - 1) {
                 Blank().height(16)

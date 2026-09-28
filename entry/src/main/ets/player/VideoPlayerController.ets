@@ -295,7 +295,8 @@ export struct VideoPlayerController {
       } else if (type == media.BufferingInfoType.BUFFERING_START) {
         this.isLoading = true
       } else if (type == media.BufferingInfoType.BUFFERING_END) {
-        this.isLoading = false
+        // 解析期间到达的缓冲结束不熄灭加载圈（解析态由 notifyParseState 收口）
+        this.isLoading = this.isParsing
       }
       Logger.e('tips', 'onBuffering isLoading=' + this.isLoading)
     },
@@ -407,6 +408,9 @@ export struct VideoPlayerController {
     this.isLoading = true;
     if (this.playerManager) {
       this.playerStatus = this.playerManager.getStatus()
+      // 页面挂载可能晚于解析开始（详情加载期间 state=LOADING 不构建播放区，控制器会错过
+      // notifyParseState(true)）：主动补同步解析态，保证解析期间加载圈立即可见
+      this.isParsing = this.playerManager.isParsing()
       this.initLoading()
       this.playerManager.addListener(this.playerListenerVC)
     } else {

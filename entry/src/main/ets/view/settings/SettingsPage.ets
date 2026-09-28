@@ -1,17 +1,17 @@
 
-import TitleBar from '../components/TitleBar'
-import { CustomListItem } from '../components/CustomListItem'
-import { CustomItemInfo, ItemActionType, ItemGroupData, MenuOption, makeItemGroups } from '../entity/CusItemInfo'
-import { ColorModeManager } from '../utils/ColorModeManager'
+import TitleBar from '../../components/TitleBar'
+import { SettingsGroupList } from '../../components/SettingsGroupList'
+import { CustomItemInfo, ItemActionType, MenuOption } from '../../entity/CusItemInfo'
+import { ColorModeManager } from '../../utils/ColorModeManager'
 import { common } from '@kit.AbilityKit'
-import { appSettings } from '../entryability/Settings'
-import { dataSourceManager } from '../api/DataSourceManager'
-import Logger from '../utils/Logger'
-import { SOURCE_CHANGED_EVENT } from '../utils/EventBus'
-import { AnimeState } from '../entryability/AnimeState'
-import { PiPManager } from '../player/PiPManager'
-import { DownloadDirHelper, DownloadLocationType } from '../utils/DownloadDirHelper'
-import { ToastUtil } from '../utils/ToastUtils'
+import { appSettings } from '../../entryability/Settings'
+import { dataSourceManager } from '../../api/DataSourceManager'
+import Logger from '../../utils/Logger'
+import { SOURCE_CHANGED_EVENT } from '../../utils/EventBus'
+import { AnimeState } from '../../entryability/AnimeState'
+import { PiPManager } from '../../player/PiPManager'
+import { DownloadDirHelper, DownloadLocationType } from '../../utils/DownloadDirHelper'
+import { ToastUtil } from '../../utils/ToastUtils'
 
 // 系统路由
 @Builder
@@ -24,15 +24,8 @@ struct SettingsPage {
 
   private context: common.UIAbilityContext = this.getUIContext().getHostContext()! as common.UIAbilityContext
 
-  /** 列表版本号：页面重新可见时递增，作为 ForEach key 前缀强制重建列表以刷新选中态 */
+  /** 列表版本号：页面重新可见时递增，作为列表重建前缀强制刷新选中态 */
   @Local private listVersion: number = 0
-
-  /** 分组结果（@Local 持有，aboutToAppear / onShown 时重建） */
-  @Local private groups: ItemGroupData[] = []
-
-  aboutToAppear(): void {
-    this.groups = makeItemGroups(this.itemList)
-  }
 
   /**
    * 设置项数据（getter 每次求值，读 appSettings 最新值保证选中态同步）
@@ -119,7 +112,6 @@ struct SettingsPage {
               }
               // 刷新列表选中态（公共目录不可用时回显沙箱）
               this.listVersion++
-              this.groups = makeItemGroups(this.itemList)
             })
           } else {
             appSettings.download_location = DownloadLocationType.SANDBOX
@@ -229,64 +221,12 @@ struct SettingsPage {
         }
       }),
       new CustomItemInfo({
-        id: 'danmaku_opacity',
-        title: '弹幕不透明度',
-        type: ItemActionType.MENU,
-        value: String(appSettings.danmaku_opacity),
-        menuOptions: [
-          new MenuOption('0.25', '25%'),
-          new MenuOption('0.5', '50%'),
-          new MenuOption('0.75', '75%'),
-          new MenuOption('1', '100%')
-        ],
-        onChange: (value) => {
-          appSettings.danmaku_opacity = Number(value)
-        }
-      }),
-      new CustomItemInfo({
-        id: 'danmaku_font_scale',
-        title: '弹幕字体大小',
-        type: ItemActionType.MENU,
-        value: String(appSettings.danmaku_font_scale),
-        menuOptions: [
-          new MenuOption('0.5', '50%'),
-          new MenuOption('0.75', '75%'),
-          new MenuOption('1', '100%'),
-          new MenuOption('1.25', '125%'),
-          new MenuOption('1.5', '150%')
-        ],
-        onChange: (value) => {
-          appSettings.danmaku_font_scale = Number(value)
-        }
-      }),
-      new CustomItemInfo({
-        id: 'danmaku_speed',
-        title: '弹幕滚动速度',
-        type: ItemActionType.MENU,
-        value: String(appSettings.danmaku_speed),
-        menuOptions: [
-          new MenuOption('0.5', '0.5x'),
-          new MenuOption('1', '1x'),
-          new MenuOption('1.5', '1.5x'),
-          new MenuOption('2', '2x')
-        ],
-        onChange: (value) => {
-          appSettings.danmaku_speed = Number(value)
-        }
-      }),
-      new CustomItemInfo({
-        id: 'danmaku_area',
-        title: '弹幕显示区域',
-        type: ItemActionType.MENU,
-        value: String(appSettings.danmaku_area),
-        menuOptions: [
-          new MenuOption('1', '全部'),
-          new MenuOption('0.75', '3/4'),
-          new MenuOption('0.5', '半屏'),
-          new MenuOption('0.25', '1/4')
-        ],
-        onChange: (value) => {
-          appSettings.danmaku_area = Number(value)
+        id: 'danmaku_config',
+        title: '弹幕配置',
+        subtitle: '不透明度、字体大小、滚动速度与显示区域',
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("DanmakuSettingsPage", '')
         }
       }),
 
@@ -324,47 +264,8 @@ struct SettingsPage {
       // 标题
       TitleBar({ title: '设置' })
       // 内容
-      Column() {
-        Scroll() {
-          Column() {
-            ForEach(
-              this.groups,
-              (group: ItemGroupData, index) => {
-                Column() {
-                  if (group.group) {
-                    this.GroupHeader(group.group.title)
-                  }
-                  // 设置项
-                  ForEach(
-                    group.items,
-                    (item: CustomItemInfo) => {
-                      CustomListItem({
-                        item: item,
-                        itemPadding: { left: 16, right: 16, top: 12, bottom: 12 }
-                      })
-                    },
-                    (item: CustomItemInfo) => item.id
-                  )
-                }
-                .backgroundColor($r('app.color.background_color'))
-                .borderRadius(16)
-
-                if (index < this.groups.length - 1) {
-                  Blank().height(16)
-                }
-              },
-              // 唯一键生成（带版本前缀：listVersion 变化时强制重建所有分组以刷新选中态）
-              (group: ItemGroupData) => `${this.listVersion}_${group.group?.id ?? String(group.items.length)}`
-            )
-          }
-          .padding({ left: 16, right: 16, top: 4, bottom: 16 })
-          .width('100%')
-          .constraintSize({
-            minHeight: '100%'
-          })
-        }.scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-      }.layoutWeight(1)
+      SettingsGroupList({ items: this.itemList, version: this.listVersion })
+        .layoutWeight(1)
 
       Text('本应用仅供学习交流！')
         .fontSize(16)
@@ -379,31 +280,9 @@ struct SettingsPage {
     .onShown(() => {
       // 页面重新可见时重建列表，同步在视频源页可能被修改的首页源选中态
       this.listVersion++
-      this.groups = makeItemGroups(this.itemList)
     })
     .width('100%')
     .height('100%')
-  }
-
-  /**
-   * 分组标题（保持原色条视觉）
-   */
-  @Builder
-  GroupHeader(title: ResourceStr) {
-    Row() {
-      Row()
-        .backgroundColor($r('app.color.primary_color'))
-        .height(14)
-        .width(6)
-        .margin({ right: 2 })
-        .borderRadius(4)
-      Text(title)
-        .fontColor($r('app.color.color_text_major'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-    }
-    .padding({ left: 16, top: 16, right: 16, bottom: 8 })
-    .width('100%')
   }
 
 }

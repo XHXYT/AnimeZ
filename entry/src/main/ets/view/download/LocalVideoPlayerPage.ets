@@ -1,13 +1,13 @@
-import IPlayerManager, { PlayerListener, VideoFit } from '../player/model/IPlayerManager';
-import PlayerManagerImpl from '../viewmodel/PlayerManagerImpl';
-import EpisodeInfo from '../entity/EpisodeInfo';
-import Logger from '../utils/Logger';
-import M3U8Utils from '../utils/m3u8/M3U8Utils';
-import { ToastUtil } from '../utils/ToastUtils';
+import IPlayerManager, { PlayerListener, VideoFit } from '../../player/model/IPlayerManager';
+import PlayerManagerImpl from '../../viewmodel/PlayerManagerImpl';
+import EpisodeInfo from '../../entity/EpisodeInfo';
+import Logger from '../../utils/Logger';
+import M3U8Utils from '../../utils/m3u8/M3U8Utils';
+import { ToastUtil } from '../../utils/ToastUtils';
 import { media } from '@kit.MediaKit';
-import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
-import { AnimeState } from '../entryability/AnimeState';
-import { PLAYER_SWITCH_EVENT } from '../utils/EventBus';
+import { MultiVideoPlayer } from '../../player/MultiVideoPlayer';
+import { AnimeState } from '../../entryability/AnimeState';
+import { PLAYER_SWITCH_EVENT } from '../../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 
 // 系统路由 - 本地视频播放界面

@@ -82,7 +82,9 @@ export class DownloadViewModel {
 
   private readonly observer: TaskManagerObserver<M3U8DownloadTask> = {
     onTaskLoaded: (tasks: M3U8DownloadTask[]) => {
-      this.tasks = this.tasks.concat(tasks).reverse()
+      // 回调携带的是管理器当前全量任务快照（addObserver 对已加载管理器会立即回调），
+      // 单例 VM 必须整体替换而非追加，否则每次进页任务被重复累积、计数翻倍
+      this.tasks = tasks.slice().reverse()
       Logger.d(this, 'onMissionLoaded tasks len=' + tasks.length)
       this.onTasksChanged()
     },
