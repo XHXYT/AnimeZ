@@ -95,7 +95,10 @@ export struct HomePage {
     .backgroundColor($r('app.color.background_color'))
     .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .onShown(() => {
-      homeViewModel.state = ViewState.CONTENT
+      // 无源引导态（EMPTY）不被覆盖，其余情况保持原强制刷新行为
+      if (homeViewModel.state !== ViewState.EMPTY) {
+        homeViewModel.state = ViewState.CONTENT
+      }
     })
   }
 

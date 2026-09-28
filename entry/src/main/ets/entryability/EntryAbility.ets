@@ -10,7 +10,6 @@ import { preferenceUtil } from '../utils/PreferenceUtil';
 import { ColorModeManager } from '../utils/ColorModeManager';
 import { ToastUtil } from '../utils/ToastUtils';
 import { RedPlayerConfigBuilder, RedPlayerInitManager, RedPlayerPreload } from '@rte-xhs/redplayer';
-import { permissionManage } from '../utils/PermissionManage';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 import SQLite from '../db/SQLite';
@@ -182,7 +181,7 @@ export default class EntryAbility extends UIAbility {
     }
 
     /**
-     * 主窗口初始化：全屏、UIContext、权限、避让高度、断点、监听器注册（写入 AnimeState）
+     * 主窗口初始化：全屏、UIContext、避让高度、断点、监听器注册（写入 AnimeState）
      */
     @SuppressWarnings({ rules: [SuppressWarningsType.SYSCAP] })
     private async initMainWindow(windowStage: window.WindowStage): Promise<void> {
@@ -222,8 +221,6 @@ export default class EntryAbility extends UIAbility {
 
             // 初始化通知
             ToastUtil.initContext(uiContext);
-            // 初始化权限
-            permissionManage.requestPermission(uiContext.getHostContext() as Context);
 
             // 宽度断点初始值
             const widthBp: WidthBreakpoint = uiContext.getWindowWidthBreakpoint();

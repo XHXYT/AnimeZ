@@ -28,6 +28,7 @@ import { CollapsibleSection } from '../components/common/CollapsibleSection';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { VideoCacheList } from '../components/VideoCacheList';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
+import { permissionManage } from '../utils/PermissionManage';
 
 // 系统路由
 @Builder
@@ -49,6 +50,8 @@ struct VideoDetailPage {
   private panelController: PanelController = new PanelController()
 
   aboutToAppear() {
+    // 设备互联权限（投播用）仅播放场景需要：从冷启动移到详情页进入时申请（已授权则直接跳过）
+    permissionManage.requestPermission(this.getUIContext().getHostContext()! as Context);
     // 播放器控制层"设置"按钮（非全屏）：用简介同款半模态面板展示播放设置
     PLAYER_SETTINGS_EVENT.on(() => {
       this.viewModel.panelContentType = 2

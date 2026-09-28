@@ -69,6 +69,12 @@ export class VideoSourcesViewModel {
     try {
       this.state = ViewState.LOADING
       await this.loadSources()
+      // 未配置任何视频源：引导从右上角菜单导入配置（搜索/过滤导致的空列表不在此列）
+      if (dataSourceManager.getAllDataSourceConfigs().length === 0) {
+        this.state = ViewState.EMPTY
+        this.errorMessage = '点击右上角导入配置'
+        return
+      }
       this.state = ViewState.CONTENT
     } catch (error) {
       this.state = ViewState.ERROR

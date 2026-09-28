@@ -39,7 +39,8 @@ export default struct StateView {
           this.content()
         }
       } else if (this.state == ViewState.EMPTY) {
-        this.ImageWithText($r('app.media.ic_empty'), "暂无数据", this.errorMessage)
+        // 提供了 errorMessage 时以其为主文案（如"请导入配置后使用"引导语）
+        this.ImageWithText($r('app.media.ic_empty'), this.errorMessage !== '' ? this.errorMessage : "暂无数据")
       } else if (this.state == ViewState.ERROR) {
         this.ImageWithText($r('app.media.ic_error'), "出错了，点击重试", this.errorMessage)
       } else if (this.state == ViewState.CUSTOM) {

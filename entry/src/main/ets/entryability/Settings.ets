@@ -40,7 +40,7 @@ export class AppConfigs {
   /**
    * 默认播放器
    */
-  @Trace default_player: string = 'av'
+  @Trace default_player: string = 'mpv'
   /**
    * 颜色模式，默认为 跟随系统
    */

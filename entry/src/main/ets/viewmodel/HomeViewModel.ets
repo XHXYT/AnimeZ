@@ -28,6 +28,12 @@ export class HomeViewModel {
    * 加载首页数据（原 Homepage.loadNextPage）
    */
   public loadHomepageData() {
+    // 未配置任何视频源：首页直接引导导入配置，不发起数据请求
+    if (dataSourceManager.getAllDataSourceConfigs().length === 0) {
+      this.state = ViewState.EMPTY
+      this.errorMessage = '请导入配置后使用'
+      return
+    }
     this.state = ViewState.LOADING
     dataSourceManager.getHomepageData()
       .then((data) => {
