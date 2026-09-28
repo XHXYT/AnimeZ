@@ -1,15 +1,15 @@
-import EpisodeInfo from '../entity/EpisodeInfo';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
 import { TaskStatus, TaskStatusObserver } from '../utils/download/core/Task';
 import TaskObserver from '../utils/download/core/TaskObserver';
 import { M3U8DownloadTask } from '../utils/m3u8/M3U8Downloader';
 import Logger from '../utils/Logger';
-import { downloadViewModel } from '../viewmodel/DownloadViewModel';
+import { AnimeDownloadGroup, downloadViewModel } from '../viewmodel/DownloadViewModel';
 import StateView, { ViewState } from '../components/StateView';
 import TitleBar, { TitleBarButton } from '../components/TitleBar';
 import { MenuItem } from '../components/common/Button';
 import { ToastUtil } from '../utils/ToastUtils';
 import { AnimeState } from '../entryability/AnimeState';
+import { common } from '@kit.AbilityKit';
 
 // 系统路由 - 下载管理页
 @Builder
@@ -18,13 +18,13 @@ export function DownloadManagerPageBuilder(name: string, param: string) {
 }
 
 /**
- * 下载管理页
+ * 下载管理页（一级）：按番剧分组展示，点击进入番剧下载任务页
  */
 @ComponentV2
 struct DownloadManagerPage {
 
   aboutToAppear() {
-    downloadViewModel.attach()
+    downloadViewModel.attach(this.getUIContext().getHostContext()! as common.UIAbilityContext)
   }
 
   aboutToDisappear() {
@@ -44,9 +44,9 @@ struct DownloadManagerPage {
           if (downloadViewModel.isAllComplete) {
             this.FunctionBar()
           }
-          // 下载列表
-          DownloadManagerList({
-            tasks: downloadViewModel.tasks,
+          // 番剧分组列表
+          DownloadGroupList({
+            groups: downloadViewModel.groups,
             selectionManager: downloadViewModel.selectionManager
           })
             .layoutWeight(1)
@@ -210,7 +210,7 @@ struct DownloadManagerPage {
           ToastUtil.showAlertDialog(
             {
               title: '移除下载任务',
-              message: `确认移除选中的${downloadViewModel.selectCount}项下载任务？`,
+              message: `确认移除选中的${downloadViewModel.selectCount}个番剧的全部下载任务？`,
               primaryButton: {
                 value: '取消',
                 action: () => {
@@ -220,7 +220,7 @@ struct DownloadManagerPage {
                 value: '确定',
                 fontColor: Color.Red,
                 action: () => {
-                  downloadViewModel.deleteSelectedTasks()
+                  downloadViewModel.deleteSelectedGroups()
                 }
               }
             }, 'DownloadManagerPage')
@@ -233,10 +233,172 @@ struct DownloadManagerPage {
 }
 
 /**
+ * 番剧分组列表
+ */
+@ComponentV2
+struct DownloadGroupList {
+
+  @Require @Param groups: AnimeDownloadGroup[]
+  @Require @Param selectionManager: SelectionManager<AnimeDownloadGroup>
+
+  build() {
+    Column() {
+      List() {
+        ForEach(this.groups, (group: AnimeDownloadGroup) => {
+          ListItem() {
+            DownloadGroupItem({ selectionManager: this.selectionManager, group: group })
+          }
+          .onClick(() => {
+            if (this.selectionManager.isSelectionMode()) {
+              this.selectionManager.toggleSelectItem(group)
+              return
+            }
+            let params: Record<string, string> = { 'dir': group.dir, 'title': group.title }
+            AnimeState.pageStack.pushPathByName("DownloadAnimeTasksPage", params, true)
+          })
+          .gesture(LongPressGesture({ repeat: false })
+            .onAction((event) => {
+              Logger.d(this, 'onLongPress')
+              // 长按多选
+              if (!this.selectionManager.isSelectionMode()) {
+                this.selectionManager.toggleSelectionMode()
+              }
+              this.selectionManager.toggleSelectItem(group)
+            })
+          )
+        }, (group: AnimeDownloadGroup) => group.dir)
+      }
+      .edgeEffect(EdgeEffect.Spring)
+      .width('100%')
+      .height('100%')
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
+
+/**
+ * 番剧分组项：封面 + 番剧名 + 聚合状态
+ */
+@ComponentV2
+struct DownloadGroupItem {
+
+  @Require @Param selectionManager: SelectionManager<AnimeDownloadGroup>
+  @Require @Param group: AnimeDownloadGroup
+  @Local selectionMode: boolean = false
+  @Local isSelected: boolean = false
+  @Local selectionIconSize: number = 0
+  @Local selectionIconMargin: number = 0
+
+  private readonly selectionObserver: OnSelectChangeObserver<AnimeDownloadGroup> = {
+    onSelectionModeChange: (isSelectionMode: boolean) => {
+      if (isSelectionMode) {
+        this.selectionMode = true
+        ToastUtil.animateTo({
+          duration: 360,
+          curve: Curve.ExtremeDeceleration,
+          iterations: 1,
+          playMode: PlayMode.Normal
+        }, () => {
+          this.selectionIconSize = 24
+          this.selectionIconMargin = 16
+        })
+      } else {
+        ToastUtil.animateTo({
+          duration: 360,
+          curve: Curve.ExtremeDeceleration,
+          iterations: 1,
+          playMode: PlayMode.Normal,
+          onFinish: () => {
+            this.selectionMode = false
+          }
+        }, () => {
+          this.selectionIconSize = 0
+          this.selectionIconMargin = 0
+        })
+      }
+    },
+    onSelectChange: (item: AnimeDownloadGroup, isSelected) => {
+      if (this.group.dir == item.dir) {
+        this.isSelected = isSelected
+      }
+    }
+  }
+
+  aboutToAppear() {
+    this.selectionManager.addObserver(this.selectionObserver)
+    this.isSelected = this.selectionManager.isSelect(this.group)
+    this.selectionMode = this.selectionManager.isSelectionMode()
+    if (this.selectionMode) {
+      this.selectionIconSize = 24
+      this.selectionIconMargin = 16
+    }
+  }
+
+  aboutToDisappear() {
+    this.selectionManager.removeObserver(this.selectionObserver)
+  }
+
+  build() {
+    Row() {
+      Image(this.isSelected ? $r('app.media.ic_selection_selected') : $r('app.media.ic_selection_none'))
+        .width(this.selectionIconSize)
+        .height(this.selectionIconSize)
+        .margin({ left: this.selectionIconMargin })
+        .visibility(this.selectionMode ? Visibility.Visible : Visibility.None)
+        .fillColor(this.isSelected ? $r('app.color.primary_color') : $r('app.color.color_text_minor'))
+      Image(this.group.coverUrl)
+        .alt($r('app.media.pic_load_failed'))
+        .height('100%')
+        .aspectRatio(1.6)
+        .borderRadius(8)
+        .margin({ left: 16, right: 16 })
+        .objectFit(ImageFit.Cover)
+        .shadow({ radius: 12, color: AnimeState.darkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
+
+      Column() {
+        Text(this.group.title)
+          .fontSize(14)
+          .fontColor($r('app.color.color_text_major'))
+          .fontWeight(FontWeight.Bold)
+          .align(Alignment.Start)
+          .width('100%')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.getInfo())
+          .fontSize(10)
+          .fontColor($r('app.color.color_text_minor'))
+          .align(Alignment.Start)
+          .width('100%')
+      }
+      .justifyContent(FlexAlign.SpaceBetween)
+      .layoutWeight(1)
+      .height('100%')
+      .margin({ right: 16 })
+    }
+    .width('100%')
+    .height(80)
+  }
+
+  private getInfo(): string {
+    let info = `${this.group.completeCount}/${this.group.taskCount} 已缓存`
+    if (this.group.errorCount > 0) {
+      info += ` · ${this.group.errorCount}个失败`
+    }
+    if (this.group.runningCount > 0) {
+      info += ' · 下载中'
+    } else if (this.group.waitingCount > 0) {
+      info += ' · 排队中'
+    }
+    return info
+  }
+}
+
+/**
  * 下载项
  */
 @ComponentV2
-struct DownloadItem {
+export struct DownloadItem {
 
   @Require @Param selectionManager: SelectionManager<M3U8DownloadTask>
   @Require @Param task: M3U8DownloadTask
@@ -454,7 +616,7 @@ struct DownloadItem {
     } else if (status == TaskStatus.PREPARING) {
       return '准备中';
     } else if (status == TaskStatus.WAITING) {
-      return '等待中';
+      return '排队中';
     } else if (status == TaskStatus.PROCESSING) {
       return this.task.getFormatTotalSize() + ' / ' + this.task.getFormatReceivedSize() + ' ' + this.task.getFormatProgress();
     } else if (status == TaskStatus.PAUSED) {
@@ -467,60 +629,5 @@ struct DownloadItem {
       }
       return '出错了';
     }
-  }
-}
-
-/**
- * 下载列表
- */
-@ComponentV2
-struct DownloadManagerList {
-
-  @Require @Param tasks: M3U8DownloadTask[]
-  @Require @Param selectionManager: SelectionManager<M3U8DownloadTask>
-
-  build() {
-    Column() {
-      List() {
-        ForEach(this.tasks, (task: M3U8DownloadTask) => {
-          ListItem() {
-            DownloadItem({ selectionManager: this.selectionManager, task: task })
-          }
-          .onClick(() => {
-            Logger.d(this, 'isSelectionMode=' + this.selectionManager.isSelectionMode())
-            if (this.selectionManager.isSelectionMode()) {
-              this.selectionManager.toggleSelectItem(task)
-              return
-            }
-            if (task.isComplete()) {
-              let episode: EpisodeInfo = {
-                title: task.getTaskName() || '',
-                desc: task.getTaskName() || '',
-                link: task.getOriginalUrl(),
-                videoUrl: task.getLocalM3U8Path()
-              }
-              // LocalVideoPlayerPage 期望参数为 { episode: EpisodeInfo }，直接传对象会取到 undefined
-              let params: Record<string, EpisodeInfo> = { 'episode': episode }
-              AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", params, true)
-            }
-          })
-          .gesture(LongPressGesture({ repeat: false })
-            .onAction((event) => {
-              Logger.d(this, 'onLongPress')
-              // 长按多选
-              if (!this.selectionManager.isSelectionMode()) {
-                this.selectionManager.toggleSelectionMode()
-              }
-              this.selectionManager.toggleSelectItem(task)
-            })
-          )
-        }, (task: M3U8DownloadTask) => String(task.getTaskId()))
-      }
-      .edgeEffect(EdgeEffect.Spring)
-      .width('100%')
-      .height('100%')
-    }
-    .width('100%')
-    .height('100%')
   }
 }

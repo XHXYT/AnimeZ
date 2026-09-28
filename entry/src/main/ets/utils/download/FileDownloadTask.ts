@@ -92,7 +92,10 @@ export class FileDownloadTask<T extends DownloadTaskInfo = DownloadTaskInfo> ext
             this.taskInfo.url, data.header['content-disposition'], data.header['content-type'])
         }
         this.taskInfo.prepared = true
-        this.manager.process(this)
+        // HEAD 期间任务可能已被暂停/删除：保持 stopped 状态，下次 start 时因 prepared 直接续传
+        if (this.getStatus() == TaskStatus.PREPARING) {
+          this.manager.process(this)
+        }
       } else if (code < 400) {
         // 重定向
         this.redirectCount++
@@ -100,12 +103,26 @@ export class FileDownloadTask<T extends DownloadTaskInfo = DownloadTaskInfo> ext
         this.taskInfo.url = location
         this.doInit()
       } else {
-        // 请求出错了
-        this.statusManager.onError('request error! responseCode is ' + code)
+        // HEAD探测被服务器拒绝（部分CDN对HEAD返回5xx但GET正常）：跳过大小探测直接走GET下载，
+        // 真实错误（如403签名过期）会在GET阶段再次出现并正常报错
+        this.fallbackToDirectDownload('HEAD responseCode is ' + code)
       }
     } else {
       Logger.w(this, 'doInit err=' + JSON.stringify(err))
-      this.statusManager.onError(err.message)
+      // HEAD网络失败同样交由GET流程兜底
+      this.fallbackToDirectDownload('HEAD request failed: ' + (err ? err.message : 'unknown'))
+    }
+  }
+
+  /** HEAD 探测失败时跳过大小预取直接进入下载，大小改由 GET 响应头补报 */
+  private fallbackToDirectDownload(reason: string) {
+    Logger.w(this, 'doInit fallback to direct download, reason: ' + reason)
+    if (!this.taskInfo.fileName) {
+      this.taskInfo.fileName = DownloadUtils.guessFileName(this.taskInfo.url)
+    }
+    this.taskInfo.prepared = true
+    if (this.getStatus() == TaskStatus.PREPARING) {
+      this.manager.process(this)
     }
   }
 
@@ -305,6 +322,28 @@ export class FileDownloadTask<T extends DownloadTaskInfo = DownloadTaskInfo> ext
       httpRequest.on('headersReceive', (header: Object) => {
         const headers = header as Record<string, string>
         location = headers['location'] ?? ''
+        // HEAD探测被跳过时大小未知：从GET响应头补报总大小（content-range 总长优先，其次 content-length）
+        // totalWorkload==0 表示本次会话尚未计入大小（HEAD已计入、或断点续传前已持久化的场景不会重复计数）
+        if (!location && this.taskInfo.totalWorkload == 0 && this.observerDispatcher.progressManager) {
+          let size = -1
+          const contentRange = headers['content-range']
+          if (contentRange && contentRange.toLowerCase().indexOf('bytes') >= 0) {
+            const total = parseInt(contentRange.split('/')[1])
+            if (!isNaN(total)) {
+              size = total
+            }
+          }
+          if (size < 0) {
+            const length = parseInt(headers['content-length'])
+            if (!isNaN(length)) {
+              size = length
+            }
+          }
+          if (size >= 0) {
+            Logger.d(this, 'download report size from GET header: ' + size)
+            this.observerDispatcher.progressManager.onInitSize(size)
+          }
+        }
         if (startOffset > 0 && !progressAdjusted) {
           const contentRange = headers['content-range']
           if (contentRange && contentRange.toLowerCase().indexOf('bytes') >= 0) {

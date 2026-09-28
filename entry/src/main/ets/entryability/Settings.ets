@@ -141,6 +141,10 @@ export class AppConfigs {
    * 下载保存位置 sandbox=应用沙箱目录 public=公共下载目录(Download/包名/)
    */
   @Trace download_location: string = 'sandbox'
+  /**
+   * 下载区分剧集路线：开启后任务目录为 番剧名/线路名/，关闭后为 番剧名/；仅影响新任务
+   */
+  @Trace download_separate_route: boolean = false
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -208,6 +212,7 @@ export class AppConfigs {
     this.search_scope_sources = (json["search_scope_sources"] as string) ?? this.search_scope_sources
     this.search_result_style = (json["search_result_style"] as string) ?? this.search_result_style
     this.download_location = (json["download_location"] as string) ?? this.download_location
+    this.download_separate_route = (json["download_separate_route"] as boolean) ?? this.download_separate_route
   }
 
   /**
@@ -259,7 +264,7 @@ export class AppConfigs {
     'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_speed', 'danmaku_area',
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
-    'search_result_style', 'download_location')
+    'search_result_style', 'download_location', 'download_separate_route')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -297,7 +302,8 @@ export class AppConfigs {
         "search_scope_groups": this.search_scope_groups,
         "search_scope_sources": this.search_scope_sources,
         "search_result_style": this.search_result_style,
-        "download_location": this.download_location
+        "download_location": this.download_location,
+        "download_separate_route": this.download_separate_route
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -342,6 +348,7 @@ export class AppConfigs {
     this.search_scope_sources = ''
     this.search_result_style = 'auto'
     this.download_location = 'sandbox'
+    this.download_separate_route = false
     this.isLoading = false
     await this.save()
   }

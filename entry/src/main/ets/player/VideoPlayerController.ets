@@ -881,6 +881,14 @@ export struct VideoPlayerController {
     }
   }
 
+  /** 切换到指定剧集（越界或重复点击不处理） */
+  private selectEpisodeByIndex(index: number): void {
+    if (index < 0 || index >= this.episodeList.length || index == this.episodeIndex) {
+      return
+    }
+    this.playerManager.selectEpisode(index)
+  }
+
   /** 单击/快捷键：切换控制层显示隐藏（暂停态保持常显） */
   private toggleControllerVisibility(): void {
     // 暂停态不隐藏控制层，保持常显
@@ -1314,27 +1322,52 @@ export struct VideoPlayerController {
 
       // 下控制栏区域
       Row() {
-        Image(this.isPlayingNow() ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
-          .width(24)
-          .height(24)
-          .fillColor(Color.White)
-          .margin({ left: this.isFullScreen ? 16 : 12 })
-          .objectFit(ImageFit.Contain)
-          .onClick(() => {
-            if (this.isCasting) {
-              if (this.isCastPlaying) {
-                this.castManager.pause()
-              } else {
-                this.castManager.play()
+        Row({ space: 12 }) {
+          // 上一集（第一集时隐藏）
+          if (this.episodeIndex > 0) {
+            Image($r("app.media.ic_episode_prev"))
+              .width(22)
+              .height(22)
+              .fillColor(Color.White)
+              .objectFit(ImageFit.Contain)
+              .onClick(() => {
+                this.selectEpisodeByIndex(this.episodeIndex - 1)
+              })
+          }
+          Image(this.isPlayingNow() ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
+            .width(24)
+            .height(24)
+            .fillColor(Color.White)
+            .objectFit(ImageFit.Contain)
+            .onClick(() => {
+              if (this.isCasting) {
+                if (this.isCastPlaying) {
+                  this.castManager.pause()
+                } else {
+                  this.castManager.play()
+                }
+                return
               }
-              return
-            }
-            if (this.playerStatus == PlayerStatus.PLAY) {
-              this.playerManager.pause()
-            } else {
-              this.playerManager.start()
-            }
-          })
+              if (this.playerStatus == PlayerStatus.PLAY) {
+                this.playerManager.pause()
+              } else {
+                this.playerManager.start()
+              }
+            })
+          // 下一集（最后一集时隐藏）
+          if (this.episodeIndex < this.episodeList.length - 1) {
+            Image($r("app.media.ic_episode_next"))
+              .width(22)
+              .height(22)
+              .fillColor(Color.White)
+              .objectFit(ImageFit.Contain)
+              .onClick(() => {
+                this.selectEpisodeByIndex(this.episodeIndex + 1)
+              })
+          }
+        }
+        .margin({ left: this.isFullScreen ? 16 : 12 })
+        .alignItems(VerticalAlign.Center)
 
         Text(this.currentTime).fontSize(12).margin({ left: 12, right: 6 }).fontColor(Color.White)
         Slider({

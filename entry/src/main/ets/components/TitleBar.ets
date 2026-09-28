@@ -204,7 +204,7 @@ export default struct TitleBar {
     .padding({
       left: 16,
       right: this.rightInset >= 0 ? this.rightInset :
-        (AnimeState.windowMode ? Math.max(16, AnimeState.titleButtonWidth + 12) : 16)
+        (AnimeState.windowMode ? Math.max(14, AnimeState.titleButtonWidth + 12) : 14)
     })
   }
 }

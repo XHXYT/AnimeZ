@@ -127,6 +127,16 @@ struct SettingsPage {
           }
         }
       }),
+      new CustomItemInfo({
+        id: 'download_separate_route',
+        title: '下载区分剧集路线',
+        subtitle: '开启后新任务按 番剧/线路 分层存放，关闭则直接存放在番剧文件夹',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.download_separate_route,
+        onChange: (value) => {
+          appSettings.download_separate_route = value as boolean
+        }
+      }),
 
       // 播放组
       new CustomItemInfo({ id: 'group_play', title: '播放', type: ItemActionType.GROUP }),

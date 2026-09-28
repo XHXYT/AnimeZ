@@ -28,6 +28,18 @@ export default class HttpUtils {
      * @param url
      */
     static async getString(url: string, headers?: object): Promise<string> {
+        try {
+            return await HttpUtils.doGetString(url, headers)
+        } catch (e) {
+            // http 明文链接可能已被站点弃用（80 端口失联导致连接超时），失败时升级 https 重试一次
+            if (url.startsWith('http://')) {
+                return await HttpUtils.doGetString('https://' + url.substring('http://'.length), headers)
+            }
+            throw e
+        }
+    }
+
+    private static async doGetString(url: string, headers?: object): Promise<string> {
         let httpRequest = http.createHttp()
        // Logger.d('HttpUtils.getString', `已使用 ${url} 创建Http`)
 

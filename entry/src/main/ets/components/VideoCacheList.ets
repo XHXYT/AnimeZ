@@ -10,6 +10,7 @@ import { TaskManagerObserver } from '../utils/download/core/TaskManager';
 import { AnimeState } from '../entryability/AnimeState';
 import { common } from '@kit.AbilityKit';
 import { DownloadDirHelper } from '../utils/DownloadDirHelper';
+import { ToastUtil } from '../utils/ToastUtils';
 
 @ComponentV2
 export struct VideoCacheList {
@@ -56,7 +57,7 @@ export struct VideoCacheList {
 
                 Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.Start, wrap: FlexWrap.Wrap }) {
                   ForEach(episodeList.episodes, (item: EpisodeInfo, episodeIndex: number) => {
-                    VideoCacheItem({ videoDetailInfo: this.videoDetailInfo, episodeInfo: item })
+                    VideoCacheItem({ videoDetailInfo: this.videoDetailInfo, episodeInfo: item, routeTitle: episodeList.title })
                       .width('22%')
                       .margin({ bottom: 8, right: (episodeIndex + 1) % 4 == 0 ? 0 : '4%' })
                   })
@@ -103,12 +104,15 @@ export struct VideoCacheList {
    * TODO test缓存全部
    */
   private downloadAll(episodeList: EpisodeList) {
+    const taskDir: string = DownloadDirHelper.getTaskDownloadDir(
+      this.getUIContext().getHostContext()! as common.UIAbilityContext, this.videoDetailInfo.title, episodeList.title)
     const observer: TaskManagerObserver<M3U8DownloadTask> = {
       onTaskLoaded: (tasks: M3U8DownloadTask[]) => {
         ZDownloader.get(M3U8Downloader).removeObserver(observer)
+        let added = 0
         for (let episode of episodeList.episodes) {
           let task = tasks.find((task) => {
-            return task.getOriginalUrl() == episode.link
+            return task.getOriginalUrl() == episode.link && task.taskInfo.downloadDir == taskDir
           })
           Logger.d(this, 'find task=' + task + ' link=' + episode.link)
           if (task) {
@@ -121,10 +125,15 @@ export struct VideoCacheList {
             .setSourceKey(this.videoDetailInfo.sourceKey)
             .setTaskName(episode.desc)
             .setFileName('index.m3u8')
-            .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext)
-              + DownloadDirHelper.sanitizeDirName(this.videoDetailInfo.title) + '/')
+            .setDownloadDir(taskDir)
             .build()
           task.start()
+          added++
+        }
+        if (added > 0) {
+          ToastUtil.showToast({ message: `已加入${added}个下载任务，将按顺序自动下载` })
+        } else {
+          ToastUtil.showToast({ message: '本列表剧集均已在下载列表中' })
         }
       },
       onTaskCreateFailed: (task: M3U8DownloadTask, error: Error) => {

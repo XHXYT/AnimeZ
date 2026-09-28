@@ -16,6 +16,11 @@
       "buildFunction": "DownloadManagerPageBuilder"
     },
     {
+      "name": "DownloadAnimeTasksPage",
+      "pageSourceFile": "src/main/ets/view/DownloadAnimeTasksPage.ets",
+      "buildFunction": "DownloadAnimeTasksPageBuilder"
+    },
+    {
       "name": "VideoHistoryPage",
       "pageSourceFile": "src/main/ets/view/VideoHistoryPage.ets",
       "buildFunction": "VideoHistoryPageBuilder"

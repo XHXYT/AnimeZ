@@ -14,18 +14,31 @@ export struct VideoCacheItem {
 
   @Require @Param videoDetailInfo: VideoDetailInfo
   @Require @Param episodeInfo: EpisodeInfo
+  /** 所属剧集路线名（EpisodeList.title），用于"区分剧集路线"时的目录分层 */
+  @Require @Param routeTitle: string
   @Local downloadTask: M3U8DownloadTask | null = null
   @Local status: number = -1
   private statusObserver: TaskStatusObserver = {
     onStatusChanged: (task, oldStatus, status) => {
       Logger.d(this, "download onStatusChanged status=" + status)
       this.status = status
+      if (status == TaskStatus.WAITING) {
+        ToastUtil.showToast({ message: '已加入下载队列，将按顺序自动下载' })
+      }
     }
   }
+
+  /** 本集对应的任务下载目录（含可能的线路子目录） */
+  private get taskDirPath(): string {
+    return DownloadDirHelper.getTaskDownloadDir(
+      this.getUIContext().getHostContext()! as common.UIAbilityContext, this.videoDetailInfo.title, this.routeTitle)
+  }
+
   private readonly observer: TaskManagerObserver<M3U8DownloadTask> = {
     onTaskLoaded: (tasks: M3U8DownloadTask[]) => {
       let target = tasks.find((task) => {
         return task.taskInfo.originalUrl == this.episodeInfo.link
+          && task.taskInfo.downloadDir == this.taskDirPath
       })
       if (target) {
         this.downloadTask = target
@@ -38,7 +51,8 @@ export struct VideoCacheItem {
     },
     onTaskAdd: (task: M3U8DownloadTask) => {
       Logger.d(this, 'onMissionAdd id=' + task.getTaskId())
-      if (task.taskInfo.originalUrl == this.episodeInfo.link) {
+      if (task.taskInfo.originalUrl == this.episodeInfo.link
+        && task.taskInfo.downloadDir == this.taskDirPath) {
         this.downloadTask = task
         this.downloadTask.addStatusObserver(this.statusObserver)
         this.status = task.getStatus()
@@ -107,8 +121,7 @@ export struct VideoCacheItem {
           .setSourceKey(this.videoDetailInfo.sourceKey)
           .setTaskName(this.episodeInfo.desc)
           .setFileName('index.m3u8')
-          .setDownloadDir(DownloadDirHelper.getDownloadDir(this.getUIContext().getHostContext()! as common.UIAbilityContext)
-            + DownloadDirHelper.sanitizeDirName(this.videoDetailInfo.title) + '/')
+          .setDownloadDir(this.taskDirPath)
           .build()
         this.downloadTask.start()
       } else {

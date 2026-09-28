@@ -745,7 +745,24 @@ export default class GenericDataSource implements DataSource {
   }
 
   private async parseHtml(url: string): Promise<AnyNode> {
-    return await HttpUtils.getHtml(url);
+    return await HttpUtils.getHtml(this.upgradeSchemeToBaseUrl(url));
+  }
+
+  /**
+   * 源 baseUrl 为 https 时，把页面内硬编码的同域 http:// 明文链接升级为 https：
+   * 部分站点（如 AGE）列表链接写死 http，但其 80 端口已失联，
+   * 直接请求会一直等到连接超时；升级为与源同协议可立即正常访问
+   */
+  private upgradeSchemeToBaseUrl(url: string): string {
+    if (!url.startsWith('http://') || !this.baseUrl.startsWith('https://')) {
+      return url;
+    }
+    const urlHost = url.substring('http://'.length).split('/')[0];
+    const baseHost = this.baseUrl.substring('https://'.length).split('/')[0];
+    if (urlHost === baseHost) {
+      return 'https://' + url.substring('http://'.length);
+    }
+    return url;
   }
 
   // ==================== JSON 模式 ====================

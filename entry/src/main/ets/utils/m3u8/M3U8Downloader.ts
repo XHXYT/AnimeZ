@@ -43,6 +43,13 @@ class M3U8DownloadTaskBuilder extends DownloadTaskBuilder<M3U8DownloadTask> {
  */
 export default class M3U8Downloader extends Downloader<M3U8DownloadTask> {
 
+  /**
+   * 视频级串行队列：同一时刻仅一个视频任务处于 准备/下载 状态，
+   * 其余任务自动排队（WAITING），前一个完成后由 startNext 接续；
+   * 避免多视频并发把脆弱的解析源CDN打挂（分片级并发仍为3）
+   */
+  maxProcessingTaskCount = 1;
+
   with(url: string): M3U8DownloadTaskBuilder {
     return new M3U8DownloadTaskBuilder(this, url)
   }
@@ -77,7 +84,7 @@ export class M3U8DownloadTask extends GroupDownloadTask {
 
   constructor(manager: TaskManager, taskInfo: DownloadTaskInfo) {
     super(manager, new M3U8SegmentTaskManager(), taskInfo)
-    this.taskDir = this.getDownloadDir() + CryptoJS.MD5(taskInfo.originalUrl).toString() + '/'
+    this.taskDir = M3U8DownloadTask.resolveTaskDir(taskInfo)
     // 自监听状态：网页解析源出错后标记强制重新初始化
     this.statusManager.addObserver({
       onStatusChanged: (task: Task, oldStatus: TaskStatus, status: TaskStatus) => {
@@ -86,6 +93,36 @@ export class M3U8DownloadTask extends GroupDownloadTask {
         }
       }
     })
+  }
+
+  /**
+   * 解析任务分片目录：优先使用可读的 剧集名_短哈希 目录；
+   * 兼容旧任务——可读目录不存在而旧版 MD5 目录存在时沿用旧目录，避免已有文件失联
+   */
+  static resolveTaskDir(taskInfo: DownloadTaskInfo): string {
+    const base: string = taskInfo.downloadDir
+    const md5: string = CryptoJS.MD5(taskInfo.originalUrl).toString()
+    const readable = base + M3U8DownloadTask.sanitizeDirName(taskInfo.taskName) + '_' + md5.substring(0, 8) + '/'
+    const legacy = base + md5 + '/'
+    try {
+      if (!fs.accessSync(readable) && fs.accessSync(legacy)) {
+        return legacy
+      }
+    } catch (e) {
+      // 路径探测失败按新目录处理
+    }
+    return readable
+  }
+
+  /**
+   * 剧集名转安全的文件夹名：替换文件系统非法字符，压缩空白，限长，空名回退
+   */
+  static sanitizeDirName(name: string): string {
+    const sanitized = (name ?? '').replace(/[\\/:*?"<>|\r\n\t]/g, '_').replace(/\s+/g, ' ').trim().replace(/^\.+$/, '_')
+    if (!sanitized) {
+      return 'video'
+    }
+    return sanitized.length > 80 ? sanitized.substring(0, 80) : sanitized
   }
 
   /** 是否为需要WebView网页解析的视频源（原始链接形如 'rawLink_|_js'） */
@@ -124,12 +161,71 @@ export class M3U8DownloadTask extends GroupDownloadTask {
   }
 
   doDelete() {
-    fs.rmdir(this.taskDir)
-    // 回收空的番剧名文件夹（downloadDir 即番剧名目录），仍有其他剧集时忽略
+    // 同一 originalUrl 的重复任务共享同一分片目录（taskDir 由 剧集名+链接短哈希 决定），
+    // 仍有其他任务占用该目录时只删数据库记录，保留分片文件
+    const sharedByOther = this.manager && this.manager.tasks.some((t) =>
+      t instanceof M3U8DownloadTask
+      && t.getTaskId() != this.getTaskId()
+      && t.taskInfo.originalUrl == this.taskInfo.originalUrl
+      && t.taskInfo.downloadDir == this.taskInfo.downloadDir)
+    if (!sharedByOther && fs.accessSync(this.taskDir)) {
+      fs.rmdir(this.taskDir)
+        .then(() => {
+          Logger.d(this, 'doDelete remove taskDir success')
+          this.tryRecycleAnimeDir()
+        })
+        .catch((e) => {
+          Logger.d(this, 'doDelete remove taskDir failed! e=' + JSON.stringify(e))
+        })
+    } else {
+      this.tryRecycleAnimeDir()
+    }
+  }
+
+  /**
+   * 回收任务下载目录（可能为番剧名目录或其下的线路子目录）及其已空的上级番剧名目录。
+   * 注意：fs.rmdir 是递归删除语义，非 POSIX 的"仅空目录"，
+   * 必须先用 listFileSync 确认目录已空，否则会误删整个番剧的已下载文件
+   */
+  private tryRecycleAnimeDir(): void {
     try {
-      fs.rmdir(this.getDownloadDir())
+      const dir = this.getDownloadDir()
+      if (fs.accessSync(dir) && fs.listFileSync(dir).length == 0) {
+        fs.rmdirSync(dir)
+        Logger.d(this, 'doDelete recycle empty dir: ' + dir)
+        // "区分剧集路线"时 dir 为线路子目录，回收后继续尝试回收已空的番剧名目录
+        this.tryRecycleParentDir(dir)
+      }
     } catch (e) {
-      // 目录非空或无权限：保留
+      // 目录不存在或无权限：保留
+    }
+  }
+
+  /**
+   * 尝试回收 dir 的已空上级目录；上级为下载根目录时跳过
+   * （沙箱根 .../files/download/、公共根 .../Download/包名/）
+   */
+  private tryRecycleParentDir(dir: string): void {
+    try {
+      const trimmed = dir.endsWith('/') ? dir.substring(0, dir.length - 1) : dir
+      const index = trimmed.lastIndexOf('/')
+      if (index <= 0) {
+        return
+      }
+      const parent = trimmed.substring(0, index)
+      const parentName = trimmed.substring(index + 1)
+      const grandIndex = parent.lastIndexOf('/')
+      const grandName = grandIndex >= 0 ? parent.substring(grandIndex + 1) : ''
+      if (parentName.toLowerCase() == 'download' || grandName.toLowerCase() == 'download') {
+        return
+      }
+      const parentDir = parent + '/'
+      if (fs.accessSync(parentDir) && fs.listFileSync(parentDir).length == 0) {
+        fs.rmdirSync(parentDir)
+        Logger.d(this, 'doDelete recycle empty parent dir: ' + parentDir)
+      }
+    } catch (e) {
+      // 目录不存在或无权限：保留
     }
   }
 

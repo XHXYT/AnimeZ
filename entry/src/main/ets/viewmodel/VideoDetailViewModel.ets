@@ -241,6 +241,9 @@ export class VideoDetailViewModel {
 
   // 初始化数据
   public async initialize(params: VideoNavigateInfo) {
+    // 进入详情页立即应用详情页系统栏样式（浅色下中性灰图标）：
+    // 播放区背景为黑色，若等详情加载完成才设置，期间黑色图标在黑底上不可见
+    SystemBarUtils.setWindowSystemBarTransparent(true);
     this.url = params.url as string;
     this.videoID = params.id;
     this.title = params.title;
@@ -547,6 +550,8 @@ export class VideoDetailViewModel {
 
   // 处理页面显示
   public async onPageShow() {
+    // 从叠放页面返回时恢复详情页系统栏样式（onPageHide 已还原为默认样式）
+    SystemBarUtils.setWindowSystemBarTransparent(true);
     // 刷新 PiP 委托指向（叠放页面返回后保证指向当前显示页）
     this.registerPiPDelegates()
     this.stackSizeOnShown = AnimeState.pageStack.size()

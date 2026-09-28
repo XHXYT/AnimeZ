@@ -31,10 +31,15 @@ export default class Logger {
 
     /**
      * error
+     * 注意：err 允许缺省（如超时等无异常对象的场景），缺省时不再读取 err.code，
+     * 否则会在日志调用处抛 TypeError 中断上层流程（曾导致手动辅助兜底无法启动）
      */
     static e(type: 'fail' | 'tips' = 'tips', descr?: string, err?: any) {
         if (type === 'fail') {
-            hilog.error(DOMAIN, PREFIX, '%{public}s', `${descr}失败，code: ${err.code} message: ${err.message} error: ${JSON.stringify(err)}`)
+            const code = (err && err.code !== undefined) ? err.code : 'none'
+            const message = (err && err.message !== undefined) ? err.message : ''
+            const detail = err ? JSON.stringify(err) : 'undefined'
+            hilog.error(DOMAIN, PREFIX, '%{public}s', `${descr}失败，code: ${code} message: ${message} error: ${detail}`)
         } else {
             hilog.error(DOMAIN, PREFIX, '%{public}s', descr)
         }

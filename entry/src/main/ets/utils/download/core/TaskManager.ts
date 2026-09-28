@@ -248,8 +248,11 @@ export default abstract class TaskManager<P extends Task = Task, T extends Task 
 
           task.canStart()
 
-          if (oldStatus == TaskStatus.PROCESSING || oldStatus == TaskStatus.PREPARING || oldStatus == TaskStatus.WAITING) {
-            if (status == TaskStatus.PAUSED || status == TaskStatus.ERROR || status == TaskStatus.COMPLETE) {
+          // processingCount 只统计 PROCESSING/PREPARING（startInner 计入），
+          // 递减只在这里进行：oldStatus 为被计数态、newStatus 为非计数态即释放名额
+          if (oldStatus == TaskStatus.PROCESSING || oldStatus == TaskStatus.PREPARING) {
+            if (status == TaskStatus.PAUSED || status == TaskStatus.WAITING || status == TaskStatus.ERROR
+              || status == TaskStatus.COMPLETE) {
               Logger.d(this, "onStatusChanged runningCount=" + this.processingCount);
               --this.processingCount;
               this.startNext();
@@ -272,9 +275,7 @@ export default abstract class TaskManager<P extends Task = Task, T extends Task 
     if (status == TaskStatus.COMPLETE || status == TaskStatus.ERROR || status == TaskStatus.CREATED) {
       return;
     }
-    if (status != TaskStatus.WAITING) {
-      --this.processingCount;
-    }
+    // 名额递减统一由 childStatusObserver 的状态迁移完成，此处不再手动递减（否则双减）
     task.statusManager.setStatus(TaskStatus.PAUSED);
     task.doPause();
   }
@@ -416,6 +417,11 @@ export default abstract class TaskManager<P extends Task = Task, T extends Task 
       Logger.d(this, 'startNext parent task is stopped! taskName=' + this.parentTask.getTaskName())
       return
     }
+    if (this.parentTask && this.parentTask.isWaiting()) {
+      // 父任务在排队（视频级串行队列未轮到），子任务保持排队不自动开始
+      Logger.d(this, 'startNext parent task is waiting! taskName=' + this.parentTask.getTaskName())
+      return
+    }
     let isComplete = this.processingCount == 0;
     let errorMessage = null;
     Logger.d(this, "startNext runningCount=" + this.processingCount + " len=" + this.tasks.length);
@@ -463,9 +469,12 @@ export default abstract class TaskManager<P extends Task = Task, T extends Task 
       if (task.isWaiting()) {
         return;
       }
-      if (task.canPause()) {
-        task.pause();
+      if (!task.canPause()) {
+        // 已完成/出错/已暂停的任务保持原状态，不并入等待队列
+        return;
       }
+      // 先中断进行中的请求，再标记等待（直接置状态，避免 pause 触发 startNext 又拉起子任务）
+      task.doPause();
       task.statusManager.setStatus(TaskStatus.WAITING);
       task.doWaiting();
     });

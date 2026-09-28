@@ -85,4 +85,16 @@ export class DownloadDirHelper {
     }
     return sanitized.length > 80 ? sanitized.substring(0, 80) : sanitized
   }
+
+  /**
+   * 组装任务的下载目录：根目录/番剧名/；开启"下载区分剧集路线"且线路名非空时
+   * 再追加一层线路子目录（根目录/番剧名/线路名/）。仅影响新建任务
+   */
+  static getTaskDownloadDir(context: common.UIAbilityContext, animeTitle: string, routeTitle: string): string {
+    let dir = DownloadDirHelper.getDownloadDir(context) + DownloadDirHelper.sanitizeDirName(animeTitle) + '/'
+    if (appSettings.download_separate_route && routeTitle) {
+      dir += DownloadDirHelper.sanitizeDirName(routeTitle) + '/'
+    }
+    return dir
+  }
 }

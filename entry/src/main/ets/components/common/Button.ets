@@ -43,7 +43,8 @@ export struct ButtonBuilder {
             startIcon: item.startIconSrc ? item.startIconSrc : undefined, // MenuItem 的 icon 属性
             symbolStartIcon: item.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolStart)) : undefined,
             labelInfo: item.labelInfo,
-            symbolEndIcon: (item.checked || (this.selectedInner == item.value && config.needCheckmark)) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined,
+            symbolEndIcon: item.symbolEnd ? new SymbolGlyphModifier($r('sys.symbol.' + item.symbolEnd))
+              : ((item.checked || (this.selectedInner == item.value && config.needCheckmark)) ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined),
             builder: this.hasChildren(item) ? (): void => {
               this.subMenu(item)
             } : undefined
@@ -74,7 +75,8 @@ export struct ButtonBuilder {
         MenuItem({
           content: child.name,
           symbolStartIcon: child.symbolStart ? new SymbolGlyphModifier($r('sys.symbol.' + child.symbolStart)) : undefined,
-          symbolEndIcon: child.checked ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+          symbolEndIcon: child.symbolEnd ? new SymbolGlyphModifier($r('sys.symbol.' + child.symbolEnd))
+            : (child.checked ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined)
         }).onClick(() => {
           child.action?.()
         })
@@ -159,6 +161,7 @@ export interface MenuItem {
   value: string | number
   action?: () => void; // 菜单项点击事件
   symbolStart?: string
+  symbolEnd?: string // 右侧 Symbol 图标名（优先于勾选标记，用于排序方向箭头等）
   startIconSrc?: ResourceStr; // 菜单项图标 (可选)
   checked?: boolean; // 独立勾选态（优先于 menuSelected 单选勾选）
   labelInfo?: string; // 右侧标签信息（如当前值）
