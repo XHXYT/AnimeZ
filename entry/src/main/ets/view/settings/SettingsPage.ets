@@ -7,7 +7,7 @@ import { common } from '@kit.AbilityKit'
 import { appSettings } from '../../entryability/Settings'
 import { dataSourceManager } from '../../api/DataSourceManager'
 import Logger from '../../utils/Logger'
-import { SOURCE_CHANGED_EVENT } from '../../utils/EventBus'
+import { SOURCE_CHANGED_EVENT, SCHEDULE_SOURCE_CHANGED_EVENT } from '../../utils/EventBus'
 import { AnimeState } from '../../entryability/AnimeState'
 import { PiPManager } from '../../player/PiPManager'
 import { DownloadDirHelper, DownloadLocationType } from '../../utils/DownloadDirHelper'
@@ -33,6 +33,8 @@ struct SettingsPage {
   private get itemList(): CustomItemInfo[] {
     const sourceViews: ResourceStr[] = dataSourceManager.getHomepageSourceTitles()
     const sourceValues: string[] = dataSourceManager.getHomepageSourceKeys()
+    const scheduleKeys: string[] = dataSourceManager.getScheduleSourceKeys()
+    const scheduleTitles: string[] = scheduleKeys.map((key: string) => dataSourceManager.getSourceTitle(key) || key)
     return [
       // 界面组
       new CustomItemInfo({ id: 'group_appearance', title: '界面', type: ItemActionType.GROUP }),
@@ -77,6 +79,25 @@ struct SettingsPage {
             }).catch((err: Error) => {
               Logger.e('fail', '设置主页数据源', err)
             })
+          }
+        }
+      }),
+      new CustomItemInfo({
+        id: 'schedule_source',
+        title: '周表数据源',
+        subtitle: '周表页的数据来源，需源配置了周表规则',
+        type: ItemActionType.MENU,
+        value: scheduleKeys.includes(appSettings.schedule_source_key) ? appSettings.schedule_source_key : '',
+        menuOptions: scheduleKeys.length > 0
+          ? scheduleKeys.map((key, index) => new MenuOption(key, scheduleTitles[index]))
+          : [new MenuOption('', '暂无可用源')],
+        onChange: (value) => {
+          if (typeof value === 'string') {
+            // 设置周表数据源（空串=暂无可用源占位，不改变选择）
+            if (value !== '') {
+              appSettings.schedule_source_key = value
+              SCHEDULE_SOURCE_CHANGED_EVENT.emit()
+            }
           }
         }
       }),

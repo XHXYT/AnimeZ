@@ -1,8 +1,9 @@
-import { DataSourceConfig, SelectorConfig, ProcessConfig, StringProcessConfig, CategoryCardConfig, LoginConfig, VideoConfig, ParserConfig, CategoryConfig, RecommendConfig, SearchCaptchaConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig, SelectorConfig, ProcessConfig, StringProcessConfig, CategoryCardConfig, LoginConfig, VideoConfig, ParserConfig, CategoryConfig, RecommendConfig, SearchCaptchaConfig, ScheduleConfig } from "../api/DataSourceConfig"
 import { UIUtils } from '@kit.ArkUI'
 import { dataSourceManager } from "../api/DataSourceManager"
-import { SOURCE_CHANGED_EVENT, VIDEO_SOURCE_EVENT } from "../utils/EventBus"
+import { SOURCE_CHANGED_EVENT, VIDEO_SOURCE_EVENT, SCHEDULE_SOURCE_CHANGED_EVENT } from "../utils/EventBus"
 import { ToastUtil } from "../utils/ToastUtils"
+import { appSettings } from "../entryability/Settings"
 
 /** 选择器字段的复杂配置形态（与 DataSourceConfig.SelectorConfig 的对象分支结构一致） */
 export interface SelectorFieldConfig {
@@ -178,6 +179,28 @@ export class VideoSourceDetailViewModel {
     }
     this.editingConfig.defaultSource = isOn
     this.markAsChanged()
+  }
+
+  // 该源是否为当前周表源（全局设置 appSettings.schedule_source_key）
+  isScheduleSource(): boolean {
+    return appSettings.schedule_source_key !== '' && appSettings.schedule_source_key === this.editingConfig.key
+  }
+
+  // 切换周表源：勾选=把当前编辑的源设为周表源，取消=清除周表源（立即生效并持久化）
+  setScheduleSource(isOn: boolean) {
+    if (isOn === this.isScheduleSource()) {
+      return
+    }
+    if (isOn) {
+      if (this.editingConfig.key === '') {
+        ToastUtil.showToast({ message: '请先填写源 Key' })
+        return
+      }
+      appSettings.schedule_source_key = this.editingConfig.key
+    } else {
+      appSettings.schedule_source_key = ''
+    }
+    SCHEDULE_SOURCE_CHANGED_EVENT.emit()
   }
 
   // 切换搜索拼接基础URL
@@ -1311,6 +1334,84 @@ export class VideoSourceDetailViewModel {
       fields.push(this.field('列表容器选择器(可选)', '整页文档中先定位轮播容器，再在其中用列表选择器找条目',
         () => this.editingConfig.parserConfig.homepage.banner.containerSelector || '',
         (v: string) => { this.editingConfig.parserConfig.homepage.banner.containerSelector = v; this.markAsChanged() }))
+    }
+    return fields
+  }
+
+  // 周表节点按需创建：编辑任一周表字段时自动补齐节点（是否为可用周表源由
+  // urlTemplate/listSelector 是否填写决定，见 GenericDataSource.hasScheduleConfig）
+  private ensureSchedule(): ScheduleConfig {
+    if (!this.editingConfig.parserConfig.schedule) {
+      this.editingConfig.parserConfig.schedule = {
+        urlTemplate: '',
+        listSelector: '',
+        itemSelectors: {},
+        urlNeedBaseUrl: !this.isJson(),
+        enabledHttps: true
+      }
+    }
+    return this.editingConfig.parserConfig.schedule
+  }
+
+  getScheduleUrlNeedBaseUrl(): boolean {
+    return this.editingConfig.parserConfig.schedule?.urlNeedBaseUrl ?? (!this.isJson())
+  }
+
+  setScheduleUrlNeedBaseUrl(isOn: boolean) {
+    const schedule = this.ensureSchedule()
+    if (isOn === schedule.urlNeedBaseUrl) {
+      return
+    }
+    schedule.urlNeedBaseUrl = isOn
+    this.markAsChanged()
+  }
+
+  getScheduleEnabledHttps(): boolean {
+    return this.editingConfig.parserConfig.schedule?.enabledHttps ?? true
+  }
+
+  setScheduleEnabledHttps(isOn: boolean) {
+    const schedule = this.ensureSchedule()
+    if (isOn === schedule.enabledHttps) {
+      return
+    }
+    schedule.enabledHttps = isOn
+    this.markAsChanged()
+  }
+
+  // 周表条目字段模板存取（供统一字段选择组件使用）
+  getScheduleItemSelectors(): SelectorConfig {
+    return this.editingConfig.parserConfig.schedule?.itemSelectors || {}
+  }
+
+  setScheduleItemSelectors(config: SelectorConfig) {
+    this.ensureSchedule().itemSelectors = config
+    this.markAsChanged()
+  }
+
+  // 周表基础字段（模式自适应：HTML=CSS选择器 / JSON=JSON路径）
+  scheduleFields(): EditField[] {
+    const json = this.isJson()
+    const fields: EditField[] = [
+      this.field('地址模板',
+        '周表数据地址，{weekday} 为星期占位符(1=周一..7=周日)，相对路径拼接基础URL',
+        () => this.editingConfig.parserConfig.schedule?.urlTemplate || '',
+        (v: string) => { this.ensureSchedule().urlTemplate = v; this.markAsChanged() }),
+      this.field(json ? '列表JSON路径' : '列表选择器',
+        json ? '当天列表在响应中的JSON路径，如 data.list.0.videos' : '周表条目的CSS选择器',
+        () => this.editingConfig.parserConfig.schedule?.listSelector || '',
+        (v: string) => { this.ensureSchedule().listSelector = v; this.markAsChanged() })
+    ]
+    // HTML 专属：首页多区块形态（一周各天分区在同一页面，按区块标题定位星期）
+    if (!json) {
+      fields.push(this.field('星期区块选择器(可选)',
+        '首页多区块形态：所有星期区块的容器选择器，如 .anime-schedule；留空则按单列表模式解析',
+        () => this.editingConfig.parserConfig.schedule?.weekdayBlocksSelector || '',
+        (v: string) => { this.ensureSchedule().weekdayBlocksSelector = v; this.markAsChanged() }))
+      fields.push(this.field('星期标题选择器(可选)',
+        '每个区块内标识星期的标题元素，如 h4（文本形如"星期三/周三"）；配合星期区块选择器使用',
+        () => this.editingConfig.parserConfig.schedule?.weekdayTitleSelector || '',
+        (v: string) => { this.ensureSchedule().weekdayTitleSelector = v; this.markAsChanged() }))
     }
     return fields
   }

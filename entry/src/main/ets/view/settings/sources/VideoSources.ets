@@ -576,6 +576,15 @@ struct SourceItem {
           .borderRadius(4)
           .margin({ right: 8 })
       }
+      if (this.item.key === appSettings.schedule_source_key) {
+        Text('周表源')
+          .fontSize(12)
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.primary_color_accent'))
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .borderRadius(4)
+          .margin({ right: 8 })
+      }
       if (!this.item.enabled) {
         Text('已禁用')
           .fontSize(12)

@@ -41,7 +41,7 @@ struct VideoSourceDetail {
   @Local currentTabIndex: number = 0
 
   // Tab页标题
-  private tabTitles: string[] = ['基本', '搜索', '主页', '详情', '视频']
+  private tabTitles: string[] = ['基本', '搜索', '主页', '周表', '详情', '视频']
 
   build() {
     NavDestination() {
@@ -64,46 +64,65 @@ struct VideoSourceDetail {
           ]
         })
         // 工具栏
-        Row({ space: 12 }) {
-          Row({ space: 5 }) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.enabled })
-              .onChange((isOn: boolean) => {
-                this.vm.setEnabled(isOn)
-              })
-            Text('启用')
+        Column() {
+          Row({ space: 12 }) {
+            Row({ space: 5 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.enabled })
+                .onChange((isOn: boolean) => {
+                  this.vm.setEnabled(isOn)
+                })
+              Text('启用')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+            }
+            .alignItems(VerticalAlign.Center)
+            Blank()
+            Text('源模式')
               .fontSize(16)
               .fontColor($r('app.color.color_text_major'))
-          }
-          .alignItems(VerticalAlign.Center)
-          Row({ space: 5 }) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.defaultSource })
-              .onChange((isOn: boolean) => {
-                this.vm.setDefaultSource(isOn)
+            Select([
+              { value: 'HTML' },
+              { value: 'JSON' }
+            ])
+              .selected(this.vm.sourceType === 'json' ? 1 : 0)
+              .value(this.vm.sourceType === 'json' ? 'JSON' : 'HTML')
+              .font({ size: 14 })
+              .onSelect((index: number) => {
+                this.vm.setSourceType(index === 1 ? 'json' : 'html')
               })
-            Text('首页')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
           }
+          .width('100%')
           .alignItems(VerticalAlign.Center)
-          Blank()
-          Text('源模式')
-            .fontSize(16)
-            .fontColor($r('app.color.color_text_major'))
-          Select([
-            { value: 'HTML' },
-            { value: 'JSON' }
-          ])
-            .selected(this.vm.sourceType === 'json' ? 1 : 0)
-            .value(this.vm.sourceType === 'json' ? 'JSON' : 'HTML')
-            .font({ size: 14 })
-            .onSelect((index: number) => {
-              this.vm.setSourceType(index === 1 ? 'json' : 'html')
-            })
+          Row({ space: 12 }) {
+            Row({ space: 5 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.defaultSource })
+                .onChange((isOn: boolean) => {
+                  this.vm.setDefaultSource(isOn)
+                })
+              Text('首页')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+            }
+            .alignItems(VerticalAlign.Center)
+            Row({ space: 5 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.isScheduleSource() })
+                .onChange((isOn: boolean) => {
+                  this.vm.setScheduleSource(isOn)
+                })
+              Text('周表')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
         .width('100%')
         .padding({ left: 16, right: 16 })
         .backgroundColor($r('app.color.background_color_accent'))
-        .alignItems(VerticalAlign.Center)
+        // Tab页签栏（胶囊按钮，可横向滚动）
+        this.TabBarView()
         // Tab内容区域
         Tabs({ index: this.currentTabIndex }) {
           ForEach(this.tabTitles, (item: string, index: number) => {
@@ -111,15 +130,12 @@ struct VideoSourceDetail {
               this.tabContentBuilder(item)
             }
             .align(Alignment.TopStart)
-            .tabBar(this.tabBarBuilder(item, index))
           }, (key: string) => key)
         }
-        .barHeight(52)
-        .barWidth(200)
+        .barHeight(0)
         .vertical(false)
         .scrollable(true)
         .layoutWeight(1)
-        .barMode(BarMode.Fixed)
         .animationDuration(300)
         .onChange((index: number) => {
           this.currentTabIndex = index
@@ -174,19 +190,31 @@ struct VideoSourceDetail {
 
   // ---------- 构建器 ----------
 
+  // 胶囊风格页签栏：选中项主色底白字，未选中卡片底灰字，超出宽度可横向滚动
   @Builder
-  tabBarBuilder(name: string, index: number) {
-    Column({space: 2}) {
-      Text(name)
-        .fontSize(this.currentTabIndex == index ? 17 : 16)
-        .fontWeight(this.currentTabIndex == index ? FontWeight.Regular : FontWeight.Normal)
-      Row()
-        .backgroundColor(this.currentTabIndex == index ? $r('app.color.primary_color') : Color.Transparent)
-        .borderRadius(2)
-        .width('60%')
-        .height(4)
+  TabBarView() {
+    Scroll() {
+      Row({ space: 8 }) {
+        ForEach(this.tabTitles, (name: string, index: number) => {
+          Text(name)
+            .fontSize(15)
+            .fontWeight(this.currentTabIndex == index ? FontWeight.Medium : FontWeight.Normal)
+            .fontColor(this.currentTabIndex == index ? Color.White : $r('app.color.color_text_normal'))
+            .backgroundColor(this.currentTabIndex == index ? $r('app.color.primary_color') : $r('app.color.color_card'))
+            .height(32)
+            .padding({ left: 16, right: 16 })
+            .borderRadius(16)
+            .onClick(() => {
+              this.currentTabIndex = index
+            })
+        }, (name: string) => `${name}_${this.currentTabIndex}`)
+      }
+      .padding({ left: 16, right: 16, top: 4, bottom: 4 })
     }
-    .width(35)
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .width('100%')
   }
 
   @Builder
@@ -197,6 +225,8 @@ struct VideoSourceDetail {
       this.SearchConfigTab()
     } else if (name == '主页') {
       this.HomepageConfigTab()
+    } else if (name == '周表') {
+      this.ScheduleConfigTab()
     } else if (name == '详情') {
       this.DetailConfigTab()
     } else {
@@ -519,6 +549,52 @@ struct VideoSourceDetail {
                   }, false)
               }
             }
+          }
+        }
+      }
+      .tabContentStyles()
+    }
+  }
+
+  // 周表配置页签（填写地址模板+列表选择器后即为可用周表源）
+  @Builder
+  ScheduleConfigTab() {
+    Scroll() {
+      Column({ space: 16 }) {
+        SourceEditSection({ title: '周表配置' }) {
+          Column({ space: 16 }) {
+            Row({ space: 12 }) {
+              Row({ space: 5 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.getScheduleUrlNeedBaseUrl() })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setScheduleUrlNeedBaseUrl(isOn)
+                  })
+                Text('拼接基础URL')
+                  .fontSize(15)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+              Row({ space: 5 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.getScheduleEnabledHttps() })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setScheduleEnabledHttps(isOn)
+                  })
+                Text('启用HTTPS')
+                  .fontSize(15)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+            }
+            .justifyContent(FlexAlign.Start)
+            .alignItems(VerticalAlign.Center)
+            this.FieldList(this.vm.scheduleFields())
+            this.VideoInfoSelector(this.vm.isJson() ? '周表字段模板' : '周表视频配置',
+              () => this.vm.getScheduleItemSelectors(),
+              (config: SelectorConfig) => {
+                this.vm.setScheduleItemSelectors(config)
+              }, this.vm.isJson())
           }
         }
       }

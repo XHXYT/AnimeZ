@@ -122,6 +122,18 @@ export interface RecommendConfig {
   jsonUrlTemplate?: string;
 }
 
+/** 周表配置接口（番剧更新时间表；不配置则应用不显示周表入口） */
+export interface ScheduleConfig {
+  urlTemplate: string;      // 地址模板，{weekday} 占位符为星期（1-7，周一=1），相对路径拼 baseUrl
+  listSelector: string;     // HTML=条目 CSS 选择器 / JSON=列表 JSON 路径（如 data.list.0.videos）
+  itemSelectors: SelectorConfig; // 字段选择器/模板（同列表卡片）
+  urlNeedBaseUrl: boolean;  // 条目 url 是否相对路径需拼 baseUrl（模板 {baseUrl} 不受影响）
+  enabledHttps: boolean;    // 是否强制 https
+  // 首页多区块形态（仅 HTML）：一周各天分区在同一页面，按区块标题定位对应星期
+  weekdayBlocksSelector?: string;  // 所有星期区块的容器选择器（如 .anime-schedule）
+  weekdayTitleSelector?: string;   // 区块内星期标题选择器（如 h4，文本形如"星期三/周三"）
+}
+
 /** 番剧详情配置接口 */
 export interface DetailConfig {
   titleSelector: string;
@@ -191,6 +203,8 @@ export interface ParserConfig {
   };
   detail: DetailConfig;
   videoUrl: VideoUrlConfig;
+  // 周表配置（可选；不配置=该源无周表入口）
+  schedule?: ScheduleConfig;
 }
 
 /** 数据源配置接口 */

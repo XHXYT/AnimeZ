@@ -31,6 +31,38 @@ import { image } from '@kit.ImageKit';
 type SelectorValue = string | { selector: string; postProcess?: ProcessConfig };
 type ExtendedSelectorConfig = Record<string, SelectorValue>;
 
+/**
+ * 将星期标题文本解析为 1-7（周一=1）：支持"星期三/周三/Wednesday/Wed/水曜日"等写法；
+ * 无法识别返回 0（该区块不参与星期匹配）。
+ */
+function parseWeekdayText(text: string): number {
+  const t = text.trim();
+  if (t === '') {
+    return 0;
+  }
+  const cnMatch = t.match(/(?:星期|周)\s*([一二三四五六日天])/);
+  if (cnMatch) {
+    const c = cnMatch[1];
+    if (c === '日' || c === '天') {
+      return 7;
+    }
+    return '一二三四五六'.indexOf(c) + 1;
+  }
+  // 日语曜日（如"昨天 (火曜日)"）：月=1 火=2 水=3 木=4 金=5 土=6 日=7
+  const jpMatch = t.match(/([月火水木金土日])曜/);
+  if (jpMatch) {
+    return '月火水木金土日'.indexOf(jpMatch[1]) + 1;
+  }
+  const enNames: string[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const lower = t.toLowerCase();
+  for (let i = 0; i < enNames.length; i++) {
+    if (lower.includes(enNames[i])) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
 export default class GenericDataSource implements DataSource {
   private key: string;
   private name: string;
@@ -294,6 +326,79 @@ export default class GenericDataSource implements DataSource {
     }
   }
 
+  /**
+   * 是否配置了可用的周表规则（未配置则应用隐藏周表入口）
+   * 单列表模式（urlTemplate+listSelector）/ 首页多区块模式（额外需要星期区块+标题选择器）；
+   * JSON 模式 listSelector 可省略（空=响应根数组）。
+   */
+  hasScheduleConfig(): boolean {
+    const schedule = this.parserConfig?.schedule;
+    if (!schedule || !schedule.urlTemplate) {
+      return false
+    }
+    if (this.isJsonMode()) {
+      return true
+    }
+    if (schedule.weekdayBlocksSelector) {
+      return !!(schedule.weekdayTitleSelector && schedule.listSelector)
+    }
+    return !!schedule.listSelector
+  }
+
+  /**
+   * 获取周表数据（weekday: 1-7，周一=1）
+   */
+  async getSchedule(weekday: number): Promise<VideoInfo[]> {
+    const schedule = this.parserConfig.schedule;
+    if (!schedule || !schedule.urlTemplate) {
+      throw new Error('当前源未配置周表规则');
+    }
+    if (!this.isJsonMode() && !schedule.listSelector) {
+      throw new Error('当前源未配置周表规则');
+    }
+    // {weekday}=1-7（周一=1）；{weekday0}=0-6（周一=0，适配 0 起始的星期字段/接口）
+    const weekdayUrl = schedule.urlTemplate
+      .replace('{weekday0}', (weekday - 1).toString())
+      .replace('{weekday}', weekday.toString());
+    const url = weekdayUrl.startsWith('http') ? weekdayUrl : this.baseUrl + weekdayUrl;
+    try {
+      if (this.isJsonMode()) {
+        const resp = await this.requestJson(url);
+        return this.parseJsonVideoList(resp, schedule.listSelector,
+          schedule.itemSelectors as ExtendedSelectorConfig,
+          schedule.urlNeedBaseUrl, schedule.enabledHttps);
+      }
+      // HTML 模式：请求周表页面，按 CSS 选择器提取条目（同搜索列表）
+      const doc = await this.parseHtml(url);
+      let list: HtmlTag[];
+      if (schedule.weekdayBlocksSelector && schedule.weekdayTitleSelector) {
+        // 首页多区块形态：按区块内星期标题定位当天区块，再在区块内提取条目
+        const blocks = select(doc, schedule.weekdayBlocksSelector);
+        list = [];
+        for (const block of blocks) {
+          const blockWeekday = parseWeekdayText(selectTextContent(block, schedule.weekdayTitleSelector));
+          if (blockWeekday === weekday) {
+            list = select(block, schedule.listSelector);
+            break;
+          }
+        }
+        if (list.length === 0) {
+          // 页面无对应星期区块：视为当天无更新
+          return [];
+        }
+      } else {
+        list = select(doc, schedule.listSelector);
+      }
+      const videoPromises = list.map(async (li) => {
+        return await this.extractVideoInfo(li, schedule.itemSelectors as ExtendedSelectorConfig, schedule.urlNeedBaseUrl, schedule.enabledHttps);
+      });
+      return await Promise.all(videoPromises);
+    } catch (e) {
+      Logger.e('fail', `获取周表数据(weekday=${weekday})`, e);
+      throw e;
+    }
+  }
+
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc'): Promise<VideoDetailInfo> {
     if (this.isJsonMode()) {
       try {
@@ -480,6 +585,15 @@ export default class GenericDataSource implements DataSource {
         processedUrl = decodeURIComponent(processedUrl);
       } catch (e) {
         Logger.e('fail', 'decodeUri 失败', e);
+      }
+    }
+
+    // JSON 字符串解码：处理播放地址中的 \/ 与 \uXXXX 转义（如 MacCMS player_aaaa 的中文路径）
+    if (postProcess.includes("jsonDecode")) {
+      try {
+        processedUrl = JSON.parse('"' + processedUrl + '"') as string;
+      } catch (e) {
+        Logger.e('fail', 'jsonDecode 失败', e);
       }
     }
 

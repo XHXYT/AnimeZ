@@ -21,6 +21,8 @@ export struct VideoList {
   @Param videoListDataSource: CategoryDataSource = new CategoryDataSource([])
   // 是否在封面左上角显示数据源角标（默认样式同集数角标）
   @Param showSourceBadge: boolean = false
+  // 滚动联动：自身优先滚动，滚动到边缘后交给父组件滚动（如主页旁周表 Tab）
+  @Param nestedScrollSelfFirst: boolean = false
 
   aboutToAppear(): void {
     if (this.videoList) {
@@ -46,6 +48,14 @@ export struct VideoList {
           }, (item: VideoInfo, index: number) => index + JSON.stringify(item))
         }
         .hitTestBehavior(HitTestMode.Default)
+        // 滚动联动模式：开启时自身优先滚动，滚动到边缘后交给父组件滚动
+        .nestedScroll(this.nestedScrollSelfFirst ? {
+          scrollForward: NestedScrollMode.SELF_FIRST,
+          scrollBackward: NestedScrollMode.SELF_FIRST
+        } : {
+          scrollForward: NestedScrollMode.SELF_ONLY,
+          scrollBackward: NestedScrollMode.SELF_ONLY
+        })
         .columnsTemplate(this.isFullList ? VideoListColumnsTemplate(AnimeState.widthBp) : VideoListColumnsTemplate2(AnimeState.widthBp))
         .width('100%')
         .columnsGap(8)

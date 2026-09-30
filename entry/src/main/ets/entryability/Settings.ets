@@ -88,11 +88,15 @@ export class AppConfigs {
   /**
    * 弹幕字体缩放 0.5~1.5
    */
-  @Trace danmaku_font_scale: number = 1.0
+  @Trace danmaku_font_scale: number = 0.9
   /**
-   * 弹幕滚动速度系数 0.5~2
+   * 弹幕加粗显示
    */
-  @Trace danmaku_speed: number = 1.0
+  @Trace danmaku_bold: boolean = true
+  /**
+   * 弹幕滚动速度系数 1.0~2.0
+   */
+  @Trace danmaku_speed: number = 1.5
   /**
    * 弹幕显示区域占比 0.25~1
    */
@@ -165,6 +169,10 @@ export class AppConfigs {
    * 下载区分剧集路线：开启后任务目录为 番剧名/线路名/，关闭后为 番剧名/；仅影响新任务
    */
   @Trace download_separate_route: boolean = true
+  /**
+   * 周表数据源 key（空=未选择，周表页显示空态引导）
+   */
+  @Trace schedule_source_key: string = ''
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -219,6 +227,7 @@ export class AppConfigs {
     this.danmaku_enabled = (json["danmaku_enabled"] as boolean) ?? this.danmaku_enabled
     this.danmaku_opacity = (json["danmaku_opacity"] as number) ?? this.danmaku_opacity
     this.danmaku_font_scale = (json["danmaku_font_scale"] as number) ?? this.danmaku_font_scale
+    this.danmaku_bold = (json["danmaku_bold"] as boolean) ?? this.danmaku_bold
     this.danmaku_speed = (json["danmaku_speed"] as number) ?? this.danmaku_speed
     this.danmaku_area = (json["danmaku_area"] as number) ?? this.danmaku_area
     this.danmaku_block_scroll = (json["danmaku_block_scroll"] as boolean) ?? this.danmaku_block_scroll
@@ -238,6 +247,7 @@ export class AppConfigs {
     this.search_result_style = (json["search_result_style"] as string) ?? this.search_result_style
     this.download_location = (json["download_location"] as string) ?? this.download_location
     this.download_separate_route = (json["download_separate_route"] as boolean) ?? this.download_separate_route
+    this.schedule_source_key = (json["schedule_source_key"] as string) ?? this.schedule_source_key
   }
 
   /**
@@ -286,12 +296,12 @@ export class AppConfigs {
     'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
     'video_source_import_overwrite', 'auto_pip_on_exit',
-    'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_speed', 'danmaku_area',
+    'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_bold', 'danmaku_speed', 'danmaku_area',
     'danmaku_block_scroll', 'danmaku_block_fixed', 'danmaku_block_color', 'danmaku_hide_duplicate',
     'danmaku_block_words',
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
-    'search_result_style', 'download_location', 'download_separate_route')
+    'search_result_style', 'download_location', 'download_separate_route', 'schedule_source_key')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -317,6 +327,7 @@ export class AppConfigs {
         "danmaku_enabled": this.danmaku_enabled,
         "danmaku_opacity": this.danmaku_opacity,
         "danmaku_font_scale": this.danmaku_font_scale,
+        "danmaku_bold": this.danmaku_bold,
         "danmaku_speed": this.danmaku_speed,
         "danmaku_area": this.danmaku_area,
         "danmaku_block_scroll": this.danmaku_block_scroll,
@@ -335,7 +346,8 @@ export class AppConfigs {
         "search_scope_sources": this.search_scope_sources,
         "search_result_style": this.search_result_style,
         "download_location": this.download_location,
-        "download_separate_route": this.download_separate_route
+        "download_separate_route": this.download_separate_route,
+        "schedule_source_key": this.schedule_source_key
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -367,6 +379,7 @@ export class AppConfigs {
     this.danmaku_enabled = true
     this.danmaku_opacity = 1.0
     this.danmaku_font_scale = 1.0
+    this.danmaku_bold = true
     this.danmaku_speed = 1.0
     this.danmaku_area = 1.0
     this.danmaku_block_scroll = false
@@ -386,6 +399,7 @@ export class AppConfigs {
     this.search_result_style = 'auto'
     this.download_location = 'sandbox'
     this.download_separate_route = false
+    this.schedule_source_key = ''
     this.isLoading = false
     await this.save()
   }

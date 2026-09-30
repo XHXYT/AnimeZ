@@ -33,9 +33,6 @@ const DRIFT_CORRECTION_INTERVAL: number = 2000
 const COMMON_DANMAKU_DURATION: number = 3800
 /** 库计算时长基数的参考播放器宽度（px） */
 const BILI_PLAYER_WIDTH: number = 682
-/** 库时长基数的下限/上限钳制（ms） */
-const MIN_DANMAKU_DURATION: number = 4000
-const MAX_DANMAKU_DURATION_HIGH_DENSITY: number = 9000
 
 /**
  * 弹幕控制中枢：管理 DanmakuViewV2.Model 生命周期、弹幕数据加载与播放器状态同步
@@ -49,7 +46,7 @@ export class DanmakuController {
    * vp 为密度无关单位（与 25dp 基准字号同尺度），跨设备物理观感一致。
    * 36vp/s ≈ 120px/s：竖屏滚动时长约 11s、视觉穿越约 9s（库默认速度的 1.5 倍慢）
    */
-  scrollSpeedVpPerS: number = 36
+  scrollSpeedVpPerS: number = 86
 
 
   private context: DanmakuContext | null = null
@@ -123,6 +120,48 @@ export class DanmakuController {
     return result
   }
 
+  /** 手动指定剧集 ID 加载弹幕（切换弹幕功能，跳过标题匹配） */
+  async loadByEpisodeId(episodeId: number, matchedTitle: string): Promise<DanmakuLoadResult> {
+    this.loadSeq++
+    const seq = this.loadSeq
+    this.prepared = false
+    this.playing = false
+    const result = new DanmakuLoadResult()
+    result.matchedTitle = matchedTitle
+    try {
+      const comments = await DandanplayApi.loadCommentsByEpisodeId(episodeId)
+      result.comments = comments
+      if (seq !== this.loadSeq) {
+        // 已被更新一次加载取代，丢弃本次结果
+        result.status = comments.length > 0 ? DanmakuLoadStatus.LOADED : DanmakuLoadStatus.EMPTY
+        return result
+      }
+      if (comments.length > 0) {
+        result.status = DanmakuLoadStatus.LOADED
+        this.comments = comments
+        this.loadedCount = comments.length
+        // context 延迟到视图挂载后创建：DanmakuViewV2.aboutToAppear 才注册 uiContext，
+        // 提前创建会导致 OhosDisplayer 密度初始化失败（density=0），字号/测量全部失效
+        this.context = null
+        this.prepareInternal()
+      } else {
+        result.status = DanmakuLoadStatus.EMPTY
+        this.comments = []
+        this.loadedCount = 0
+        this.context = null
+      }
+    } catch (e) {
+      Logger.e('fail', `DanmakuCtrl 手动加载弹幕失败 episodeId=${episodeId}`, e)
+      result.status = DanmakuLoadStatus.FAILED
+      if (seq === this.loadSeq) {
+        this.comments = []
+        this.loadedCount = 0
+        this.context = null
+      }
+    }
+    return result
+  }
+
   /** 播放器开始/恢复播放 */
   onPlay(positionMs: number): void {
     Logger.d('tips', `DanmakuCtrl onPlay pos=${positionMs} prepared=${this.prepared}`)
@@ -189,6 +228,7 @@ export class DanmakuController {
     }
     this.context.setDanmakuTransparency(appSettings.danmaku_opacity)
     this.context.setScaleTextSize(appSettings.danmaku_font_scale)
+    this.context.setDanmakuBold(appSettings.danmaku_bold)
     this.applyScrollSpeed(this.context)
     this.applyMaxLines(this.context)
     this.syncFilters()
@@ -225,8 +265,35 @@ export class DanmakuController {
     this.model.prepare(parser, this.context)
     // prepare 之后工厂 Duration 才存在，此时应用速度因子才会真正生效
     this.applyScrollSpeed(this.context)
+    this.reapplyScrollSpeedWhenReady()
     const density = this.context.mDisplayer.getDensity()
     Logger.d('tips', `DanmakuController prepare已提交 comments=${this.comments.length} w=${this.model.getWidth()} h=${this.model.getHeight()} density=${density}`)
+  }
+
+  /**
+   * model.prepare 是异步的：DrawHandler 线程稍后才执行 DrawTask.prepare，
+   * 在那之前工厂会重置 Duration、且尚未按视口建立时长基数（real=3800 默认值）。
+   * 同步补调 applyScrollSpeed 只能走回退公式，弹幕会按错误的短时长创建
+   * （实测曾延迟 4s 才被偶然事件校准，期间速度比目标快近一倍）。
+   * 这里轮询直至工厂视口就绪（CURRENT_DISP_WIDTH > 0）后重新校准。
+   */
+  private reapplyScrollSpeedWhenReady(): void {
+    if (this.context === null) {
+      return
+    }
+    const context = this.context
+    const delays: number[] = [200, 500, 1000, 2000, 4000]
+    for (const delay of delays) {
+      setTimeout(() => {
+        if (this.context !== context) {
+          return
+        }
+        const factory = context.mDanmakuFactory
+        if (factory.CURRENT_DISP_WIDTH > 0) {
+          this.applyScrollSpeed(context)
+        }
+      }, delay)
+    }
   }
 
   /** 临时诊断：start 提交后探测弹幕时钟是否被意外重置 */
@@ -300,6 +367,7 @@ export class DanmakuController {
       .setDuplicateMergingEnabled(false)
       .setDanmakuTransparency(appSettings.danmaku_opacity)
       .setScaleTextSize(appSettings.danmaku_font_scale)
+      .setDanmakuBold(appSettings.danmaku_bold)
     this.applyScrollSpeed(context)
     this.applyMaxLines(context)
     return context
@@ -309,11 +377,10 @@ export class DanmakuController {
    * 弹幕滚动速度：设置值 danmaku_speed 是"速度倍率"（越大越快），
    * scrollSpeedVpPerS 是基准速度（vp/s），库的 setScrollSpeedFactor 是"时长倍率"（越大越慢）。
    *
-   * 库的时长基数 initial = clamp(3800 × width / 682, 4000, 9000) ms。
-   * 未钳制时 duration ∝ width，像素速度恒为 682/(3800×factor) px/ms——与宽度无关。
-   * 由目标速度（vp/s × density → px/ms）反推 factor，使速度成为真正的瞬时量：
-   * 不随视口宽度变化；再按 rawInitial/clampedInitial 补偿上下限钳制
-   * （横屏宽屏触顶 9000ms 后时长被压缩、速度会变快），横竖屏速度保持一致。
+   * 目标：像素速度恒定（vp/s × density），穿越时长 = 视口像素宽 / 像素速度，与宽度无关。
+   * 实现直接读工厂的 REAL_DANMAKU_DURATION（库内基准，随视口变化、含 4000/9000ms 钳制），
+   * factor = 目标穿越时长 / REAL，实际时长 = REAL × factor = 目标穿越——自校准，
+   * 无需复算库的钳制公式（工厂内部视口宽与像素宽并非线性一致，实测竖屏 real 被 MIN 钳到 4000ms）。
    */
   private applyScrollSpeed(context: DanmakuContext): void {
     const speed = appSettings.danmaku_speed > 0 ? appSettings.danmaku_speed : 1.0
@@ -321,22 +388,29 @@ export class DanmakuController {
     // 滑条语义"越大越快"：目标速度 = 基准速度 × 滑条倍率
     const vpPerS = baseVpPerS * speed
     const density = display.getDefaultDisplaySync().densityPixels
-    let factor = BILI_PLAYER_WIDTH * 1000 / (COMMON_DANMAKU_DURATION * vpPerS * density)
     const width = this.model.getWidth()
-    if (width > 0) {
-      const rawInitial = COMMON_DANMAKU_DURATION * width / BILI_PLAYER_WIDTH
-      const clampedInitial = Math.min(MAX_DANMAKU_DURATION_HIGH_DENSITY,
-        Math.max(MIN_DANMAKU_DURATION, rawInitial))
-      factor = factor * rawInitial / clampedInitial
-      const crossMs = clampedInitial * factor
-      Logger.d('tips', `applyScrollSpeed 滑条=${speed} width=${Math.round(width)} factor=${factor.toFixed(2)} 穿越=${Math.round(crossMs / 100) / 10}s 速度=${vpPerS.toFixed(1)}vp/s(${(vpPerS * density).toFixed(0)}px/s)`)
+    const targetCrossMs = width > 0 ? width * 1000 / (vpPerS * density) : 0
+    const factory = context.mDanmakuFactory
+    const real = factory.REAL_DANMAKU_DURATION
+    let factor: number
+    if (width > 0 && factory.CURRENT_DISP_WIDTH > 0 && real > 0) {
+      // 工厂已按当前视口建立基准：直接反推 factor，弹幕实际时长即目标穿越时长
+      factor = targetCrossMs / real
+    } else {
+      // prepare 前工厂尚未建立视口基准，按未钳制公式估算，prepare 后会重新校准
+      factor = BILI_PLAYER_WIDTH * 1000 / (COMMON_DANMAKU_DURATION * vpPerS * density)
     }
     context.setScrollSpeedFactor(factor)
     // setScrollSpeedFactor 有同值守卫，且 prepare 之前工厂的 Duration 尚未创建时
     // updateDurationFactor 会空守卫提前返回——之后同值调用被外层守卫拦截，
     // 因子永远不会生效（渲染退回默认 1.0，约 7s 穿越）。
     // 这里强制重放绕过两层守卫：Duration 已创建则应用（setFactor 内部同值幂等），未创建则安全返回。
-    context.mDanmakuFactory.updateDurationFactor(factor)
+    factory.updateDurationFactor(factor)
+    // R2LDanmaku 在 measure() 时缓存 stepPerMs = mDistance / duration.value，
+    // 改 Duration 后必须 bump 测量标志触发重测，否则在屏弹幕仍按旧速度走完。
+    // setScrollSpeedFactor 同值守卫拦截时会跳过 bump，这里手动补上。
+    context.mGlobalFlagValues.updateMeasureFlag()
+    context.mGlobalFlagValues.updateVisibleFlag()
   }
 
   /**

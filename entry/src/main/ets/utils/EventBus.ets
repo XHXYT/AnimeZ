@@ -69,3 +69,8 @@ export const PLAYER_SWITCH_EVENT: Event = new EventImpl(5)
  * 打开播放设置面板（非全屏时由播放器控制层发出，详情页用简介同款半模态面板展示）
  */
 export const PLAYER_SETTINGS_EVENT: Event = new EventImpl(6)
+
+/**
+ * 周表数据源改变（设置页"周表数据源"选择后发出，周表页按新源重新加载）
+ */
+export const SCHEDULE_SOURCE_CHANGED_EVENT: Event = new EventImpl(7)

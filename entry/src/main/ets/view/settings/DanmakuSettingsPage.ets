@@ -67,6 +67,15 @@ struct DanmakuSettingsPage {
         }
       }),
       new CustomItemInfo({
+        id: 'danmaku_bold',
+        title: '弹幕加粗',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.danmaku_bold,
+        onChange: (value) => {
+          appSettings.danmaku_bold = value as boolean
+        }
+      }),
+      new CustomItemInfo({
         id: 'danmaku_area',
         title: '显示区域',
         type: ItemActionType.MENU,

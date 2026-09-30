@@ -7,7 +7,6 @@ import {
   DandanplayComment,
   DandanplayCommentResponse,
   DandanplayEpisode,
-  DandanplayEpisodeMatch,
   DandanplaySearchResponse
 } from './DandanplayModels'
 
@@ -51,16 +50,27 @@ interface CommentCacheEntry {
 export enum DanmakuLoadStatus {
   /** 成功加载到弹幕 */
   LOADED = 0,
-  /** 匹配失败或请求失败 */
+  /** 网络/接口请求失败 */
   FAILED = 1,
   /** 匹配成功但该集无弹幕 */
-  EMPTY = 2
+  EMPTY = 2,
+  /** 搜索无结果：未查询到该番剧的弹幕资源 */
+  NOT_FOUND = 3,
+  /** 搜索有结果但标题/集数均不匹配 */
+  NO_MATCH = 4
 }
 
 /** 弹幕加载结果 */
 export class DanmakuLoadResult {
   status: DanmakuLoadStatus = DanmakuLoadStatus.FAILED
   comments: DandanplayComment[] = []
+  matchedTitle: string = ''
+}
+
+/** 标题匹配结果：含失败状态细分，供上层区分提示 */
+export class EpisodeMatchOutcome {
+  status: DanmakuLoadStatus = DanmakuLoadStatus.FAILED
+  episodeId: number = -1
   matchedTitle: string = ''
 }
 
@@ -103,7 +113,8 @@ export class DandanplayApi {
       result.matchedTitle = match.matchedTitle
     } else {
       const found = await DandanplayApi.matchEpisode(animeTitle, episodeTitle)
-      if (found === null) {
+      if (found.status !== DanmakuLoadStatus.LOADED) {
+        result.status = found.status
         return result
       }
       episodeId = found.episodeId
@@ -163,9 +174,55 @@ export class DandanplayApi {
   }
 
   /**
-   * 标题搜索匹配剧集，返回 episodeId；无合适匹配返回 null
+   * 按关键词搜索动画列表（含剧集），供手动切换弹幕
    */
-  private static async matchEpisode(animeTitle: string, episodeTitle: string): Promise<DandanplayEpisodeMatch | null> {
+  static async searchAnimes(keyword: string): Promise<DandanplayAnime[]> {
+    await DandanplayApi.ensureConfig()
+    const baseUrl = DandanplayApi.getBaseUrl()
+    const trimmed = keyword.trim()
+    if (baseUrl.length === 0 || trimmed.length === 0) {
+      return []
+    }
+    try {
+      const path = '/api/v2/search/anime'
+      const url = `${baseUrl}${path}?keyword=${encodeURIComponent(trimmed)}`
+      const resp = await DandanplayApi.getJsonWithRetry(url, DandanplayApi.buildHeaders(path)) as DandanplaySearchResponse
+      const code = resp.errorCode
+      if ((code !== undefined && code !== 0) || (resp.success !== undefined && !resp.success)) {
+        Logger.e('fail', `DandanplayApi 动画搜索失败 code=${code} msg=${resp.errorMessage}`)
+        return []
+      }
+      const animes = resp.result !== null && resp.result !== undefined
+        ? resp.result.animes : resp.animes
+      const list = animes === null || animes === undefined ? [] : animes
+      Logger.d('tips', `DandanplayApi 动画搜索成功 keyword="${trimmed}" count=${list.length}`)
+      return list
+    } catch (e) {
+      Logger.e('fail', 'DandanplayApi 动画搜索异常', e)
+      return []
+    }
+  }
+
+  /**
+   * 按剧集 ID 直接拉取弹幕（手动切换弹幕用，带缓存）
+   */
+  static async loadCommentsByEpisodeId(episodeId: number): Promise<DandanplayComment[]> {
+    await DandanplayApi.ensureConfig()
+    const cached = DandanplayApi.commentCache.get(episodeId)
+    if (cached !== undefined && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      return cached.comments
+    }
+    const comments = await DandanplayApi.fetchComments(episodeId)
+    const entry: CommentCacheEntry = { comments: comments, cachedAt: Date.now() }
+    DandanplayApi.commentCache.set(episodeId, entry)
+    return comments
+  }
+
+  /**
+   * 标题搜索匹配剧集，返回带失败状态细分的结果
+   */
+  private static async matchEpisode(animeTitle: string, episodeTitle: string): Promise<EpisodeMatchOutcome> {
+    const outcome = new EpisodeMatchOutcome()
     try {
       const episodeNumber = extractEpisodeNumber(episodeTitle)
       const episodeParam = episodeNumber > 0 ? episodeNumber.toString() : episodeTitle
@@ -173,7 +230,7 @@ export class DandanplayApi {
       const baseUrl = DandanplayApi.getBaseUrl()
       if (baseUrl.length === 0) {
         Logger.d('tips', 'DandanplayApi 未配置弹幕数据源，跳过匹配')
-        return null
+        return outcome
       }
       const url = `${baseUrl}${path}?anime=${encodeURIComponent(animeTitle)}&episode=${encodeURIComponent(episodeParam)}`
       const resp = await DandanplayApi.getJsonWithRetry(url, DandanplayApi.buildHeaders(path)) as DandanplaySearchResponse
@@ -181,37 +238,42 @@ export class DandanplayApi {
       const code = resp.errorCode
       if ((code !== undefined && code !== 0) || (resp.success !== undefined && !resp.success)) {
         Logger.e('fail', `DandanplayApi 搜索失败 code=${code} msg=${resp.errorMessage}`)
-        return null
+        return outcome
       }
       // 官方结构数据在 result 中，中转结构数据在顶层
       const animes = resp.result !== null && resp.result !== undefined
         ? resp.result.animes : resp.animes
       if (animes === null || animes === undefined || animes.length === 0) {
         Logger.e('fail', `DandanplayApi 搜索无结果 anime="${animeTitle}" episode="${episodeTitle}"`)
-        return null
+        outcome.status = DanmakuLoadStatus.NOT_FOUND
+        return outcome
       }
       const bestAnime = DandanplayApi.pickBestAnime(animes, animeTitle)
       if (bestAnime === null) {
         Logger.e('fail', `DandanplayApi 搜索结果无匹配项 anime="${animeTitle}"`)
-        return null
+        outcome.status = DanmakuLoadStatus.NO_MATCH
+        return outcome
       }
       const episodes = bestAnime.episodes
       if (episodes === null || episodes === undefined || episodes.length === 0) {
-        return null
+        Logger.e('fail', `DandanplayApi 匹配动画无剧集 anime="${bestAnime.animeTitle}"`)
+        outcome.status = DanmakuLoadStatus.NOT_FOUND
+        return outcome
       }
       const chosen = DandanplayApi.pickEpisode(episodes, episodeNumber)
       if (chosen === null) {
-        return null
+        Logger.e('fail', `DandanplayApi 剧集不匹配 anime="${bestAnime.animeTitle}" episode="${episodeTitle}"`)
+        outcome.status = DanmakuLoadStatus.NO_MATCH
+        return outcome
       }
-      const matchResult: DandanplayEpisodeMatch = {
-        episodeId: chosen.episodeId,
-        matchedTitle: `${bestAnime.animeTitle} ${chosen.episodeTitle}`
-      }
-      Logger.d('tips', `DandanplayApi 匹配成功 anime="${animeTitle}" episode="${episodeTitle}" -> "${matchResult.matchedTitle}" episodeId=${matchResult.episodeId} via=${baseUrl}`)
-      return matchResult
+      outcome.status = DanmakuLoadStatus.LOADED
+      outcome.episodeId = chosen.episodeId
+      outcome.matchedTitle = `${bestAnime.animeTitle} ${chosen.episodeTitle}`
+      Logger.d('tips', `DandanplayApi 匹配成功 anime="${animeTitle}" episode="${episodeTitle}" -> "${outcome.matchedTitle}" episodeId=${outcome.episodeId} via=${baseUrl}`)
+      return outcome
     } catch (e) {
       Logger.e('fail', 'DandanplayApi 搜索匹配异常', e)
-      return null
+      return outcome
     }
   }
 

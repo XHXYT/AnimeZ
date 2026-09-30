@@ -78,8 +78,12 @@ export class DandanplayParser extends BaseDanmakuParser {
     if (context === null || context === undefined) {
       return null
     }
-    const factory = context.mDanmakuFactory
-    const item = factory.createDanmaku(type)
+    // 关键：显式传 context 走完整创建路径（createDanmakuByAll），弹幕才会绑定
+    // 工厂按视口建立的共享 Duration，速度因子才能通过 updateDurationFactor 生效。
+    // 零参 createDanmaku 依赖工厂的 sLastConfig/sLastDisp，prepare 阶段尚未就绪时
+    // 返回 null 并走 createDefaultDanmaku 兜底——弹幕绑定独立的 Duration(3800)，
+    // 速度控制完全失效（实测在屏弹幕 dur=3800ms，横屏 ~950px/s 比竖屏快）。
+    const item = context.mDanmakuFactory.createDanmakuByContext(type, context)
     if (item === null) {
       return null
     }

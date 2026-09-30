@@ -1,5 +1,6 @@
 import { MyPage } from './MyPage';
 import { HomePage } from './HomePage';
+import { SchedulePage } from './SchedulePage';
 import mediaQuery from '@ohos.mediaquery'
 import { appSettings } from '../entryability/Settings';
 import { AnimeState } from '../entryability/AnimeState';
@@ -68,11 +69,18 @@ struct Index {
             AnimeState.currentIndex = 0
           })
           TabContent() {
-            MyPage()
+            SchedulePage()
           }
-          .tabBar(this.TabBarBuilder(1, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected')))
+          .tabBar(this.TabBarBuilder(1, '周表', $r('app.media.ic_schedule'), $r('app.media.ic_schedule_selected')))
           .onWillShow(() => {
             AnimeState.currentIndex = 1
+          })
+          TabContent() {
+            MyPage()
+          }
+          .tabBar(this.TabBarBuilder(2, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected')))
+          .onWillShow(() => {
+            AnimeState.currentIndex = 2
           })
         }.layoutWeight(1)
         .barMode(BarMode.Fixed)
@@ -82,6 +90,8 @@ struct Index {
         .onChange((index: number) => {
           AnimeState.currentIndex = index
         })
+        // 周表 Tab 上禁用主 Tab 滑动切换：左右滑动优先切换星期（见 SchedulePage 的 PanGesture）
+        .scrollable(AnimeState.currentIndex !== 1)
       }.hideToolBar(true)
       .backgroundColor($r('app.color.background_color_accent'))
       .mode(NavigationMode.Stack)

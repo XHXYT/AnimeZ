@@ -25,7 +25,8 @@ export class CategoryDataSource extends BaseDataSource<VideoInfo> {
 
   public pushData(data: VideoInfo[]): void {
     this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
+    // 整组替换语义：必须通知全量重载，仅通知末位新增会导致旧数据残留
+    this.notifyDataReload()
   }
 
   // 删除全部数据
@@ -63,7 +64,8 @@ export class CategoryListDataSource extends BaseDataSource<DramaList> {
 
   public pushData(data: DramaList[]): void {
     this.dataArray = data
-    this.notifyDataAdd(this.dataArray.length - 1)
+    // 整组替换语义：必须通知全量重载，仅通知末位新增会导致旧数据残留
+    this.notifyDataReload()
   }
 
   // 删除全部数据

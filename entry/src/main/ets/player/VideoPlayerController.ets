@@ -21,7 +21,8 @@ import { AVCastPicker, AVCastPickerState } from '@kit.AVSessionKit';
 import { common } from '@kit.AbilityKit';
 import { DanmakuLayer } from '../danmaku/DanmakuLayer';
 import { DanmakuController } from '../danmaku/DanmakuController';
-import { DanmakuLoadResult, DanmakuLoadStatus } from '../danmaku/DandanplayApi';
+import { DanmakuLoadResult, DanmakuLoadStatus, DandanplayApi } from '../danmaku/DandanplayApi';
+import { DandanplayAnime, DandanplayEpisode } from '../danmaku/DandanplayModels';
 import { MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
 import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findActionByKeyCode } from '../utils/PlayerShortcuts';
 
@@ -148,6 +149,16 @@ export struct VideoPlayerController {
   private danmakuCtrl: DanmakuController = new DanmakuController()
   /** @description 当前剧集弹幕是否已成功加载（驱动弹幕层挂载） */
   @Local danmakuLoaded: boolean = false
+  /** @description 切换弹幕对话框是否可见 */
+  @Local danmakuSwitchDialogVisible: boolean = false
+  /** @description 切换弹幕搜索关键词 */
+  @Local danmakuSwitchKeyword: string = ''
+  /** @description 切换弹幕搜索结果（动画列表） */
+  @Local danmakuSwitchAnimes: DandanplayAnime[] = []
+  /** @description 切换弹幕当前选中的动画（null 表示还在动画列表阶段） */
+  @Local danmakuSwitchSelectedAnime: DandanplayAnime | null = null
+  /** @description 切换弹幕搜索/加载中 */
+  @Local danmakuSwitchSearching: boolean = false
 
   /** @description 拖动轴向：0未判定 1纵向(音量/亮度) 2横向(进度) */
   private panAxis: number = 0
@@ -489,6 +500,20 @@ export struct VideoPlayerController {
       this.CenterPauseMarkBuilder()
 
       this.RightPanel()
+
+      // 切换弹幕对话框：遮罩 + 居中卡片
+      if (this.danmakuSwitchDialogVisible) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('#99000000')
+          .onClick(() => {
+            this.closeDanmakuSwitchDialog()
+          })
+      }
+      if (this.danmakuSwitchDialogVisible) {
+        this.DanmakuSwitchDialogCard()
+      }
     }
     .width('100%')
     .height('100%')
@@ -1066,6 +1091,10 @@ export struct VideoPlayerController {
         ToastUtil.showToast({ message: `弹幕已加载 ${result.comments.length} 条` })
       } else if (result.status === DanmakuLoadStatus.EMPTY) {
         ToastUtil.showToast({ message: '该集暂无弹幕' })
+      } else if (result.status === DanmakuLoadStatus.NOT_FOUND) {
+        ToastUtil.showToast({ message: '未查询到该番剧的弹幕资源' })
+      } else if (result.status === DanmakuLoadStatus.NO_MATCH) {
+        ToastUtil.showToast({ message: '未匹配到对应剧集，可在弹幕设置中手动切换弹幕' })
       } else {
         ToastUtil.showToast({ message: '弹幕加载失败，请稍后重试' })
       }
@@ -1078,6 +1107,67 @@ export struct VideoPlayerController {
       this.danmakuCtrl.onPlay(this.playerManager.getCurrentPosition())
     } else {
       this.danmakuCtrl.onPause()
+    }
+  }
+
+  /** 打开切换弹幕对话框（预填当前番剧名并自动搜索） */
+  private openDanmakuSwitchDialog(): void {
+    this.danmakuSwitchKeyword = AnimeState.playingTitle
+    this.danmakuSwitchAnimes = []
+    this.danmakuSwitchSelectedAnime = null
+    this.danmakuSwitchSearching = false
+    this.danmakuSwitchDialogVisible = true
+    this.hideRightPanel()
+    this.searchDanmakuSwitchAnimes()
+  }
+
+  /** 关闭切换弹幕对话框 */
+  private closeDanmakuSwitchDialog(): void {
+    this.danmakuSwitchDialogVisible = false
+    this.danmakuSwitchSelectedAnime = null
+    this.danmakuSwitchAnimes = []
+  }
+
+  /** 按关键词搜索动画列表（切换弹幕第一步） */
+  private async searchDanmakuSwitchAnimes(): Promise<void> {
+    const keyword = this.danmakuSwitchKeyword.trim()
+    if (keyword.length === 0 || this.danmakuSwitchSearching) {
+      return
+    }
+    this.danmakuSwitchSearching = true
+    this.danmakuSwitchAnimes = []
+    this.danmakuSwitchSelectedAnime = null
+    try {
+      this.danmakuSwitchAnimes = await DandanplayApi.searchAnimes(keyword)
+    } finally {
+      this.danmakuSwitchSearching = false
+    }
+  }
+
+  /** 手动选集加载弹幕（切换弹幕第二步） */
+  private async selectDanmakuSwitchEpisode(episode: DandanplayEpisode): Promise<void> {
+    if (this.danmakuSwitchSearching) {
+      return
+    }
+    const anime = this.danmakuSwitchSelectedAnime
+    const matchedTitle = anime !== null
+      ? `${anime.animeTitle} ${episode.episodeTitle}` : episode.episodeTitle
+    this.danmakuSwitchSearching = true
+    try {
+      const result = await this.danmakuCtrl.loadByEpisodeId(episode.episodeId, matchedTitle)
+      if (result.status === DanmakuLoadStatus.LOADED) {
+        this.danmakuLoaded = true
+        // loadByEpisodeId 会重置弹幕播放态，按播放器实际状态恢复
+        this.syncDanmakuPlayback()
+        ToastUtil.showToast({ message: `弹幕已加载 ${result.comments.length} 条` })
+        this.closeDanmakuSwitchDialog()
+      } else if (result.status === DanmakuLoadStatus.EMPTY) {
+        ToastUtil.showToast({ message: '该集暂无弹幕' })
+      } else {
+        ToastUtil.showToast({ message: '弹幕加载失败，请稍后重试' })
+      }
+    } finally {
+      this.danmakuSwitchSearching = false
     }
   }
 
@@ -1899,6 +1989,19 @@ export struct VideoPlayerController {
         }
         .width('100%')
 
+        Row() {
+          Text('弹幕加粗')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_bold })
+            .onChange((isOn: boolean) => {
+              appSettings.danmaku_bold = isOn
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+
         Text('显示区域')
           .alignSelf(ItemAlign.Start)
           .fontSize(this.isFullScreen ? 16 : 13)
@@ -2016,6 +2119,18 @@ export struct VideoPlayerController {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
 
+        Button('切换弹幕')
+          .width('100%')
+          .height(this.isFullScreen ? 40 : 36)
+          .fontSize(this.isFullScreen ? 15 : 13)
+          .fontColor(Color.White)
+          .backgroundColor('#33ffffff')
+          .borderRadius(6)
+          .margin({ top: 12 })
+          .onClick(() => {
+            this.openDanmakuSwitchDialog()
+          })
+
       }
       .padding(this.isFullScreen ? 16 : 8)
       .width('100%')
@@ -2028,6 +2143,139 @@ export struct VideoPlayerController {
     .width(this.isFullScreen ? '30%' : '45%')
     .scale({ x: this.rightPanelScale, centerX: '100%' })
     .backgroundColor('#80000000')
+  }
+
+  /** 切换弹幕对话框卡片（搜索动画 -> 选集 -> 加载） */
+  @Builder DanmakuSwitchDialogCard() {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        if (this.danmakuSwitchSelectedAnime !== null) {
+          Button('返回')
+            .height(32)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .backgroundColor('#33ffffff')
+            .borderRadius(6)
+            .onClick(() => {
+              this.danmakuSwitchSelectedAnime = null
+            })
+        }
+        Text(this.danmakuSwitchSelectedAnime !== null
+          ? this.danmakuSwitchSelectedAnime.animeTitle : '切换弹幕')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+      .width('100%')
+
+      if (this.danmakuSwitchSelectedAnime === null) {
+        Row({ space: 8 }) {
+          TextInput({ text: this.danmakuSwitchKeyword, placeholder: '输入番剧名称或别名' })
+            .type(InputType.Normal)
+            .layoutWeight(1)
+            .height(38)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .placeholderColor('#99ffffff')
+            .backgroundColor('#33ffffff')
+            .borderRadius(6)
+            .onChange((value: string) => {
+              this.danmakuSwitchKeyword = value
+            })
+          Button('搜索')
+            .height(38)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .backgroundColor('#33ffffff')
+            .borderRadius(6)
+            .enabled(!this.danmakuSwitchSearching)
+            .onClick(() => {
+              this.searchDanmakuSwitchAnimes()
+            })
+        }
+        .width('100%')
+
+        if (this.danmakuSwitchSearching) {
+          LoadingProgress()
+            .size(28)
+            .color(Color.White)
+            .margin({ top: 12 })
+        } else if (this.danmakuSwitchAnimes.length === 0) {
+          Text('暂无搜索结果，换个名称试试')
+            .fontSize(12)
+            .fontColor('#99ffffff')
+            .margin({ top: 12 })
+        } else {
+          Scroll() {
+            Column() {
+              ForEach(this.danmakuSwitchAnimes, (anime: DandanplayAnime) => {
+                Column({ space: 2 }) {
+                  Text(anime.animeTitle)
+                    .fontSize(14)
+                    .fontColor(Color.White)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .width('100%')
+                  Text(`共 ${anime.episodes.length} 集`)
+                    .fontSize(11)
+                    .fontColor('#99ffffff')
+                    .width('100%')
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+                .padding(8)
+                .borderRadius(6)
+                .backgroundColor('#1affffff')
+                .margin({ bottom: 6 })
+                .onClick(() => {
+                  this.danmakuSwitchSelectedAnime = anime
+                })
+              }, (anime: DandanplayAnime) => `anime-${anime.animeId}`)
+            }
+          }
+          .width('100%')
+          .constraintSize({ maxHeight: 360 })
+          .edgeEffect(EdgeEffect.Spring)
+        }
+      } else {
+        Scroll() {
+          Column() {
+            ForEach(this.danmakuSwitchSelectedAnime.episodes,
+              (episode: DandanplayEpisode) => {
+                Text(episode.episodeTitle)
+                  .fontSize(14)
+                  .fontColor(Color.White)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+                  .padding(10)
+                  .borderRadius(6)
+                  .backgroundColor('#1affffff')
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.selectDanmakuSwitchEpisode(episode)
+                  })
+              }, (episode: DandanplayEpisode) => `episode-${episode.episodeId}`)
+          }
+        }
+        .width('100%')
+        .constraintSize({ maxHeight: 380 })
+        .edgeEffect(EdgeEffect.Spring)
+        if (this.danmakuSwitchSearching) {
+          LoadingProgress()
+            .size(28)
+            .color(Color.White)
+        }
+      }
+    }
+    .padding(14)
+    .width('86%')
+    .constraintSize({ maxHeight: '80%' })
+    .backgroundColor('#ee1c1c1e')
+    .borderRadius(12)
   }
 
   /** 快捷手势说明条目（实时读取双击快进/快退秒数设置） */

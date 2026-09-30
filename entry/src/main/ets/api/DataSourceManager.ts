@@ -359,6 +359,49 @@ class DataSourceManager {
   }
 
   /**
+   * 获取已启用且配置了周表规则的数据源key（设置页"周表数据源"候选）
+   */
+  getScheduleSourceKeys(): string[] {
+    const keys: string[] = []
+    this.dataSources.forEach(item => {
+      if (item.isEnabled() && item.hasScheduleConfig()) {
+        keys.push(item.getKey())
+      }
+    })
+    return keys;
+  }
+
+  /**
+   * 指定源是否配置了可用的周表（设置页选择与周表页加载前校验）
+   */
+  hasScheduleConfig(sourceKey: string): boolean {
+    const source = this.dataSources.get(sourceKey);
+    return !!source && source.isEnabled() && source.hasScheduleConfig();
+  }
+
+  /**
+   * 获取指定源的周表数据（weekday: 1-7，周一=1）
+   */
+  async getSchedule(weekday: number, sourceKey: string): Promise<VideoInfo[]> {
+    const source = this.dataSources.get(sourceKey);
+
+    if (!source) {
+      throw new Error(`DataSourceManager.getSchedule Schedule data source not found: ${sourceKey}`);
+    }
+
+    if (!source.isEnabled()) {
+      throw new Error(`DataSourceManager.getSchedule Data source is disabled: ${sourceKey}`);
+    }
+
+    try {
+      return await source.getSchedule(weekday);
+    } catch (error) {
+      Logger.e('tips', `DataSourceManager.getSchedule Failed to get schedule from ${sourceKey}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * 获取视频详情
    */
   async getVideoDetailInfo(url: string, order: "asc" | "desc" = 'asc', sourceKey?: string): Promise<VideoDetailInfo> {
