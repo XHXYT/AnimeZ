@@ -1,8 +1,30 @@
 ﻿import { DataSourceConfig, SelectorConfig, CategoryCardConfig } from "../../../api/DataSourceConfig"
 import { EditField, EditToggleField, VideoSourceDetailViewModel } from "../../../viewmodel/VideoSourceDetailViewModel"
 import TitleBar from "../../../components/TitleBar"
+import { CollapsibleSection } from "../../../components/common/CollapsibleSection"
 import { ToastUtil } from "../../../utils/ToastUtils"
 import { AnimeState } from "../../../entryability/AnimeState"
+
+// 源编辑页节标题：复用 CollapsibleSection 的色条标题风格（可折叠），
+// 取消其内建水平/顶部边距，使色条与字段在 Tab 内边距下对齐
+@ComponentV2
+struct SourceEditSection {
+  @Param title: string = ''
+  @BuilderParam content: () => void = this.emptyContent
+
+  @Builder emptyContent() {
+  }
+
+  build() {
+    CollapsibleSection({
+      title: this.title,
+      titlePadding: { left: 0, right: 0, top: 0, bottom: 4 },
+      content: (): void => {
+        this.content()
+      }
+    })
+  }
+}
 
 // 系统路由 - 视频源详情
 @Builder
@@ -225,31 +247,29 @@ struct VideoSourceDetail {
   @Builder
   VideoInfoSelector(title: string, getConfig: () => SelectorConfig, setConfig: (c: SelectorConfig) => void,
     jsonMode: boolean) {
-    Column({ space: 12 }) {
-      Text(title)
-        .titleStyles(0)
-      this.FieldList(this.vm.videoInfoFields(getConfig, setConfig, jsonMode))
-      Row() {
-        Text('更多字段')
-          .fontSize(16)
-          .fontColor($r('app.color.color_text_major'))
-        Text('播放量 / 年份 / 月份 / 导演 / 演员 / 标签')
-          .fontSize(12)
-          .fontColor($r('app.color.color_text_minor'))
-          .margin({ left: 8 })
-        Blank()
-        Toggle({ type: ToggleType.Switch, isOn: this.vm.hasExtendedFields(getConfig()) })
-          .onChange((isOn: boolean) => {
-            this.vm.toggleExtendedFields(getConfig, setConfig, isOn)
-          })
-      }
-      .width('100%')
-      if (this.vm.hasExtendedFields(getConfig())) {
-        this.FieldList(this.vm.extendedVideoInfoFields(getConfig, setConfig, jsonMode))
+    SourceEditSection({ title: title }) {
+      Column({ space: 12 }) {
+        this.FieldList(this.vm.videoInfoFields(getConfig, setConfig, jsonMode))
+        Row() {
+          Text('更多字段')
+            .fontSize(16)
+            .fontColor($r('app.color.color_text_major'))
+          Text('播放量 / 年份 / 月份 / 导演 / 声优 / 标签')
+            .fontSize(12)
+            .fontColor($r('app.color.color_text_minor'))
+            .margin({ left: 8 })
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: this.vm.hasExtendedFields(getConfig()) })
+            .onChange((isOn: boolean) => {
+              this.vm.toggleExtendedFields(getConfig, setConfig, isOn)
+            })
+        }
+        .width('100%')
+        if (this.vm.hasExtendedFields(getConfig())) {
+          this.FieldList(this.vm.extendedVideoInfoFields(getConfig, setConfig, jsonMode))
+        }
       }
     }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
   }
 
   // 详情扩展字段（仅更多字段开关 + 扩展组，无基础字段）
@@ -261,7 +281,7 @@ struct VideoSourceDetail {
         Text('更多字段')
           .fontSize(16)
           .fontColor($r('app.color.color_text_major'))
-        Text('播放量 / 年份 / 月份 / 导演 / 演员 / 标签')
+        Text('播放量 / 年份 / 月份 / 导演 / 声优 / 标签')
           .fontSize(12)
           .fontColor($r('app.color.color_text_minor'))
           .margin({ left: 8 })
@@ -284,13 +304,9 @@ struct VideoSourceDetail {
   @Builder
   EpisodeSelector(title: string, getConfig: () => SelectorConfig, setConfig: (c: SelectorConfig) => void,
     jsonMode: boolean) {
-    Column({ space: 12 }) {
-      Text(title)
-        .titleStyles(0)
+    SourceEditSection({ title: title }) {
       this.FieldList(this.vm.episodeItemFields(getConfig, setConfig, jsonMode))
     }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
   }
 
   // 基本信息Tab
@@ -301,25 +317,27 @@ struct VideoSourceDetail {
         this.FieldList(this.vm.basicFields())
         // JSON 模式：自定义请求头 + 登录配置
         if (this.vm.isJson()) {
-          Text('自定义请求头')
-            .titleStyles(1)
-          this.FieldList(this.vm.requestHeaderFields())
-          Text('登录配置(API)')
-            .titleStyles(1)
-          Row() {
-            Text('启用账号登录')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-              .width('30%')
-            Blank()
-            Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.login !== undefined })
-              .onChange((isOn: boolean) => {
-                this.vm.setLoginEnabled(isOn)
-              })
+          SourceEditSection({ title: '自定义请求头' }) {
+            this.FieldList(this.vm.requestHeaderFields())
           }
-          .width('100%')
-          if (this.vm.editingConfig.login !== undefined) {
-            this.FieldList(this.vm.loginFields())
+          SourceEditSection({ title: '登录配置(API)' }) {
+            Column({ space: 16 }) {
+              Row() {
+                Text('启用账号登录')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+                  .width('30%')
+                Blank()
+                Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.login !== undefined })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setLoginEnabled(isOn)
+                  })
+              }
+              .width('100%')
+              if (this.vm.editingConfig.login !== undefined) {
+                this.FieldList(this.vm.loginFields())
+              }
+            }
           }
         }
       }
@@ -332,61 +350,63 @@ struct VideoSourceDetail {
   SearchConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
-        Text('搜索配置')
-          .titleStyles(1)
-        Row({space: 12}) {
-          // 是否需要基础URL
-          Row({space: 5}) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.search.videos.urlNeedBaseUrl })
-              .onChange((isOn: boolean) => {
-                this.vm.setSearchUrlNeedBaseUrl(isOn)
-              })
-            Text('拼接基础URL')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-          }
-          .justifyContent(FlexAlign.Start)
-          .alignItems(VerticalAlign.Center)
-          // 启用HTTPS
-          Row() {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.search.videos.enabledHttps })
-              .onChange((isOn: boolean) => {
-                this.vm.setSearchEnabledHttps(isOn)
-              })
-            Text('启用HTTPS')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-          }
-          .justifyContent(FlexAlign.Start)
-          .alignItems(VerticalAlign.Center)
-        }
-        .justifyContent(FlexAlign.Start)
-        .alignItems(VerticalAlign.Center)
-        this.FieldList(this.vm.searchFields())
-        this.VideoInfoSelector('搜索结果配置',
-          () => this.vm.editingConfig.parserConfig.search.videos.itemSelectors,
-          (config: SelectorConfig) => {
-            this.vm.editingConfig.parserConfig.search.videos.itemSelectors = config
-            this.vm.markAsChanged()
-          }, this.vm.isJson())
-        if (!this.vm.isJson()) {
-          Row() {
-            Text('高级字段')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-            Text('搜索验证码（图片 + 提交校验 + 会话重放）')
-              .fontSize(12)
-              .fontColor($r('app.color.color_text_minor'))
-              .margin({ left: 8 })
-            Blank()
-            Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.parserConfig.search.captcha !== undefined })
-              .onChange((isOn: boolean) => {
-                this.vm.setSearchCaptchaEnabled(isOn)
-              })
-          }
-          .width('100%')
-          if (this.vm.editingConfig.parserConfig.search.captcha !== undefined) {
-            this.FieldList(this.vm.captchaFields())
+        SourceEditSection({ title: '搜索配置' }) {
+          Column({ space: 16 }) {
+            Row({space: 12}) {
+              // 是否需要基础URL
+              Row({space: 5}) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.search.videos.urlNeedBaseUrl })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setSearchUrlNeedBaseUrl(isOn)
+                  })
+                Text('拼接基础URL')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+              // 启用HTTPS
+              Row() {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.search.videos.enabledHttps })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setSearchEnabledHttps(isOn)
+                  })
+                Text('启用HTTPS')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+            }
+            .justifyContent(FlexAlign.Start)
+            .alignItems(VerticalAlign.Center)
+            this.FieldList(this.vm.searchFields())
+            this.VideoInfoSelector('搜索结果配置',
+              () => this.vm.editingConfig.parserConfig.search.videos.itemSelectors,
+              (config: SelectorConfig) => {
+                this.vm.editingConfig.parserConfig.search.videos.itemSelectors = config
+                this.vm.markAsChanged()
+              }, this.vm.isJson())
+            if (!this.vm.isJson()) {
+              Row() {
+                Text('高级字段')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+                Text('搜索验证码（图片 + 提交校验 + 会话重放）')
+                  .fontSize(12)
+                  .fontColor($r('app.color.color_text_minor'))
+                  .margin({ left: 8 })
+                Blank()
+                Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.parserConfig.search.captcha !== undefined })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setSearchCaptchaEnabled(isOn)
+                  })
+              }
+              .width('100%')
+              if (this.vm.editingConfig.parserConfig.search.captcha !== undefined) {
+                this.FieldList(this.vm.captchaFields())
+              }
+            }
           }
         }
       }
@@ -398,97 +418,108 @@ struct VideoSourceDetail {
   HomepageConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
-        Text('轮播图配置')
-          .titleStyles(1)
-        Row({space: 12}) {
-          Row({space: 5}) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.banner.urlNeedBaseUrl })
-              .onChange((isOn: boolean) => {
-                this.vm.setBannerUrlNeedBaseUrl(isOn)
-              })
-            Text('拼接基础URL')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
+        SourceEditSection({ title: '轮播图配置' }) {
+          Column({ space: 16 }) {
+            Row({space: 12}) {
+              Row({space: 5}) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.banner.urlNeedBaseUrl })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setBannerUrlNeedBaseUrl(isOn)
+                  })
+                Text('拼接基础URL')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+              Row() {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.banner.enabledHttps })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setBannerEnabledHttps(isOn)
+                  })
+                Text('启用HTTPS')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .justifyContent(FlexAlign.Start)
+              .alignItems(VerticalAlign.Center)
+            }
+            .justifyContent(FlexAlign.Start)
+            .alignItems(VerticalAlign.Center)
+            this.FieldList(this.vm.bannerFields())
+            this.VideoInfoSelector(this.vm.isJson() ? '轮播字段模板' : '轮播视频配置',
+              () => this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors,
+              (config: SelectorConfig) => {
+                this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors = config
+                this.vm.markAsChanged()
+              }, this.vm.isJson())
           }
-          .justifyContent(FlexAlign.Start)
-          .alignItems(VerticalAlign.Center)
-          Row() {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.banner.enabledHttps })
-              .onChange((isOn: boolean) => {
-                this.vm.setBannerEnabledHttps(isOn)
-              })
-            Text('启用HTTPS')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-          }
-          .justifyContent(FlexAlign.Start)
-          .alignItems(VerticalAlign.Center)
         }
-        .justifyContent(FlexAlign.Start)
-        .alignItems(VerticalAlign.Center)
-        this.FieldList(this.vm.bannerFields())
         if (this.vm.isJson()) {
-          this.VideoInfoSelector('轮播字段模板',
-            () => this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors,
-            (config: SelectorConfig) => {
-              this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors = config
-              this.vm.markAsChanged()
-            }, true)
-          Text('分类卡片')
-            .titleStyles(1)
-          this.CategoryCardsEditor()
-        } else {
-          this.VideoInfoSelector('轮播视频配置',
-            () => this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors,
-            (config: SelectorConfig) => {
-              this.vm.editingConfig.parserConfig.homepage.banner.itemSelectors = config
-              this.vm.markAsChanged()
-            }, false)
-          Text('分类卡片(独立页面)')
-            .titleStyles(1)
-          this.CategoryCardsEditor()
-          Text('分类配置(同页,未配置卡片时生效)')
-            .titleStyles(1)
-          Row({space: 12}) {
-            Row({space: 5}) {
-              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.moreUrlNeedBaseUrl })
-                .onChange((isOn: boolean) => {
-                  this.vm.setMoreUrlNeedBaseUrl(isOn)
-                })
-              Text('更多链接拼接URL')
-                .fontSize(15)
-                .fontColor($r('app.color.color_text_major'))
-            }
-            .alignItems(VerticalAlign.Center)
-            Row({space: 5}) {
-              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.videos.urlNeedBaseUrl })
-                .onChange((isOn: boolean) => {
-                  this.vm.setCategoryVideosUrlNeedBaseUrl(isOn)
-                })
-              Text('视频拼接基础URL')
-                .fontSize(15)
-                .fontColor($r('app.color.color_text_major'))
-            }
-            .alignItems(VerticalAlign.Center)
-            Row({space: 5}) {
-              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.videos.enabledHttps })
-                .onChange((isOn: boolean) => {
-                  this.vm.setCategoryVideosEnabledHttps(isOn)
-                })
-              Text('启用HTTPS')
-                .fontSize(15)
-                .fontColor($r('app.color.color_text_major'))
-            }
-            .alignItems(VerticalAlign.Center)
+          SourceEditSection({ title: '分类卡片' }) {
+            this.CategoryCardsEditor()
           }
-          .alignItems(VerticalAlign.Center)
-          this.FieldList(this.vm.categoryHtmlFields())
-          this.VideoInfoSelector('分类视频配置',
-            () => this.vm.editingConfig.parserConfig.homepage.category.videos.itemSelectors,
-            (config: SelectorConfig) => {
-              this.vm.editingConfig.parserConfig.homepage.category.videos.itemSelectors = config
-              this.vm.markAsChanged()
-            }, false)
+        } else {
+          SourceEditSection({ title: '分类卡片(独立页面)' }) {
+            Column({ space: 16 }) {
+              this.CategoryCardsEditor()
+              if (this.vm.categoryCards.length > 0) {
+                // 已配置卡片：同页分类配置整块隐藏，仅保留统一字段模板供卡片引用
+                this.VideoInfoSelector('统一视频字段模板',
+                  () => this.vm.editingConfig.parserConfig.homepage.category.videos.itemSelectors,
+                  (config: SelectorConfig) => {
+                    this.vm.setUnifiedItemSelectors(config)
+                  }, false)
+              }
+            }
+          }
+          if (this.vm.categoryCards.length === 0) {
+            SourceEditSection({ title: '分类配置(同页)' }) {
+              Column({ space: 16 }) {
+                Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+                  Row({space: 5}) {
+                    Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.moreUrlNeedBaseUrl })
+                      .onChange((isOn: boolean) => {
+                        this.vm.setMoreUrlNeedBaseUrl(isOn)
+                      })
+                    Text('更多链接拼接URL')
+                      .fontSize(15)
+                      .fontColor($r('app.color.color_text_major'))
+                  }
+                  .alignItems(VerticalAlign.Center)
+                  .margin({ right: 16 })
+                  Row({space: 5}) {
+                    Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.videos.urlNeedBaseUrl })
+                      .onChange((isOn: boolean) => {
+                        this.vm.setCategoryVideosUrlNeedBaseUrl(isOn)
+                      })
+                    Text('视频拼接基础URL')
+                      .fontSize(15)
+                      .fontColor($r('app.color.color_text_major'))
+                  }
+                  .alignItems(VerticalAlign.Center)
+                  .margin({ right: 16 })
+                  Row({space: 5}) {
+                    Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.homepage.category.videos.enabledHttps })
+                      .onChange((isOn: boolean) => {
+                        this.vm.setCategoryVideosEnabledHttps(isOn)
+                      })
+                    Text('启用HTTPS')
+                      .fontSize(15)
+                      .fontColor($r('app.color.color_text_major'))
+                  }
+                  .alignItems(VerticalAlign.Center)
+                  .margin({ right: 16 })
+                }
+                this.FieldList(this.vm.categoryHtmlFields())
+                this.VideoInfoSelector('分类视频配置',
+                  () => this.vm.editingConfig.parserConfig.homepage.category.videos.itemSelectors,
+                  (config: SelectorConfig) => {
+                    this.vm.setUnifiedItemSelectors(config)
+                  }, false)
+              }
+            }
+          }
         }
       }
       .tabContentStyles()
@@ -534,7 +565,7 @@ struct VideoSourceDetail {
       }
       .width('100%')
       this.FieldList(this.vm.cardFields(index))
-      Row({ space: 12 }) {
+      Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
         Row({ space: 5 }) {
           Toggle({ type: ToggleType.Checkbox, isOn: card.urlNeedBaseUrl ?? false })
             .onChange((isOn: boolean) => {
@@ -545,6 +576,7 @@ struct VideoSourceDetail {
             .fontColor($r('app.color.color_text_major'))
         }
         .alignItems(VerticalAlign.Center)
+        .margin({ right: 16 })
         Row({ space: 5 }) {
           Toggle({ type: ToggleType.Checkbox, isOn: card.enabledHttps ?? true })
             .onChange((isOn: boolean) => {
@@ -555,20 +587,35 @@ struct VideoSourceDetail {
             .fontColor($r('app.color.color_text_major'))
         }
         .alignItems(VerticalAlign.Center)
-      }
-      .alignItems(VerticalAlign.Center)
-      this.VideoInfoSelector('字段模板',
-        () => {
-          const c = this.vm.categoryCards[index]
-          return c ? c.itemSelectors : {}
-        },
-        (config: SelectorConfig) => {
-          const c = this.vm.categoryCards[index]
-          if (c) {
-            c.itemSelectors = config
-            this.vm.markAsChanged()
+        .margin({ right: 16 })
+        if (!this.vm.isJson()) {
+          Row({ space: 5 }) {
+            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.isCardUnified(index) })
+              .onChange((isOn: boolean) => {
+                this.vm.setCardUseUnified(index, isOn)
+              })
+            Text('使用统一字段')
+              .fontSize(15)
+              .fontColor($r('app.color.color_text_major'))
           }
-        }, this.vm.isJson())
+          .alignItems(VerticalAlign.Center)
+          .margin({ right: 16 })
+        }
+      }
+      if (this.vm.isJson() || !this.vm.isCardUnified(index)) {
+        this.VideoInfoSelector('字段模板',
+          () => {
+            const c = this.vm.categoryCards[index]
+            return c ? c.itemSelectors : {}
+          },
+          (config: SelectorConfig) => {
+            const c = this.vm.categoryCards[index]
+            if (c) {
+              c.itemSelectors = config
+              this.vm.markAsChanged()
+            }
+          }, this.vm.isJson())
+      }
     }
     .padding(12)
     .borderRadius(16)
@@ -581,56 +628,62 @@ struct VideoSourceDetail {
   DetailConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
-        Text(this.vm.isJson() ? '详情字段模板' : '影片详情')
-          .titleStyles(1)
-        this.FieldList(this.vm.detailFields())
-        this.DetailExtraSelector(
-          () => this.vm.editingConfig.parserConfig.detail.extra ?? {},
-          (config: SelectorConfig) => {
-            this.vm.editingConfig.parserConfig.detail.extra = this.vm.hasExtendedFields(config) ? config : undefined
-            this.vm.markAsChanged()
-          }, this.vm.isJson())
-        Text(this.vm.isJson() ? '选集配置(JSON)' : '剧集配置')
-          .titleStyles(1)
-        this.FieldList(this.vm.episodeListFields())
-        this.EpisodeSelector(this.vm.isJson() ? '单集字段模板' : '单集剧集配置',
-          () => this.vm.editingConfig.parserConfig.detail.episodes.itemSelectors,
-          (config: SelectorConfig) => {
-            this.vm.editingConfig.parserConfig.detail.episodes.itemSelectors = config
-            this.vm.markAsChanged()
-          }, this.vm.isJson())
-        Text(this.vm.isJson() ? '推荐配置(JSON)' : '推荐配置')
-          .titleStyles(1)
-        Row({space: 12}) {
-          Row({space: 5}) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.detail.recommends.urlNeedBaseUrl })
-              .onChange((isOn: boolean) => {
-                this.vm.setRecommendUrlNeedBaseUrl(isOn)
-              })
-            Text('拼接基础URL')
-              .fontSize(15)
-              .fontColor($r('app.color.color_text_major'))
+        SourceEditSection({ title: this.vm.isJson() ? '详情字段模板' : '影片详情' }) {
+          Column({ space: 16 }) {
+            this.FieldList(this.vm.detailFields())
+            this.DetailExtraSelector(
+              () => this.vm.editingConfig.parserConfig.detail.extra ?? {},
+              (config: SelectorConfig) => {
+                this.vm.editingConfig.parserConfig.detail.extra = this.vm.hasExtendedFields(config) ? config : undefined
+                this.vm.markAsChanged()
+              }, this.vm.isJson())
           }
-          .alignItems(VerticalAlign.Center)
-          Row({space: 5}) {
-            Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.detail.recommends.enabledHttps })
-              .onChange((isOn: boolean) => {
-                this.vm.setRecommendEnabledHttps(isOn)
-              })
-            Text('启用HTTPS')
-              .fontSize(15)
-              .fontColor($r('app.color.color_text_major'))
-          }
-          .alignItems(VerticalAlign.Center)
         }
-        .alignItems(VerticalAlign.Center)
-        this.FieldList(this.vm.recommendFields())
-        this.VideoInfoSelector(this.vm.isJson() ? '推荐字段模板' : '推荐番剧配置',
-          () => this.vm.editingConfig.parserConfig.detail.recommends.itemSelectors,
-          (config: SelectorConfig) => {
-            this.vm.editingConfig.parserConfig.detail.recommends.itemSelectors = config
-            this.vm.markAsChanged()
-          }, this.vm.isJson())
+        SourceEditSection({ title: this.vm.isJson() ? '选集配置(JSON)' : '剧集配置' }) {
+          Column({ space: 16 }) {
+            this.FieldList(this.vm.episodeListFields())
+            this.EpisodeSelector(this.vm.isJson() ? '单集字段模板' : '单集剧集配置',
+              () => this.vm.editingConfig.parserConfig.detail.episodes.itemSelectors,
+              (config: SelectorConfig) => {
+                this.vm.editingConfig.parserConfig.detail.episodes.itemSelectors = config
+                this.vm.markAsChanged()
+              }, this.vm.isJson())
+          }
+        }
+        SourceEditSection({ title: this.vm.isJson() ? '推荐配置(JSON)' : '推荐配置' }) {
+          Column({ space: 16 }) {
+            Row({space: 12}) {
+              Row({space: 5}) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.detail.recommends.urlNeedBaseUrl })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setRecommendUrlNeedBaseUrl(isOn)
+                  })
+                Text('拼接基础URL')
+                  .fontSize(15)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .alignItems(VerticalAlign.Center)
+              Row({space: 5}) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.parserConfig.detail.recommends.enabledHttps })
+                  .onChange((isOn: boolean) => {
+                    this.vm.setRecommendEnabledHttps(isOn)
+                  })
+                Text('启用HTTPS')
+                  .fontSize(15)
+                  .fontColor($r('app.color.color_text_major'))
+              }
+              .alignItems(VerticalAlign.Center)
+            }
+            .alignItems(VerticalAlign.Center)
+            this.FieldList(this.vm.recommendFields())
+            this.VideoInfoSelector(this.vm.isJson() ? '推荐字段模板' : '推荐番剧配置',
+              () => this.vm.editingConfig.parserConfig.detail.recommends.itemSelectors,
+              (config: SelectorConfig) => {
+                this.vm.editingConfig.parserConfig.detail.recommends.itemSelectors = config
+                this.vm.markAsChanged()
+              }, this.vm.isJson())
+          }
+        }
       }
       .tabContentStyles()
     }
@@ -741,14 +794,6 @@ struct VideoSourceDetail {
 
 }
 
-
-@Extend(Text)
-function titleStyles(weight: 0 | 1) {
-  .fontWeight(weight == 0 ? FontWeight.Medium : FontWeight.Bold)
-  .textAlign(TextAlign.Start)
-  .width('100%')
-  .fontSize(18)
-}
 
 @Extend(Column)
 function tabContentStyles() {

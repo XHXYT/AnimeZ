@@ -98,6 +98,26 @@ export class AppConfigs {
    */
   @Trace danmaku_area: number = 1.0
   /**
+   * 弹幕屏蔽：屏蔽滚动弹幕
+   */
+  @Trace danmaku_block_scroll: boolean = false
+  /**
+   * 弹幕屏蔽：屏蔽固定弹幕（顶部/底部）
+   */
+  @Trace danmaku_block_fixed: boolean = false
+  /**
+   * 弹幕屏蔽：屏蔽彩色弹幕（非白色）
+   */
+  @Trace danmaku_block_color: boolean = false
+  /**
+   * 弹幕屏蔽：隐藏重复弹幕（相同文本短时间窗口内仅显示首条）
+   */
+  @Trace danmaku_hide_duplicate: boolean = false
+  /**
+   * 弹幕屏蔽：屏蔽词（逗号/空格分隔，命中即过滤）
+   */
+  @Trace danmaku_block_words: string = ''
+  /**
    * 画面尺寸（VideoFit），默认为 适应
    */
   @Trace video_fit: VideoFit = VideoFit.Contain
@@ -201,6 +221,11 @@ export class AppConfigs {
     this.danmaku_font_scale = (json["danmaku_font_scale"] as number) ?? this.danmaku_font_scale
     this.danmaku_speed = (json["danmaku_speed"] as number) ?? this.danmaku_speed
     this.danmaku_area = (json["danmaku_area"] as number) ?? this.danmaku_area
+    this.danmaku_block_scroll = (json["danmaku_block_scroll"] as boolean) ?? this.danmaku_block_scroll
+    this.danmaku_block_fixed = (json["danmaku_block_fixed"] as boolean) ?? this.danmaku_block_fixed
+    this.danmaku_block_color = (json["danmaku_block_color"] as boolean) ?? this.danmaku_block_color
+    this.danmaku_hide_duplicate = (json["danmaku_hide_duplicate"] as boolean) ?? this.danmaku_hide_duplicate
+    this.danmaku_block_words = (json["danmaku_block_words"] as string) ?? this.danmaku_block_words
     this.video_fit = (json["video_fit"] as VideoFit) ?? this.video_fit
     this.double_tap_seek_forward = (json["double_tap_seek_forward"] as number) ?? this.double_tap_seek_forward
     this.double_tap_seek_rewind = (json["double_tap_seek_rewind"] as number) ?? this.double_tap_seek_rewind
@@ -262,6 +287,8 @@ export class AppConfigs {
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
     'video_source_import_overwrite', 'auto_pip_on_exit',
     'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_speed', 'danmaku_area',
+    'danmaku_block_scroll', 'danmaku_block_fixed', 'danmaku_block_color', 'danmaku_hide_duplicate',
+    'danmaku_block_words',
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
     'search_result_style', 'download_location', 'download_separate_route')
@@ -292,6 +319,11 @@ export class AppConfigs {
         "danmaku_font_scale": this.danmaku_font_scale,
         "danmaku_speed": this.danmaku_speed,
         "danmaku_area": this.danmaku_area,
+        "danmaku_block_scroll": this.danmaku_block_scroll,
+        "danmaku_block_fixed": this.danmaku_block_fixed,
+        "danmaku_block_color": this.danmaku_block_color,
+        "danmaku_hide_duplicate": this.danmaku_hide_duplicate,
+        "danmaku_block_words": this.danmaku_block_words,
         "video_fit": this.video_fit,
         "double_tap_seek_forward": this.double_tap_seek_forward,
         "double_tap_seek_rewind": this.double_tap_seek_rewind,
@@ -337,6 +369,11 @@ export class AppConfigs {
     this.danmaku_font_scale = 1.0
     this.danmaku_speed = 1.0
     this.danmaku_area = 1.0
+    this.danmaku_block_scroll = false
+    this.danmaku_block_fixed = false
+    this.danmaku_block_color = false
+    this.danmaku_hide_duplicate = false
+    this.danmaku_block_words = ''
     this.video_fit = VideoFit.Contain
     this.double_tap_seek_forward = 10
     this.double_tap_seek_rewind = 10

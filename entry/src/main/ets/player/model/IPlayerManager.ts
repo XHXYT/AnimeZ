@@ -127,6 +127,9 @@ export default interface IPlayerManager {
   /** 底层播放器 seek 完成回调（AVPlayer seekDone / IJK onSeekComplete），用于关闭 seek 加载圈 */
   notifySeekDone: () => void
 
+  /** 待消费的续播位置（毫秒，-1 表示无）；供 mpv 等后端在 open 媒体时随 start 选项传入 */
+  getPendingSeekPos: () => number
+
 }
 
 

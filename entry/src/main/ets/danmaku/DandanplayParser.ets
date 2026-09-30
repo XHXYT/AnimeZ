@@ -1,7 +1,8 @@
-import { BaseDanmaku, BaseDanmakuParser, DanmakuContext, Danmakus, IDanmakus, ST_BY_TIME } from '@ohos/danmakuflamemaster'
+import { BaseDanmaku, BaseDanmakuParser, DanmakuContext, DanmakuTimer, Danmakus, IDanmakus, ST_BY_TIME } from '@ohos/danmakuflamemaster'
+import Logger from '../utils/Logger'
 import { DandanplayComment } from './DandanplayModels'
 
-/** 弹幕基础字号（dp），B 站标准 */
+/** 弹幕基础字号（dp），B 站标准；所有弹幕统一使用该字号，不随原始字号变化 */
 const BASE_DANMAKU_TEXT_SIZE: number = 25
 
 /**
@@ -17,27 +18,57 @@ export class DandanplayParser extends BaseDanmakuParser {
 
   protected parse(): IDanmakus {
     const danmakus = new Danmakus({ sortType: ST_BY_TIME, duplicateMergingEnabled: false })
+    const total = this.comments.length
+    let added = 0
+    let rejected = 0
+    let firstTime = -1
+    let firstTextSize = -1
+    let sampleLogged = 0
     for (const comment of this.comments) {
+      if (sampleLogged < 3) {
+        Logger.d('tips', `DandanplayParser 样本${sampleLogged} p=${comment.p}`)
+        sampleLogged++
+      }
       const item = this.parseComment(comment)
       if (item !== null) {
-        danmakus.addItem(item)
+        if (danmakus.addItem(item)) {
+          if (firstTime < 0) {
+            firstTime = item.getTime()
+            firstTextSize = item.textSize
+          }
+          added++
+        } else {
+          rejected++
+        }
+      } else {
+        rejected++
       }
     }
+    Logger.d('tips', `DandanplayParser 解析完成 输入=${total} 入集=${added} 丢弃=${rejected} size=${danmakus.size()} 首条时间=${firstTime} 首条字号=${firstTextSize} scaledDensity=${this.mScaledDensity} dispDensity=${this.mDispDensity}`)
     this.comments = []
     return danmakus
   }
 
-  /** 解析单条评论: p = "时间(秒),模式,颜色,来源" */
+  /** 解析单条评论: p = "时间(秒),模式,颜色,字号,发送时间戳,弹幕池,用户ID,弹幕ID"（dandanplay 官方格式，颜色在字号前） */
   private parseComment(comment: DandanplayComment): BaseDanmaku | null {
     const parts = comment.p.split(',')
-    if (parts.length < 3) {
+    if (parts.length < 4) {
       return null
     }
     const timeSec = parseFloat(parts[0])
     const mode = parseInt(parts[1], 10)
-    const color = parseInt(parts[2], 10)
-    if (isNaN(timeSec) || isNaN(mode) || isNaN(color)) {
+    if (isNaN(timeSec) || isNaN(mode)) {
       return null
+    }
+    const v2 = parseFloat(parts[2])
+    const v3 = parseFloat(parts[3])
+    let color = v3
+    if (!isNaN(v2) && v2 > 1000 && !isNaN(v3) && v3 >= 8 && v3 <= 144) {
+      // dandanplay 官方顺序：颜色在前；若来源是 B 站 XML 顺序（字号在前，颜色是 0xFFFFFF 级大数）则保持默认
+      color = v2
+    }
+    if (isNaN(color) || color < 0 || color > 0xFFFFFF) {
+      color = 0xFFFFFF
     }
     const type = DandanplayParser.mapType(mode)
     if (type < 0) {
@@ -52,9 +83,18 @@ export class DandanplayParser extends BaseDanmakuParser {
     if (item === null) {
       return null
     }
+    const timer = this.mTimer as DanmakuTimer
+    if (timer !== null && timer !== undefined) {
+      // 库不会为解析出的弹幕绑定时钟，未绑定时 isTimeOut()/isLate() 恒为 true，渲染循环会整体跳过
+      item.setTimer(timer)
+    }
+    // 库只给实时弹幕(addDanmaku)绑定 flags，parser 产出的弹幕必须自行绑定，
+    // 否则 isShown()/isMeasured() 中 flags != null 恒 false，永远绘制不出来（官方 demo 同款写法）
+    item.flags = context.mGlobalFlagValues
     item.setTime(Math.round(timeSec * 1000))
     item.text = comment.m
     item.textColor = color
+    // 统一字号：原始字号大小不一观感杂乱，全部使用基准字号（缩放仍由设置的字体系数控制）
     item.textSize = BASE_DANMAKU_TEXT_SIZE * this.mScaledDensity
     item.setVisibility(true)
     return item

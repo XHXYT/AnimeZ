@@ -12,6 +12,7 @@ export interface SelectorConfig {
   month?: string | { selector: string; postProcess?: ProcessConfig };
   director?: string | { selector: string; postProcess?: ProcessConfig };
   actors?: string | { selector: string; postProcess?: ProcessConfig };
+  protagonist?: string | { selector: string; postProcess?: ProcessConfig };
   tags?: string | { selector: string; postProcess?: ProcessConfig };
 
   // 支持任意字段的复杂配置

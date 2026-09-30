@@ -604,6 +604,7 @@ export default class GenericDataSource implements DataSource {
     if (key === 'month') { info.month = value; return; }
     if (key === 'director') { info.director = value; return; }
     if (key === 'actors') { info.actors = value; return; }
+    if (key === 'protagonist') { info.protagonist = value; return; }
     if (key === 'tags') { info.tags = value; return; }
   }
 

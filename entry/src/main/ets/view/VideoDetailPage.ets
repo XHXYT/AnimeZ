@@ -402,13 +402,6 @@ struct VideoDetailPage {
           .fontSize(12)
           .padding(16)
       }
-      if (this.viewModel.videoDetailInfo.protagonist) {
-        Header('角色声优')
-        Text(this.viewModel.videoDetailInfo.protagonist)
-          .fontColor($r('app.color.color_text_normal'))
-          .fontSize(12)
-          .padding(16)
-      }
       if (this.viewModel.videoDetailInfo.director) {
         Header('制作信息')
         Text(this.viewModel.videoDetailInfo.director)
@@ -416,9 +409,9 @@ struct VideoDetailPage {
           .fontSize(12)
           .padding(16)
       }
-      if (this.viewModel.videoDetailInfo.actors) {
-        Header('主演')
-        Text(this.viewModel.videoDetailInfo.actors)
+      if (this.viewModel.videoDetailInfo.actors || this.viewModel.videoDetailInfo.protagonist) {
+        Header('声优')
+        Text(this.viewModel.videoDetailInfo.actors || this.viewModel.videoDetailInfo.protagonist)
           .fontColor($r('app.color.color_text_normal'))
           .fontSize(12)
           .padding(16)

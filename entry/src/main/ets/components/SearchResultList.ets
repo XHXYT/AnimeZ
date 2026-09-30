@@ -115,9 +115,9 @@ struct SearchResultItem {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
 
-          // 演员（单行省略）
+          // 声优（单行省略）
           if (this.hasText(this.item.actors)) {
-            Text('主演：' + this.item.actors)
+            Text('声优：' + this.item.actors)
               .fontSize(12)
               .fontColor($r('app.color.color_text_minor'))
               .maxLines(1)

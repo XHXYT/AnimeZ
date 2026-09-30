@@ -93,7 +93,8 @@ enum PanelType {
   SPEED = 1,
   EPISODES = 2,
   PLAYER_SETTINGS = 3,
-  GESTURE_HELP = 4
+  GESTURE_HELP = 4,
+  DANMAKU = 5
 
 }
 
@@ -1060,6 +1061,8 @@ export struct VideoPlayerController {
     this.danmakuCtrl.load(animeTitle, episodeTitle).then((result: DanmakuLoadResult) => {
       if (result.status === DanmakuLoadStatus.LOADED) {
         this.danmakuLoaded = true
+        // load() 会重置弹幕播放态，播放中开启需按播放器实际状态恢复，否则弹幕定格
+        this.syncDanmakuPlayback()
         ToastUtil.showToast({ message: `弹幕已加载 ${result.comments.length} 条` })
       } else if (result.status === DanmakuLoadStatus.EMPTY) {
         ToastUtil.showToast({ message: '该集暂无弹幕' })
@@ -1069,6 +1072,15 @@ export struct VideoPlayerController {
     })
   }
 
+  /** 按播放器当前状态恢复弹幕时钟（prepare 完成后由回调按 playing 决定启动/定帧） */
+  private syncDanmakuPlayback(): void {
+    if (this.isPlayingNow()) {
+      this.danmakuCtrl.onPlay(this.playerManager.getCurrentPosition())
+    } else {
+      this.danmakuCtrl.onPause()
+    }
+  }
+
   /** 切换弹幕开关 */
   private toggleDanmaku(): void {
     appSettings.danmaku_enabled = !appSettings.danmaku_enabled
@@ -1076,6 +1088,8 @@ export struct VideoPlayerController {
       // 已有弹幕数据直接挂载展示，否则重新匹配加载
       if (this.danmakuCtrl.loadedCount > 0) {
         this.danmakuLoaded = true
+        // 重新挂载后按播放器实际进度/播放态恢复，避免从旧位置起播
+        this.syncDanmakuPlayback()
       } else {
         this.loadDanmaku()
       }
@@ -1415,7 +1429,7 @@ export struct VideoPlayerController {
           })
         Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
 
-        Text('弹幕')
+        Text(AnimeState.widthBp <= 2 && !this.isFullScreen ? '弹' : '弹幕')
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .borderWidth(1)
           .borderColor(appSettings.danmaku_enabled ? $r('app.color.primary_color_accent') : Color.White)
@@ -1426,6 +1440,19 @@ export struct VideoPlayerController {
           .onClick(() => {
             this.toggleDanmaku()
           })
+        if (this.isFullScreen || AnimeState.widthBp > 2) {
+          Text('弹幕设置')
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .borderWidth(1)
+            .borderColor(Color.White)
+            .borderRadius(4)
+            .margin({ right: 12 })
+            .fontSize(12)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.showRightPanel(PanelType.DANMAKU)
+            })
+        }
 
         Text(`${this.currentSpeed}X`)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -1508,6 +1535,8 @@ export struct VideoPlayerController {
           this.PlayerSettings()
         } else if (this.rightPanelType == PanelType.GESTURE_HELP) {
           this.GestureHelpPanel()
+        } else if (this.rightPanelType == PanelType.DANMAKU) {
+          this.DanmakuSettingsPanel()
         }
       }
     }
@@ -1716,106 +1745,6 @@ export struct VideoPlayerController {
         .width('100%')
 
         Row() {
-          Text('弹幕不透明度')
-            .fontSize(this.isFullScreen ? 16 : 13)
-            .fontColor(Color.White)
-          Slider({
-            value: appSettings.danmaku_opacity * 100,
-            min: 25,
-            max: 100,
-            step: 5,
-            style: SliderStyle.InSet
-          })
-            .layoutWeight(1)
-            .margin({ left: 12 })
-            .blockColor($r('app.color.primary_color_accent'))
-            .trackColor('#4dffffff')
-            .selectedColor($r('app.color.primary_color'))
-            .onChange((value: number, mode: SliderChangeMode) => {
-              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
-                appSettings.danmaku_opacity = value / 100
-                this.danmakuCtrl.applyStyle()
-              }
-            })
-        }
-        .width('100%')
-
-        Row() {
-          Text('弹幕字体大小')
-            .fontSize(this.isFullScreen ? 16 : 13)
-            .fontColor(Color.White)
-          Slider({
-            value: appSettings.danmaku_font_scale * 100,
-            min: 50,
-            max: 150,
-            step: 5,
-            style: SliderStyle.InSet
-          })
-            .layoutWeight(1)
-            .margin({ left: 12 })
-            .blockColor($r('app.color.primary_color_accent'))
-            .trackColor('#4dffffff')
-            .selectedColor($r('app.color.primary_color'))
-            .onChange((value: number, mode: SliderChangeMode) => {
-              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
-                appSettings.danmaku_font_scale = value / 100
-                this.danmakuCtrl.applyStyle()
-              }
-            })
-        }
-        .width('100%')
-
-        Row() {
-          Text('弹幕滚动速度')
-            .fontSize(this.isFullScreen ? 16 : 13)
-            .fontColor(Color.White)
-          Slider({
-            value: appSettings.danmaku_speed * 100,
-            min: 50,
-            max: 200,
-            step: 10,
-            style: SliderStyle.InSet
-          })
-            .layoutWeight(1)
-            .margin({ left: 12 })
-            .blockColor($r('app.color.primary_color_accent'))
-            .trackColor('#4dffffff')
-            .selectedColor($r('app.color.primary_color'))
-            .onChange((value: number, mode: SliderChangeMode) => {
-              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
-                appSettings.danmaku_speed = value / 100
-                this.danmakuCtrl.applyStyle()
-              }
-            })
-        }
-        .width('100%')
-
-        Text('弹幕显示区域')
-          .alignSelf(ItemAlign.Start)
-          .fontSize(this.isFullScreen ? 16 : 13)
-          .fontColor(Color.White)
-
-        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
-          ForEach(DANMAKU_AREA_LIST, (item: KeyValue) => {
-            Text(item.name)
-              .textAlign(TextAlign.Center)
-              .fontColor(Color.White)
-              .fontSize(this.isFullScreen ? 14 : 11)
-              .padding(6)
-              .backgroundColor((appSettings.danmaku_area == item.value) ? $r('app.color.primary_color_accent') : Color.Transparent)
-              .borderRadius(4)
-              .margin({ bottom: 8 })
-              .width('33%')
-              .maxLines(1)
-              .onClick(() => {
-                appSettings.danmaku_area = item.value
-                this.danmakuCtrl.applyStyle()
-              })
-          })
-        }
-        .width('100%')
-
-        Row() {
           Column() {
             Text('自动全屏')
               .fontSize(this.isFullScreen ? 16 : 13)
@@ -1859,6 +1788,233 @@ export struct VideoPlayerController {
           }
           .width('100%')
         }
+
+      }
+      .padding(this.isFullScreen ? 16 : 8)
+      .width('100%')
+      .constraintSize({
+        minHeight: '100%'
+      })
+    }
+    .edgeEffect(EdgeEffect.Spring)
+    .height('100%')
+    .width(this.isFullScreen ? '30%' : '45%')
+    .scale({ x: this.rightPanelScale, centerX: '100%' })
+    .backgroundColor('#80000000')
+  }
+
+  /** 弹幕设置面板：样式（不透明度/字号/速度/区域）+ 屏蔽设置（类型/重复/屏蔽词） */
+  @Builder DanmakuSettingsPanel() {
+    Scroll() {
+      Column({ space: this.isFullScreen ? 16 : 8 }) {
+        Text('弹幕设置')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Row() {
+          Text('不透明度')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_opacity * 100,
+            min: 25,
+            max: 100,
+            step: 5,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_opacity = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+          Text(`${Math.round(appSettings.danmaku_opacity * 100)}%`)
+            .fontSize(this.isFullScreen ? 12 : 10)
+            .fontColor('#99ffffff')
+            .margin({ left: 8 })
+        }
+        .width('100%')
+
+        Row() {
+          Text('字体大小')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_font_scale * 100,
+            min: 50,
+            max: 150,
+            step: 5,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_font_scale = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+          Text(`${Math.round(appSettings.danmaku_font_scale * 100)}%`)
+            .fontSize(this.isFullScreen ? 12 : 10)
+            .fontColor('#99ffffff')
+            .margin({ left: 8 })
+        }
+        .width('100%')
+
+        Row() {
+          Text('滚动速度')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Slider({
+            value: appSettings.danmaku_speed * 100,
+            min: 100,
+            max: 200,
+            step: 10,
+            style: SliderStyle.InSet
+          })
+            .layoutWeight(1)
+            .margin({ left: 12 })
+            .blockColor($r('app.color.primary_color_accent'))
+            .trackColor('#4dffffff')
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((value: number, mode: SliderChangeMode) => {
+              if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+                appSettings.danmaku_speed = value / 100
+                this.danmakuCtrl.applyStyle()
+              }
+            })
+          Text(`${Math.round(appSettings.danmaku_speed * 100)}%`)
+            .fontSize(this.isFullScreen ? 12 : 10)
+            .fontColor('#99ffffff')
+            .margin({ left: 8 })
+        }
+        .width('100%')
+
+        Text('显示区域')
+          .alignSelf(ItemAlign.Start)
+          .fontSize(this.isFullScreen ? 16 : 13)
+          .fontColor(Color.White)
+
+        Flex({ alignItems: ItemAlign.Start, justifyContent: FlexAlign.SpaceAround, wrap: FlexWrap.Wrap }) {
+          ForEach(DANMAKU_AREA_LIST, (item: KeyValue) => {
+            Text(item.name)
+              .textAlign(TextAlign.Center)
+              .fontColor(Color.White)
+              .fontSize(this.isFullScreen ? 14 : 11)
+              .padding(6)
+              .backgroundColor((appSettings.danmaku_area == item.value) ? $r('app.color.primary_color_accent') : Color.Transparent)
+              .borderRadius(4)
+              .margin({ bottom: 8 })
+              .width('33%')
+              .maxLines(1)
+              .onClick(() => {
+                appSettings.danmaku_area = item.value
+                this.danmakuCtrl.applyStyle()
+              })
+          })
+        }
+        .width('100%')
+
+        Divider().color('#33ffffff').margin({ top: 4, bottom: 4 })
+
+        Row() {
+          Text('屏蔽滚动弹幕')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_block_scroll })
+            .onChange((isOn: boolean) => {
+              appSettings.danmaku_block_scroll = isOn
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('屏蔽固定弹幕')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Text('顶部/底部')
+            .fontSize(this.isFullScreen ? 12 : 10)
+            .fontColor('#99ffffff')
+            .margin({ left: 6 })
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_block_fixed })
+            .onChange((isOn: boolean) => {
+              appSettings.danmaku_block_fixed = isOn
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('屏蔽彩色弹幕')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_block_color })
+            .onChange((isOn: boolean) => {
+              appSettings.danmaku_block_color = isOn
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Column() {
+            Text('隐藏重复弹幕')
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Text('相同内容短时间内仅显示首条')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 2 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          Blank()
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.danmaku_hide_duplicate })
+            .onChange((isOn: boolean) => {
+              appSettings.danmaku_hide_duplicate = isOn
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+
+        Column() {
+          Text('弹幕屏蔽词')
+            .fontSize(this.isFullScreen ? 16 : 13)
+            .fontColor(Color.White)
+            .alignSelf(ItemAlign.Start)
+          Text('多个屏蔽词用逗号或空格分隔，实时生效')
+            .fontSize(this.isFullScreen ? 12 : 10)
+            .fontColor('#99ffffff')
+            .margin({ top: 2, bottom: 6 })
+            .alignSelf(ItemAlign.Start)
+          TextInput({ text: appSettings.danmaku_block_words, placeholder: '输入屏蔽词，逗号分隔' })
+            .type(InputType.Normal)
+            .width('100%')
+            .height(40)
+            .fontSize(this.isFullScreen ? 14 : 12)
+            .fontColor(Color.White)
+            .placeholderColor('#99ffffff')
+            .backgroundColor('#33ffffff')
+            .borderRadius(6)
+            .onChange((value: string) => {
+              appSettings.danmaku_block_words = value
+              this.danmakuCtrl.applyStyle()
+            })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
 
       }
       .padding(this.isFullScreen ? 16 : 8)

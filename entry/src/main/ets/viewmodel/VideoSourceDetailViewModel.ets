@@ -130,6 +130,8 @@ export class VideoSourceDetailViewModel {
   // 卡片 ForEach 稳定 key（与 categoryCards 下标对应）
   public cardKeys: string[] = []
   private cardKeySeq: number = 0
+  // HTML 模式取消「使用统一字段」的卡片 key（会话级自定义标记，不落配置；整体重赋值保证 @Trace 通知）
+  @Trace public customCardKeys: string[] = []
   // 原始配置 key（'new' 表示新建）
   public originalKey: string = ''
 
@@ -379,6 +381,140 @@ export class VideoSourceDetailViewModel {
     this.markAsChanged()
   }
 
+  // ---------- 分类卡片"统一字段"（HTML 模式） ----------
+
+  /** 字段模板取值的规范化形式：缺失/空视为 ''，对象取其 selector */
+  private normSelectorValue(value: SelectorValue): string {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (value && typeof value === 'object') {
+      return value.selector || ''
+    }
+    return ''
+  }
+
+  /** 卡片模板是否与统一模板一致（空对空也算一致） */
+  private cardEqualsUnified(card: CategoryCardConfig, unified: SelectorConfig): boolean {
+    const own = card.itemSelectors ?? {}
+    const keys: string[] = []
+    Object.keys(unified).forEach((k: string) => keys.push(k))
+    Object.keys(own).forEach((k: string) => {
+      if (keys.indexOf(k) < 0) {
+        keys.push(k)
+      }
+    })
+    for (const key of keys) {
+      if (this.normSelectorValue(own[key]) !== this.normSelectorValue(unified[key])) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /** 卡片自身字段模板是否为空（未填写任何选择器） */
+  private cardOwnEmpty(card: CategoryCardConfig): boolean {
+    const own = card.itemSelectors ?? {}
+    const keys = Object.keys(own)
+    for (const key of keys) {
+      if (this.normSelectorValue(own[key]) !== '') {
+        return false
+      }
+    }
+    return true
+  }
+
+  /** 卡片是否被会话级标记为自定义（取消过「使用统一字段」） */
+  private isCardMarkedCustom(index: number): boolean {
+    const key = this.cardKeys[index]
+    return key !== undefined && this.customCardKeys.indexOf(key) >= 0
+  }
+
+  /** 卡片是否跟随统一模板：未被标记自定义，且模板为空或与统一模板完全一致 */
+  private cardUsesUnified(index: number, unified: SelectorConfig): boolean {
+    if (this.isCardMarkedCustom(index)) {
+      return false
+    }
+    const card = this.categoryCards[index]
+    if (!card) {
+      return false
+    }
+    return this.cardOwnEmpty(card) || this.cardEqualsUnified(card, unified)
+  }
+
+  /** 卡片是否使用统一字段（驱动勾选状态与卡片字段模板编辑器显隐） */
+  isCardUnified(index: number): boolean {
+    const unified = this.editingConfig.parserConfig.homepage.category.videos.itemSelectors ?? {}
+    return this.cardUsesUnified(index, unified)
+  }
+
+  /** 勾选「使用统一字段」：立即把统一模板拷贝进卡片；取消勾选：保留当前值，标记自定义以展开编辑器 */
+  setCardUseUnified(index: number, useUnified: boolean) {
+    const old = this.categoryCards[index]
+    if (!old) {
+      return
+    }
+    const key = this.cardKeys[index]
+    if (useUnified) {
+      const updated = UIUtils.makeObserved(this.copyCard(old))
+      updated.itemSelectors = JSON.parse(JSON.stringify(
+        this.editingConfig.parserConfig.homepage.category.videos.itemSelectors ?? {})) as SelectorConfig
+      const arr = this.categoryCards.slice()
+      arr[index] = updated
+      this.categoryCards = arr
+      if (key !== undefined && this.customCardKeys.indexOf(key) >= 0) {
+        this.customCardKeys = this.customCardKeys.filter((k: string): boolean => k !== key)
+      }
+      this.markAsChanged()
+    } else if (key !== undefined && this.customCardKeys.indexOf(key) < 0) {
+      this.customCardKeys = this.customCardKeys.concat([key])
+      this.markAsChanged()
+    }
+  }
+
+  /** 更新统一字段模板（分类视频配置）：跟随统一模板的卡片同步拷贝新值，再写回配置 */
+  setUnifiedItemSelectors(config: SelectorConfig) {
+    const oldUnified = this.editingConfig.parserConfig.homepage.category.videos.itemSelectors ?? {}
+    if (this.categoryCards.length > 0) {
+      const arr = this.categoryCards.slice()
+      for (let i = 0; i < this.categoryCards.length; i++) {
+        if (!this.cardUsesUnified(i, oldUnified)) {
+          continue
+        }
+        const card = arr[i]
+        if (!card) {
+          continue
+        }
+        const updated = UIUtils.makeObserved(this.copyCard(card))
+        updated.itemSelectors = JSON.parse(JSON.stringify(config)) as SelectorConfig
+        arr[i] = updated
+      }
+      this.categoryCards = arr
+    }
+    this.editingConfig.parserConfig.homepage.category.videos.itemSelectors = config
+    this.markAsChanged()
+  }
+
+  /** 保存用卡片列表：使用统一字段的卡片把统一模板写入自身，保证导出 JSON 自包含可解析 */
+  private effectiveCardsForSave(): CategoryCardConfig[] {
+    const unified = this.editingConfig.parserConfig.homepage.category.videos.itemSelectors ?? {}
+    const result: CategoryCardConfig[] = []
+    for (let i = 0; i < this.categoryCards.length; i++) {
+      const card = this.categoryCards[i]
+      if (!card) {
+        continue
+      }
+      if (this.cardUsesUnified(i, unified)) {
+        const copied = this.copyCard(card)
+        copied.itemSelectors = JSON.parse(JSON.stringify(unified)) as SelectorConfig
+        result.push(copied)
+      } else {
+        result.push(card)
+      }
+    }
+    return result
+  }
+
   // ---------- 保存 ----------
 
   // 保存配置
@@ -433,8 +569,13 @@ export class VideoSourceDetailViewModel {
     this.editingConfig.update_time =
       `${now.getFullYear()}-${month < 10 ? '0' + month : month}-${day < 10 ? '0' + day : day}`
     if (this.editingConfig.parserConfig.homepage && this.editingConfig.parserConfig.homepage.category) {
-      this.editingConfig.parserConfig.homepage.category.cards =
-        this.categoryCards.length > 0 ? this.categoryCards : undefined
+      if (this.categoryCards.length > 0) {
+        // HTML 模式：使用统一字段的卡片把统一模板物化进自身，保证导出 JSON 自包含可解析
+        this.editingConfig.parserConfig.homepage.category.cards =
+          this.isJson() ? this.categoryCards : this.effectiveCardsForSave()
+      } else {
+        this.editingConfig.parserConfig.homepage.category.cards = undefined
+      }
     }
   }
 
@@ -459,6 +600,7 @@ export class VideoSourceDetailViewModel {
     this.categoryCards = []
     this.cardKeys = []
     this.cardKeySeq = 0
+    this.customCardKeys = []
   }
 
   // 初始化编辑数据源
@@ -471,6 +613,7 @@ export class VideoSourceDetailViewModel {
       plain.parserConfig = createDefaultConfig().parserConfig
     }
     this.ensureEditableSections(plain.parserConfig)
+    this.migrateDetailLegacyFields(plain.parserConfig)
     // makeObserved 递归代理所有层级：编辑页嵌套写入直接触发 UI 更新（V2 深度观测）
     this.editingConfig = UIUtils.makeObserved(plain)
     const parser = this.editingConfig.parserConfig
@@ -486,6 +629,38 @@ export class VideoSourceDetailViewModel {
     this.categoryCards = copied
     this.cardKeys = copied.map((item: CategoryCardConfig, index: number) => `card_${index}`)
     this.cardKeySeq = copied.length
+    this.customCardKeys = []
+  }
+
+  // 旧版详情基础字段（directorSelector/protagonistSelector）及 extra.protagonist 统一迁移：
+  // 编辑器已统一走"更多字段"，声优只保留一个键 actors（extra 支持 selector@attr 与后处理）；
+  // 运行时仍兼容旧字段读取；extra 已有同名键时保留 extra 值（运行时 extra 后执行会覆盖，二者等价）
+  private migrateDetailLegacyFields(parser: ParserConfig) {
+    const detail = parser.detail
+    if (!detail) {
+      return
+    }
+    const extra: SelectorConfig = detail.extra ? detail.extra : {}
+    let changed = false
+    if (detail.directorSelector) {
+      if (extra.director === undefined) {
+        extra.director = detail.directorSelector
+      }
+      detail.directorSelector = undefined
+      changed = true
+    }
+    // 声优与旧"角色声优"合并为同一字段：actors 已有值时保留，否则吸收 protagonist 数据
+    if (detail.protagonistSelector || extra.protagonist !== undefined) {
+      if (extra.actors === undefined || extra.actors === '') {
+        extra.actors = detail.protagonistSelector ? detail.protagonistSelector : extra.protagonist
+      }
+      detail.protagonistSelector = undefined
+      extra.protagonist = undefined
+      changed = true
+    }
+    if (changed) {
+      detail.extra = extra
+    }
   }
 
   // 补齐编辑界面会解引用的可选配置段（仅补缺，不覆盖已有值）
@@ -1199,18 +1374,10 @@ export class VideoSourceDetailViewModel {
         json ? '如 {categories}' : '视频分类的CSS选择器',
         () => detail().categorySelector || '',
         (v: string) => { detail().categorySelector = v; this.markAsChanged() }),
-      this.field(json ? '导演模板(可选)' : '导演选择器(可选)',
-        json ? '如 {director}' : '导演信息的CSS选择器',
-        () => detail().directorSelector || '',
-        (v: string) => { detail().directorSelector = v; this.markAsChanged() }),
       this.field(json ? '更新时间模板(可选)' : '更新时间选择器(可选)',
         json ? '如 {publish_date}' : '更新时间的CSS选择器',
         () => detail().updateTimeSelector || '',
-        (v: string) => { detail().updateTimeSelector = v; this.markAsChanged() }),
-      this.field(json ? '主演模板(可选)' : '主演选择器(可选)',
-        json ? '如 {actor}' : '主演信息的CSS选择器',
-        () => detail().protagonistSelector || '',
-        (v: string) => { detail().protagonistSelector = v; this.markAsChanged() })
+        (v: string) => { detail().updateTimeSelector = v; this.markAsChanged() })
     ]
     if (json) {
       fields.push(this.field('详情数据JSON路径(可选)', '详情数据在响应中的JSON路径，默认 data；接口直接返回数组时填 0，留空恢复默认',
@@ -1409,7 +1576,7 @@ export class VideoSourceDetailViewModel {
     const yearHint = jsonMode ? '字段模板，如 {year}' : '播出年份的CSS选择器'
     const monthHint = jsonMode ? '字段模板，如 {month}' : '播出月份的CSS选择器'
     const directorHint = jsonMode ? '字段模板，如 {director}' : '导演的CSS选择器'
-    const actorsHint = jsonMode ? '字段模板，如 {actors}' : '演员的CSS选择器'
+    const actorsHint = jsonMode ? '字段模板，如 {actors}' : '声优的CSS选择器'
     const tagsHint = jsonMode ? '字段模板，如 {tags}' : '标签的CSS选择器'
     return [
       ...this.itemSelectorFieldGroup('播放量', playCountHint, getConfig, setConfig,
@@ -1424,7 +1591,7 @@ export class VideoSourceDetailViewModel {
       ...this.itemSelectorFieldGroup('导演', directorHint, getConfig, setConfig,
         (c: SelectorConfig): SelectorValue => c.director,
         (c: SelectorConfig, v: SelectorValue): SelectorConfig => this.writeVideoInfoField(c, 'director', v)),
-      ...this.itemSelectorFieldGroup('演员', actorsHint, getConfig, setConfig,
+      ...this.itemSelectorFieldGroup('声优', actorsHint, getConfig, setConfig,
         (c: SelectorConfig): SelectorValue => c.actors,
         (c: SelectorConfig, v: SelectorValue): SelectorConfig => this.writeVideoInfoField(c, 'actors', v)),
       ...this.itemSelectorFieldGroup('标签', tagsHint, getConfig, setConfig,

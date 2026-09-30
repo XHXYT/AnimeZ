@@ -263,9 +263,13 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
   }
 
+  /** 待消费的续播位置（毫秒，-1 表示无）；供 mpv 等后端在 open 媒体时随 start 选项传入 */
+  getPendingSeekPos(): number {
+    return this.pendingSeekPos
+  }
+
   /** 位置到达 seek 目标：关闭 seek 加载圈 */
-  private clearSeekWaiting() {
-    if (this.seekTimeoutId !== -1) {
+  private clearSeekWaiting() {    if (this.seekTimeoutId !== -1) {
       clearTimeout(this.seekTimeoutId)
       this.seekTimeoutId = -1
     }

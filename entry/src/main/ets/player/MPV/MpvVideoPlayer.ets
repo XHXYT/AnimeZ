@@ -18,6 +18,10 @@ const DEFAULT_ASPECT = 1.9;
 export struct MpvVideoPlayer {
   private mpvPlayer: Player = new Player();
   private destroyed: boolean = false;
+  /** mpv 在 file-loaded 前会静默丢弃 seek：媒体就绪前暂存 seek 目标（毫秒），就绪后补发 */
+  private pendingSeekMs: number = -1;
+  /** 媒体是否已加载完成（duration 已知），seek 可安全执行 */
+  private mediaReady: boolean = false;
   @Local videoAspRatio: number = DEFAULT_ASPECT;
   @Local aspRatio: number = DEFAULT_ASPECT;
   @Local videoFit: VideoFit = VideoFit.Contain;
@@ -34,8 +38,17 @@ export struct MpvVideoPlayer {
         return;
       }
       try {
-        // 加载媒体但不立即播放，交给上层状态机驱动
-        this.mpvPlayer.open(new Media(url), false);
+        // 加载媒体但不立即播放，交给上层状态机驱动。
+        // 续播位置通过 mpv 的 start 选项随 open 传入：
+        // open 是异步加载，file-loaded 前的 seek 会被 mpv 丢弃，直接从头播放
+        this.mediaReady = false;
+        this.pendingSeekMs = -1;
+        const startPosMs = this.playerManager?.getPendingSeekPos() ?? -1;
+        if (startPosMs > 0) {
+          this.mpvPlayer.open(new Media(url, { start: startPosMs / 1000 }), false);
+        } else {
+          this.mpvPlayer.open(new Media(url), false);
+        }
         this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
         Logger.i('MpvVideoPlayer', 'DataSource set.');
       } catch (error) {
@@ -64,6 +77,8 @@ export struct MpvVideoPlayer {
       if (this.destroyed) {
         return;
       }
+      this.mediaReady = false;
+      this.pendingSeekMs = -1;
       try {
         this.mpvPlayer.stop();
         Logger.i('MpvVideoPlayer', 'Player stopped.');
@@ -88,6 +103,8 @@ export struct MpvVideoPlayer {
       if (this.destroyed) {
         return;
       }
+      this.mediaReady = false;
+      this.pendingSeekMs = -1;
       try {
         this.mpvPlayer.stop();
       } catch (error) {
@@ -112,6 +129,12 @@ export struct MpvVideoPlayer {
 
     seekTo: async (msec: number): Promise<void> => {
       if (this.destroyed) {
+        return;
+      }
+      if (!this.mediaReady) {
+        // file-loaded 前 mpv 会静默丢弃 seek：暂存，待 duration/position 事件到达后补发
+        this.pendingSeekMs = msec;
+        Logger.e('tips', `MpvVideoPlayer seek deferred (media not ready): ${msec}ms`);
         return;
       }
       try {
@@ -173,8 +196,22 @@ export struct MpvVideoPlayer {
       if (this.destroyed) {
         return;
       }
+      // 首个 position 事件意味着 file-loaded 已完成：补发暂存的续播 seek
+      if (!this.mediaReady) {
+        this.applyPendingSeek();
+      }
       const durationMs = Math.round(this.mpvPlayer.state.duration * 1000);
       this.playerManager?.notifyTime(durationMs, Math.round(position * 1000));
+    });
+
+    // 媒体加载完成（duration 已知，file-loaded 已完成）：此时 seek 才会被 mpv 执行
+    this.mpvPlayer.stream.duration.listen((duration: number) => {
+      if (this.destroyed) {
+        return;
+      }
+      if (duration > 0 && !this.mediaReady) {
+        this.applyPendingSeek();
+      }
     });
 
     // 缓冲开始/结束
@@ -204,6 +241,22 @@ export struct MpvVideoPlayer {
         this.playerManager?.onVideoSizeChanged(params.w, params.h);
       }
     });
+  }
+
+  /** file-loaded 前暂存的 seek 在媒体就绪后补发（duration/position 事件均会触发，幂等） */
+  private applyPendingSeek(): void {
+    this.mediaReady = true;
+    if (this.pendingSeekMs < 0) {
+      return;
+    }
+    const targetSec = this.pendingSeekMs / 1000;
+    this.pendingSeekMs = -1;
+    try {
+      this.mpvPlayer.seek(targetSec);
+      Logger.e('tips', `MpvVideoPlayer deferred seek applied: ${targetSec}s`);
+    } catch (error) {
+      Logger.e('fail', `MpvVideoPlayer.deferredSeek`, error);
+    }
   }
 
   aboutToAppear() {
