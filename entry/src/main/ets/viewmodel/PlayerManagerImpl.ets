@@ -10,6 +10,7 @@ import { appContinueModel } from './AppContinueModel';
 import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
 import { AnimeState } from '../entryability/AnimeState';
 import { appSettings } from '../entryability/Settings';
+import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
 
 /**
  * 播放器管理（总）
@@ -76,9 +77,21 @@ export default class PlayerManagerImpl implements IPlayerManager {
   init(player: IPlayer) {
     this.player = player
     Logger.e('tips', 'init url=' + this.url)
-    if (this.url && this.status == PlayerStatus.IDLE && !this.isInitializing) {
+    // 自动续播判定取切换前的状态：后端切换场景旧状态非 IDLE，不在此提前拉流，
+    // 避免与随后的 setPlayerUrl 竞态重复设置数据源
+    const resumeLoad: boolean = this.url != '' && this.status == PlayerStatus.IDLE && !this.isInitializing
+    // 后端切换：新实例是全新状态，旧后端残留的 PLAY 等状态作废，通知式置 IDLE——
+    // 控制层立即进入加载态，且 setPlayerUrl 不再凭残留状态对新实例误调 stop/reset
+    if (!resumeLoad && this.status != PlayerStatus.IDLE) {
+      this.setStatus(PlayerStatus.IDLE)
+    }
+    if (resumeLoad) {
       this.isInitializing = true
-      this.player.setDataSource(this.url)
+      M3u8AdFilter.getPlayableUrl(this.url).then((playableUrl: string) => {
+        this.player.setDataSource(playableUrl)
+        // 此路径不经过 setPlayerUrl：数据源就位后同样在此收口解析态
+        this.notifyParseState(false)
+      })
     }
   }
 
@@ -154,10 +167,14 @@ export default class PlayerManagerImpl implements IPlayerManager {
   //  }
 
   private isInitializing = false
+  /** 加载阶段瞬时失败的自动重试次数（每次加载请求最多自动重试 1 次） */
+  private loadRetryCount: number = 0
 
   async setPlayerUrl(url: string, startPos: number = -1) {
     Logger.e('tips', 'setPlayerUrl status=' + this.status + ' url=' + url + ' startPos=' + startPos)
     this.url = url;
+    // 新一次加载请求：重置自动重试配额
+    this.loadRetryCount = 0
     if (this.player) {
       if (this.isPlaying()) {
         await this.player.stop()
@@ -171,7 +188,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
         // 通知式置位（部分后端 reset 不上报事件），保证控制层加载圈在换集 reset→prepare 期间不中断
         this.setStatus(PlayerStatus.IDLE)
       }
-      await this.player.setDataSource(url)
+      // 状态已置 IDLE，加载圈由播放器状态接管：在此收口解析态，
+      // 覆盖解析结束→播放器接管之间（历史保存/记录查询/stop+reset）全程，避免加载圈空窗
+      this.notifyParseState(false)
+      await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(url))
     }
   }
 
@@ -184,7 +204,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
       this.playAfterInit = true
       if (this.player && !this.isInitializing) {
         this.isInitializing = true
-        await this.player.setDataSource(this.url)
+        await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(this.url))
       }
       return
     }
@@ -201,10 +221,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
         //        // TODO验证是否有问题
         //        await this.player.prepare()
         this.isInitializing = true
+        // 手动重试同样重置自动重试配额
+        this.loadRetryCount = 0
         this.currentTime = 0
         await this.player.reset()
         this.setStatus(PlayerStatus.IDLE)
-        await this.player.setDataSource(this.url)
+        await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(this.url))
       } else {
         // 优先使用未消费的续播位置（currentTime 可能已被加载期间的 position=0 事件覆盖）
         const seekPos = this.pendingSeekPos >= 0 ? this.pendingSeekPos : this.currentTime
@@ -323,6 +345,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
     if (this.status === status) {
       return
     }
+    // 加载阶段（已请求起播但尚未到达 PREPARED）的瞬时失败：多为网络抖动，
+    // 不向控制层广播 ERROR，静默自动重试一次（重试同 URL 通常可恢复）
+    if (status == PlayerStatus.ERROR && this.playAfterInit && this.loadRetryCount < 1 && this.url != '') {
+      this.scheduleLoadRetry()
+      return
+    }
     Logger.e('tips', 'setStatus status=' + status + ' playAfterInit=' + this.playAfterInit)
     this.status = status;
     for (let listener of this.listeners) {
@@ -342,6 +370,33 @@ export default class PlayerManagerImpl implements IPlayerManager {
       this.currentTime = 0
       this.pendingSeekPos = -1
     }
+  }
+
+  /**
+   * 加载阶段瞬时失败的自动重试（由 setStatus 的 ERROR 拦截触发）：
+   * 延迟片刻后静默重走 reset→setDataSource，控制层全程维持加载圈；
+   * 再次失败或重试途中用户退出/停止则正常上抛 ERROR
+   */
+  private scheduleLoadRetry(): void {
+    this.loadRetryCount++
+    Logger.w('tips', 'load error before prepared, auto retry: ' + this.url)
+    // 静默置 IDLE（不通知监听者）：加载圈由状态驱动继续显示
+    this.status = PlayerStatus.IDLE
+    this.isInitializing = true
+    setTimeout(() => {
+      if (this.url == '' || !this.playAfterInit) {
+        return
+      }
+      this.player.reset().then(() => {
+        return M3u8AdFilter.getPlayableUrl(this.url)
+      }).then((playableUrl: string) => {
+        return this.player.setDataSource(playableUrl)
+      }).catch((e: BusinessError) => {
+        Logger.e('fail', 'auto retry load failed', e)
+        this.isInitializing = false
+        this.setStatus(PlayerStatus.ERROR)
+      })
+    }, 1000)
   }
 
   notifyParseState(parsing: boolean) {

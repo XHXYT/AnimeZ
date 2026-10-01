@@ -93,7 +93,7 @@ export struct HomePage {
     .height('100%')
     .hideToolBar(true)
     .backgroundColor($r('app.color.background_color'))
-    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, /*bottom: AnimeState.bottomRectHeight - 20*/})
     .onShown(() => {
       // 无源引导态（EMPTY）不被覆盖，其余情况保持原强制刷新行为
       if (homeViewModel.state !== ViewState.EMPTY) {

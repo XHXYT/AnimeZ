@@ -21,6 +21,7 @@ import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
 import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 import { WebVideoResolver } from '../utils/WebVideoResolver';
+import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
 
 
 /** 续播定位结果：校正后的剧集索引 + 是否保留播放进度 */
@@ -369,8 +370,10 @@ export class VideoDetailViewModel {
     this.historyInfo.videoUrl = episode.videoUrl as string;
 
     if (episode.videoUrl) {
-      // 详情页阶段置过的解析态在此收口，交由播放器状态（IDLE/PREPARED）接管加载圈
-      this.playerManager.notifyParseState(false);
+      // 链接已就绪：立即预热广告过滤（播放列表抓取与后续准备工作重叠）。
+      // 解析态不再在此收口，改由 setPlayerUrl 置 IDLE 后收口，
+      // 避免解析结束→播放器接管之间（历史保存/记录查询期间）加载圈熄灭
+      M3u8AdFilter.prewarm(episode.videoUrl as string);
       await this.saveHistoryInfo(true);
       await this.checkVideoInfo();
       this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);
@@ -384,9 +387,10 @@ export class VideoDetailViewModel {
         console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，url：${url}`)
         // 检查链接是否需要js
         const finalUrl = await this.checkParesVideoLink(url)
-        this.playerManager.notifyParseState(false);
         episode.videoUrl = finalUrl
         this.historyInfo.videoUrl = finalUrl
+        // 解析完成即预热广告过滤：播放列表抓取与历史保存/记录查询重叠
+        M3u8AdFilter.prewarm(finalUrl);
         await this.saveHistoryInfo(true);
         await this.checkVideoInfo();
         this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);

@@ -179,6 +179,16 @@ struct SettingsPage {
         }
       }),
       new CustomItemInfo({
+        id: 'm3u8_ad_filter',
+        title: 'm3u8 广告拦截',
+        subtitle: '播放前自动剔除播放列表中注入的广告分片',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.m3u8_ad_filter,
+        onChange: (value) => {
+          appSettings.m3u8_ad_filter = value as boolean
+        }
+      }),
+      new CustomItemInfo({
         id: 'episodes_order',
         title: '剧集列表排序',
         type: ItemActionType.MENU,

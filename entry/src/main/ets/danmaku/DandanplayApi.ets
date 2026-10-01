@@ -6,8 +6,11 @@ import {
   DandanplayAnime,
   DandanplayComment,
   DandanplayCommentResponse,
+  DandanplayDeleteResponse,
   DandanplayEpisode,
-  DandanplaySearchResponse
+  DandanplaySearchResponse,
+  DandanplaySendBody,
+  DandanplaySendResponse
 } from './DandanplayModels'
 
 /**
@@ -65,6 +68,8 @@ export class DanmakuLoadResult {
   status: DanmakuLoadStatus = DanmakuLoadStatus.FAILED
   comments: DandanplayComment[] = []
   matchedTitle: string = ''
+  /** 匹配到的剧集 ID（发送/删除应用弹幕用，未匹配为 -1） */
+  episodeId: number = -1
 }
 
 /** 标题匹配结果：含失败状态细分，供上层区分提示 */
@@ -126,6 +131,7 @@ export class DandanplayApi {
       }
       DandanplayApi.matchCache.set(cacheKey, entry)
     }
+    result.episodeId = episodeId
 
     const cached = DandanplayApi.commentCache.get(episodeId)
     if (cached !== undefined && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
@@ -194,7 +200,32 @@ export class DandanplayApi {
       }
       const animes = resp.result !== null && resp.result !== undefined
         ? resp.result.animes : resp.animes
-      const list = animes === null || animes === undefined ? [] : animes
+      const raw = animes === null || animes === undefined ? [] : animes
+      // 归一化：部分数据源可能缺失 episodes 等字段，直接访问会导致 UI 崩溃
+      const list: DandanplayAnime[] = []
+      for (const anime of raw) {
+        if (anime === null || anime === undefined) {
+          continue
+        }
+        const rawEpisodes = anime.episodes !== undefined && anime.episodes !== null ? anime.episodes : []
+        const episodes: DandanplayEpisode[] = []
+        for (const ep of rawEpisodes) {
+          if (ep === null || ep === undefined) {
+            continue
+          }
+          episodes.push({
+            episodeId: ep.episodeId !== undefined && ep.episodeId !== null ? ep.episodeId : -1,
+            episodeTitle: ep.episodeTitle !== undefined && ep.episodeTitle !== null ? ep.episodeTitle : ''
+          })
+        }
+        const normalized: DandanplayAnime = {
+          animeId: anime.animeId,
+          animeTitle: anime.animeTitle !== undefined && anime.animeTitle !== null ? anime.animeTitle : '',
+          type: anime.type !== undefined && anime.type !== null ? anime.type : '',
+          episodes: episodes
+        }
+        list.push(normalized)
+      }
       Logger.d('tips', `DandanplayApi 动画搜索成功 keyword="${trimmed}" count=${list.length}`)
       return list
     } catch (e) {
@@ -216,6 +247,76 @@ export class DandanplayApi {
     const entry: CommentCacheEntry = { comments: comments, cachedAt: Date.now() }
     DandanplayApi.commentCache.set(episodeId, entry)
     return comments
+  }
+
+  /** 官方应用凭据是否已配置（发送/删除应用弹幕到弹弹play 必需，中转接口不支持写操作） */
+  static isAppCredentialConfigured(): boolean {
+    return DandanplayApi.appId.length > 0 && DandanplayApi.appSecret.length > 0
+  }
+
+  /**
+   * 发送应用弹幕（POST /api/v2/comment/{episodeId}/app，需官方应用凭据）
+   * 弹幕存入本应用私有弹幕库，后续拉取时会与官方弹幕合并返回
+   * @return 成功返回弹幕 cid，失败返回 -1
+   */
+  static async sendComment(episodeId: number, timeMs: number, mode: number, color: number,
+    comment: string, userName: string): Promise<number> {
+    await DandanplayApi.ensureConfig()
+    if (!DandanplayApi.isAppCredentialConfigured() || episodeId <= 0) {
+      return -1
+    }
+    try {
+      const path = `/api/v2/comment/${episodeId}/app`
+      const url = `${DANDANPLAY_BASE_URL}${path}`
+      const body: DandanplaySendBody = {
+        time: Math.max(0, Math.round(timeMs)),
+        mode: mode,
+        color: color,
+        comment: comment,
+        userName: userName
+      }
+      const text = await HttpUtils.postJson(url, JSON.stringify(body), DandanplayApi.buildHeaders(path))
+      const resp = JSON.parse(text) as DandanplaySendResponse
+      const code = resp.errorCode
+      if ((code !== undefined && code !== 0) || (resp.success !== undefined && !resp.success)) {
+        Logger.e('fail', `DandanplayApi 发送弹幕失败 code=${code} msg=${resp.errorMessage} detail=${resp.errorDetail}`)
+        return -1
+      }
+      const cid = resp.cid !== undefined ? resp.cid : -1
+      Logger.d('tips', `DandanplayApi 发送弹幕成功 episodeId=${episodeId} cid=${cid} time=${timeMs}`)
+      return cid
+    } catch (e) {
+      Logger.e('fail', `DandanplayApi 发送弹幕异常 episodeId=${episodeId}`, e)
+      return -1
+    }
+  }
+
+  /**
+   * 删除本应用发送的弹幕（DELETE /api/v2/comment/app/{episodeId}/{cid}，需官方应用凭据）
+   * 仅能删除本应用发送的弹幕；服务端异步生效，可能有数秒缓存延迟
+   * @return 是否提交成功
+   */
+  static async deleteComment(episodeId: number, cid: number): Promise<boolean> {
+    if (!DandanplayApi.isAppCredentialConfigured() || episodeId <= 0 || cid <= 0) {
+      return false
+    }
+    try {
+      const path = `/api/v2/comment/app/${episodeId}/${cid}`
+      const url = `${DANDANPLAY_BASE_URL}${path}`
+      const text = await HttpUtils.deleteRequest(url, DandanplayApi.buildHeaders(path))
+      const resp = JSON.parse(text) as DandanplayDeleteResponse
+      const code = resp.errorCode
+      if ((code !== undefined && code !== 0) || (resp.success !== undefined && !resp.success)) {
+        // errorCode=7: 弹幕不存在或非本应用发送
+        Logger.e('fail', `DandanplayApi 删除弹幕失败 code=${code} msg=${resp.errorMessage} detail=${resp.errorDetail}`)
+        return false
+      }
+      Logger.d('tips', `DandanplayApi 删除弹幕成功 episodeId=${episodeId} cid=${cid}`)
+      return true
+    } catch (e) {
+      Logger.e('fail', `DandanplayApi 删除弹幕异常 episodeId=${episodeId} cid=${cid}`, e)
+      return false
+    }
   }
 
   /**

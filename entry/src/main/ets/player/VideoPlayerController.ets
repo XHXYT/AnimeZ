@@ -20,7 +20,7 @@ import { PiPManager } from './PiPManager';
 import { AVCastPicker, AVCastPickerState } from '@kit.AVSessionKit';
 import { common } from '@kit.AbilityKit';
 import { DanmakuLayer } from '../danmaku/DanmakuLayer';
-import { DanmakuController } from '../danmaku/DanmakuController';
+import { DanmakuController, DanmakuRemoveOutcome, DanmakuSendOutcome, SentDanmakuRecord } from '../danmaku/DanmakuController';
 import { DanmakuLoadResult, DanmakuLoadStatus, DandanplayApi } from '../danmaku/DandanplayApi';
 import { DandanplayAnime, DandanplayEpisode } from '../danmaku/DandanplayModels';
 import { MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
@@ -30,6 +30,9 @@ interface KeyValue {
   name: string,
   value: number
 }
+
+/** 弹幕删除列表折叠时预览条数 */
+const DANMAKU_DELETE_PREVIEW_COUNT = 3
 
 /** 播放设置面板的播放器切换选项（与 SettingsPage 默认播放器保持一致） */
 class PlayerOption {
@@ -159,6 +162,12 @@ export struct VideoPlayerController {
   @Local danmakuSwitchSelectedAnime: DandanplayAnime | null = null
   /** @description 切换弹幕搜索/加载中 */
   @Local danmakuSwitchSearching: boolean = false
+  /** @description 发送弹幕输入内容 */
+  @Local danmakuInput: string = ''
+  /** @description 删除弹幕候选列表（屏幕在显弹幕快照） */
+  @Local danmakuDeleteList: SentDanmakuRecord[] = []
+  /** 删除列表是否展开（折叠时仅预览最近几条，避免挤占下方弹幕设置） */
+  @Local danmakuDeleteExpanded: boolean = false
 
   /** @description 拖动轴向：0未判定 1纵向(音量/亮度) 2横向(进度) */
   private panAxis: number = 0
@@ -1110,6 +1119,61 @@ export struct VideoPlayerController {
     }
   }
 
+  /** 打开弹幕设置面板时刷新本会话已发送弹幕列表（仅自己发送的可删除） */
+  private refreshDanmakuDeleteList(): void {
+    this.danmakuDeleteList = this.danmakuCtrl.listSentDanmakus()
+  }
+
+  /** 删除列表展示数据：折叠时仅预览最近几条 */
+  private danmakuDeleteDisplayList(): SentDanmakuRecord[] {
+    if (this.danmakuDeleteExpanded || this.danmakuDeleteList.length <= DANMAKU_DELETE_PREVIEW_COUNT) {
+      return this.danmakuDeleteList
+    }
+    return this.danmakuDeleteList.slice(0, DANMAKU_DELETE_PREVIEW_COUNT)
+  }
+
+  /** 发送弹幕（弹幕设置面板输入框），配置官方凭据时同步弹弹play */
+  private async sendDanmakuFromPanel(): Promise<void> {
+    const text = this.danmakuInput.trim()
+    if (text.length === 0) {
+      ToastUtil.showToast({ message: '弹幕内容不能为空' })
+      return
+    }
+    if (!appSettings.danmaku_enabled || !this.danmakuLoaded) {
+      ToastUtil.showToast({ message: '弹幕未开启或未加载' })
+      return
+    }
+    const outcome = await this.danmakuCtrl.sendDanmaku(text)
+    if (outcome === DanmakuSendOutcome.FAILED) {
+      ToastUtil.showToast({ message: '弹幕发送失败，请稍后重试' })
+    } else {
+      this.danmakuInput = ''
+      this.danmakuDeleteList = this.danmakuCtrl.listSentDanmakus()
+      if (outcome === DanmakuSendOutcome.SERVER) {
+        ToastUtil.showToast({ message: '弹幕已发送' })
+      } else {
+        ToastUtil.showToast({ message: '弹幕已发送，仅本机可见' })
+      }
+    }
+  }
+
+  /** 删除一条自己发送的弹幕：已同步服务端的从弹弹play 弹幕库删除，其余仅本机移除 */
+  private deleteDanmakuEntry(record: SentDanmakuRecord): void {
+    const outcome = this.danmakuCtrl.removeSentDanmaku(record)
+    const next: SentDanmakuRecord[] = []
+    for (const e of this.danmakuDeleteList) {
+      if (e !== record) {
+        next.push(e)
+      }
+    }
+    this.danmakuDeleteList = next
+    if (outcome === DanmakuRemoveOutcome.SERVER_DELETED) {
+      ToastUtil.showToast({ message: '已从弹幕库删除该弹幕' })
+    } else {
+      ToastUtil.showToast({ message: '已删除该弹幕（仅本机）' })
+    }
+  }
+
   /** 打开切换弹幕对话框（预填当前番剧名并自动搜索） */
   private openDanmakuSwitchDialog(): void {
     this.danmakuSwitchKeyword = AnimeState.playingTitle
@@ -1428,98 +1492,100 @@ export struct VideoPlayerController {
         })
       }
 
-      // 下控制栏区域
-      Row() {
-        Row({ space: 12 }) {
-          // 上一集（第一集时隐藏）
-          if (this.episodeIndex > 0) {
-            Image($r("app.media.ic_episode_prev"))
-              .width(22)
-              .height(22)
-              .fillColor(Color.White)
-              .objectFit(ImageFit.Contain)
-              .onClick(() => {
-                this.selectEpisodeByIndex(this.episodeIndex - 1)
-              })
+      // 下控制栏区域：全屏为 B站样式（进度条一行+控件行），竖屏保持旧版单行
+      Column() {
+        // 进度条行（仅全屏）
+        if (this.isFullScreen) {
+          Row() {
+            this.ProgressTrio()
           }
-          Image(this.isPlayingNow() ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
-            .objectFit(ImageFit.Contain)
-            .onClick(() => {
-              if (this.isCasting) {
-                if (this.isCastPlaying) {
-                  this.castManager.pause()
-                } else {
-                  this.castManager.play()
-                }
-                return
-              }
-              if (this.playerStatus == PlayerStatus.PLAY) {
-                this.playerManager.pause()
-              } else {
-                this.playerManager.start()
-              }
-            })
-          // 下一集（最后一集时隐藏）
-          if (this.episodeIndex < this.episodeList.length - 1) {
-            Image($r("app.media.ic_episode_next"))
-              .width(22)
-              .height(22)
-              .fillColor(Color.White)
-              .objectFit(ImageFit.Contain)
-              .onClick(() => {
-                this.selectEpisodeByIndex(this.episodeIndex + 1)
-              })
-          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
-        .margin({ left: this.isFullScreen ? 16 : 12 })
-        .alignItems(VerticalAlign.Center)
 
-        Text(this.currentTime).fontSize(12).margin({ left: 12, right: 6 }).fontColor(Color.White)
-        Slider({
-          value: this.progress,
-          min: 0,
-          max: 100,
-          step: 1,
-          style: SliderStyle.OutSet
-        })
-          .layoutWeight(1)
-          .blockColor($r('app.color.primary_color_accent'))
-          .trackColor(Color.White)
-          .trackThickness(2)
-          .selectedColor($r('app.color.primary_color'))
-          .enabled(this.slideEnable)
-          .onChange((value: number, mode: SliderChangeMode) => {
-            Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value)
-            if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
-              this.progress = value
-              const duration = this.effectiveDuration()
-              const seekValue = value / 100 * duration;
-              this.setProgress(duration, seekValue)
-              if (this.isCasting) {
-                this.castLastPos = seekValue
-                this.castManager.seek(seekValue)
-              } else {
-                this.playerManager.seekTo(seekValue);
-                this.danmakuCtrl.onSeek(seekValue, this.isPlayingNow())
-              }
+        // 控件行
+        Row() {
+          Row({ space: 12 }) {
+            // 上一集（第一集时隐藏）
+            if (this.episodeIndex > 0) {
+              Image($r("app.media.ic_episode_prev"))
+                .width(22)
+                .height(22)
+                .fillColor(Color.White)
+                .objectFit(ImageFit.Contain)
+                .onClick(() => {
+                  this.selectEpisodeByIndex(this.episodeIndex - 1)
+                })
             }
-          })
-          .onAreaChange((_oldArea: Area, newArea: Area) => {
-            const w = Number(newArea.width);
-            if (w > 0) {
-              this.sliderAreaWidth = w;
+            Image(this.isPlayingNow() ? $r("app.media.ic_pause") : $r("app.media.ic_play"))
+              .width(24)
+              .height(24)
+              .fillColor(Color.White)
+              .objectFit(ImageFit.Contain)
+              .onClick(() => {
+                if (this.isCasting) {
+                  if (this.isCastPlaying) {
+                    this.castManager.pause()
+                  } else {
+                    this.castManager.play()
+                  }
+                  return
+                }
+                if (this.playerStatus == PlayerStatus.PLAY) {
+                  this.playerManager.pause()
+                } else {
+                  this.playerManager.start()
+                }
+              })
+            // 下一集（最后一集时隐藏）
+            if (this.episodeIndex < this.episodeList.length - 1) {
+              Image($r("app.media.ic_episode_next"))
+                .width(22)
+                .height(22)
+                .fillColor(Color.White)
+                .objectFit(ImageFit.Contain)
+                .onClick(() => {
+                  this.selectEpisodeByIndex(this.episodeIndex + 1)
+                })
             }
-          })
-          .onClick((event: ClickEvent) => {
-            // 兜底：部分设备点击轨道不触发 onChange 的 Click 模式，按点击位置直接跳转
-            this.seekBySliderTap(event.x)
-          })
-        Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
+          }
+          .margin({ left: this.isFullScreen ? 16 : 12, right: this.isFullScreen ? 12 : 0 })
+          .alignItems(VerticalAlign.Center)
 
-        Text(AnimeState.widthBp <= 2 && !this.isFullScreen ? '弹' : '弹幕')
+          if (!this.isFullScreen) {
+            // 竖屏：进度条与旧版一致放回控件行
+            this.ProgressTrio()
+          } else if (appSettings.danmaku_enabled) {
+            // 全屏：弹幕发送输入框占据原进度条位置（B站样式）
+            TextInput({ text: this.danmakuInput, placeholder: '发个弹幕见证当下' })
+              .type(InputType.Normal)
+              .layoutWeight(1)
+              .height(34)
+              .fontSize(14)
+              .fontColor(Color.White)
+              .placeholderColor('#99ffffff')
+              .backgroundColor('#33ffffff')
+              .borderRadius(17)
+              .padding({ left: 12, right: 12 })
+              .onChange((value: string) => {
+                this.danmakuInput = value
+              })
+              .onSubmit(() => {
+                this.sendDanmakuFromPanel()
+              })
+            Text('发送')
+              .fontSize(12)
+              .fontColor(Color.White)
+              .backgroundColor($r('app.color.primary_color'))
+              .borderRadius(15)
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .margin({ left: 12, right: 12 })
+              .onClick(() => {
+                this.sendDanmakuFromPanel()
+              })
+          }
+
+          Text(AnimeState.widthBp <= 2 && !this.isFullScreen ? '弹' : '弹幕')
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .borderWidth(1)
           .borderColor(appSettings.danmaku_enabled ? $r('app.color.primary_color_accent') : Color.White)
@@ -1544,17 +1610,23 @@ export struct VideoPlayerController {
             })
         }
 
-        Text(`${this.currentSpeed}X`)
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .borderWidth(1)
-          .borderColor(Color.White)
-          .borderRadius(4)
-          .margin({ right: 12 })
-          .fontSize(12)
-          .fontColor(Color.White)
-          .onClick(() => {
-            this.showRightPanel(PanelType.SPEED)
-          })
+        // 弹幕输入框未显示时（竖屏/未开启弹幕），把倍速与全屏按钮推到右侧
+        Blank()
+
+        // 速率切换：竖屏（非全屏小屏）不显示
+        if (this.isFullScreen || AnimeState.widthBp > 2) {
+          Text(`${this.currentSpeed}X`)
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .borderWidth(1)
+            .borderColor(Color.White)
+            .borderRadius(4)
+            .margin({ right: 12 })
+            .fontSize(12)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.showRightPanel(PanelType.SPEED)
+            })
+        }
 
         if (this.isFullScreen) {
           Text('选集')
@@ -1585,6 +1657,9 @@ export struct VideoPlayerController {
               }
             })
         }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
       .padding({ top: this.isFullScreen ? 10 : 4, bottom: this.isFullScreen ? 10 : 4 })
       .width('100%')
@@ -1612,6 +1687,51 @@ export struct VideoPlayerController {
       }
     })
 
+  }
+
+  /** 进度条三元组：当前时间 + 进度条 + 总时长（全屏进度行/竖屏控件行共用） */
+  @Builder ProgressTrio() {
+    Text(this.currentTime).fontSize(12).margin({ left: 12, right: 6 }).fontColor(Color.White)
+    Slider({
+      value: this.progress,
+      min: 0,
+      max: 100,
+      step: 1,
+      style: SliderStyle.OutSet
+    })
+      .layoutWeight(1)
+      .blockColor($r('app.color.primary_color_accent'))
+      .trackColor(Color.White)
+      .trackThickness(2)
+      .selectedColor($r('app.color.primary_color'))
+      .enabled(this.slideEnable)
+      .onChange((value: number, mode: SliderChangeMode) => {
+        Logger.e('tips', 'Slider onChange mode=' + mode + ' value=' + value)
+        if (mode == SliderChangeMode.End || mode == SliderChangeMode.Click) {
+          this.progress = value
+          const duration = this.effectiveDuration()
+          const seekValue = value / 100 * duration;
+          this.setProgress(duration, seekValue)
+          if (this.isCasting) {
+            this.castLastPos = seekValue
+            this.castManager.seek(seekValue)
+          } else {
+            this.playerManager.seekTo(seekValue);
+            this.danmakuCtrl.onSeek(seekValue, this.isPlayingNow())
+          }
+        }
+      })
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        const w = Number(newArea.width);
+        if (w > 0) {
+          this.sliderAreaWidth = w;
+        }
+      })
+      .onClick((event: ClickEvent) => {
+        // 兜底：部分设备点击轨道不触发 onChange 的 Click 模式，按点击位置直接跳转
+        this.seekBySliderTap(event.x)
+      })
+    Text(this.totalTime).fontSize(12).margin({ left: 6, right: 12 }).fontColor(Color.White)
   }
 
   @Builder RightPanel() {
@@ -1798,9 +1918,6 @@ export struct VideoPlayerController {
               .borderRadius(4)
               .margin({ bottom: 8 })
               .width('33%')
-                //              .constraintSize({
-                //                minWidth: '33%'
-                //              })
               .maxLines(1)
               .onClick(() => {
                 // 同步持久化到全局设置，下次进入播放页沿用
@@ -1893,7 +2010,7 @@ export struct VideoPlayerController {
     .backgroundColor('#80000000')
   }
 
-  /** 弹幕设置面板：样式（不透明度/字号/速度/区域）+ 屏蔽设置（类型/重复/屏蔽词） */
+  /** 弹幕设置面板：发送/删除 + 样式（不透明度/字号/速度/区域）+ 屏蔽设置（类型/重复/屏蔽词）+ 切换弹幕 */
   @Builder DanmakuSettingsPanel() {
     Scroll() {
       Column({ space: this.isFullScreen ? 16 : 8 }) {
@@ -1901,6 +2018,60 @@ export struct VideoPlayerController {
           .alignSelf(ItemAlign.Start)
           .fontSize(this.isFullScreen ? 16 : 13)
           .fontColor(Color.White)
+
+        Column() {
+          Row() {
+            Text(`我发送的弹幕 (${this.danmakuDeleteList.length})`)
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Blank()
+            if (this.danmakuDeleteList.length > DANMAKU_DELETE_PREVIEW_COUNT) {
+              Text(this.danmakuDeleteExpanded ? '收起' : `展开 ${this.danmakuDeleteList.length - DANMAKU_DELETE_PREVIEW_COUNT} 条`)
+                .fontSize(this.isFullScreen ? 13 : 11)
+                .fontColor($r('app.color.primary_color_accent'))
+                .padding({ left: 8, top: 4, bottom: 4 })
+                .onClick(() => {
+                  this.danmakuDeleteExpanded = !this.danmakuDeleteExpanded
+                })
+            }
+          }
+          .width('100%')
+
+          if (this.danmakuDeleteList.length === 0) {
+            Text('还没有发送过弹幕，可在播放器底部输入框发送')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 4 })
+              .width('100%')
+          } else {
+            ForEach(this.danmakuDeleteDisplayList(), (record: SentDanmakuRecord) => {
+              Row({ space: 8 }) {
+                Text(record.text)
+                  .fontSize(this.isFullScreen ? 13 : 11)
+                  .fontColor(Color.White)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                Text(VideoTimeUtils.stringForTime(record.timeMs))
+                  .fontSize(this.isFullScreen ? 12 : 10)
+                  .fontColor('#99ffffff')
+                Text('删除')
+                  .fontSize(this.isFullScreen ? 13 : 11)
+                  .fontColor($r('app.color.primary_color_accent'))
+                  .padding({ left: 8, top: 4, bottom: 4 })
+                  .onClick(() => {
+                    this.deleteDanmakuEntry(record)
+                  })
+              }
+              .width('100%')
+              .padding(6)
+              .borderRadius(6)
+              .backgroundColor('#1affffff')
+            }, (record: SentDanmakuRecord, index: number) => `del-${index}-${record.timeMs}-${record.text.length}-${record.cid}`)
+          }
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
 
         Row() {
           Text('不透明度')
@@ -2200,7 +2371,7 @@ export struct VideoPlayerController {
 
         if (this.danmakuSwitchSearching) {
           LoadingProgress()
-            .size(28)
+            .size({ width: 28, height: 28 })
             .color(Color.White)
             .margin({ top: 12 })
         } else if (this.danmakuSwitchAnimes.length === 0) {
@@ -2266,7 +2437,7 @@ export struct VideoPlayerController {
         .edgeEffect(EdgeEffect.Spring)
         if (this.danmakuSwitchSearching) {
           LoadingProgress()
-            .size(28)
+            .size({ width: 28, height: 28 })
             .color(Color.White)
         }
       }
@@ -2465,6 +2636,9 @@ export struct VideoPlayerController {
 
   private showRightPanel(type: number) {
     this.rightPanelType = type
+    if (type == PanelType.DANMAKU) {
+      this.refreshDanmakuDeleteList()
+    }
     this.rightPanelScale = 0
     this.showPanel = true
     this.showController = false

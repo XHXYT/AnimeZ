@@ -34,6 +34,38 @@ const COMMON_DANMAKU_DURATION: number = 3800
 /** 库计算时长基数的参考播放器宽度（px） */
 const BILI_PLAYER_WIDTH: number = 682
 
+/** 弹幕发送结果 */
+export enum DanmakuSendOutcome {
+  /** 已上屏，仅本机可见（未配置凭据或服务端发送失败） */
+  LOCAL = 0,
+  /** 已上屏并同步到弹弹play 开放弹幕网络 */
+  SERVER = 1,
+  /** 发送失败（未上屏） */
+  FAILED = 2
+}
+
+/** 弹幕删除结果 */
+export enum DanmakuRemoveOutcome {
+  /** 仅本地移除（未同步服务端） */
+  LOCAL_HIDE = 0,
+  /** 已从弹弹play 弹幕库删除（自己发送的弹幕，服务端异步生效） */
+  SERVER_DELETED = 1
+}
+
+/** 本会话发送的弹幕记录（供删除列表展示与删除） */
+export class SentDanmakuRecord {
+  timeMs: number = 0
+  text: string = ''
+  /** 服务端 cid（-1 表示仅本机） */
+  cid: number = -1
+
+  constructor(timeMs: number, text: string, cid: number) {
+    this.timeMs = timeMs
+    this.text = text
+    this.cid = cid
+  }
+}
+
 /**
  * 弹幕控制中枢：管理 DanmakuViewV2.Model 生命周期、弹幕数据加载与播放器状态同步
  */
@@ -74,6 +106,10 @@ export class DanmakuController {
   private progressCount: number = 0
   /** 诊断：已显示弹幕计数 */
   private shownCount: number = 0
+  /** 当前弹幕对应的弹弹play 剧集 ID（发送/删除应用弹幕用，未加载为 -1） */
+  private currentEpisodeId: number = -1
+  /** 本会话发送的弹幕记录（删除列表数据源） */
+  private sentRecords: SentDanmakuRecord[] = []
 
   constructor() {
     this.model.setMode(RenderMode.XCOMPONENT_TEXTURE)
@@ -108,6 +144,8 @@ export class DanmakuController {
     if (result.status === DanmakuLoadStatus.LOADED && result.comments.length > 0) {
       this.comments = result.comments
       this.loadedCount = result.comments.length
+      this.currentEpisodeId = result.episodeId
+      this.sentRecords = []
       // context 延迟到视图挂载后创建：DanmakuViewV2.aboutToAppear 才注册 uiContext，
       // 提前创建会导致 OhosDisplayer 密度初始化失败（density=0），字号/测量全部失效
       this.context = null
@@ -115,6 +153,8 @@ export class DanmakuController {
     } else {
       this.comments = []
       this.loadedCount = 0
+      this.currentEpisodeId = -1
+      this.sentRecords = []
       this.context = null
     }
     return result
@@ -128,6 +168,7 @@ export class DanmakuController {
     this.playing = false
     const result = new DanmakuLoadResult()
     result.matchedTitle = matchedTitle
+    result.episodeId = episodeId
     try {
       const comments = await DandanplayApi.loadCommentsByEpisodeId(episodeId)
       result.comments = comments
@@ -140,6 +181,8 @@ export class DanmakuController {
         result.status = DanmakuLoadStatus.LOADED
         this.comments = comments
         this.loadedCount = comments.length
+        this.currentEpisodeId = episodeId
+        this.sentRecords = []
         // context 延迟到视图挂载后创建：DanmakuViewV2.aboutToAppear 才注册 uiContext，
         // 提前创建会导致 OhosDisplayer 密度初始化失败（density=0），字号/测量全部失效
         this.context = null
@@ -148,6 +191,8 @@ export class DanmakuController {
         result.status = DanmakuLoadStatus.EMPTY
         this.comments = []
         this.loadedCount = 0
+        this.currentEpisodeId = -1
+        this.sentRecords = []
         this.context = null
       }
     } catch (e) {
@@ -156,10 +201,129 @@ export class DanmakuController {
       if (seq === this.loadSeq) {
         this.comments = []
         this.loadedCount = 0
+        this.currentEpisodeId = -1
+        this.sentRecords = []
         this.context = null
       }
     }
     return result
+  }
+
+  /**
+   * 发送一条弹幕（当前弹幕时钟位置，右到左滚动，白色），即时上屏。
+   * 写入源数据后 seek 回该时间仍会显示。
+   * 配置了官方应用凭据且当前剧集已匹配时，同时 POST 到弹弹play 开放弹幕网络
+   * （存入本应用私有弹幕库，拉取时与官方弹幕合并返回）；否则仅本机可见，下一次 load 后丢弃。
+   */
+  async sendDanmaku(text: string): Promise<DanmakuSendOutcome> {
+    const trimmed = text.trim()
+    const context = this.context
+    if (trimmed.length === 0 || context === null || !this.prepared) {
+      return DanmakuSendOutcome.FAILED
+    }
+    const posMs = Math.max(0, Math.round(this.model.getCurrentTime()))
+    const nowSec = Math.floor(Date.now() / 1000)
+    const comment: DandanplayComment = {
+      cid: -1,
+      p: `${(posMs / 1000).toFixed(3)},1,16777215,25,${nowSec},0,0,${nowSec}`,
+      m: trimmed
+    }
+    this.comments.push(comment)
+    this.loadedCount = this.comments.length
+    // 即时上屏：与 parser 相同的完整创建路径（绑定工厂共享 Duration，速度因子生效），
+    // flags 与 timer 由 DrawHandler.addDanmaku 自动绑定
+    const item = context.mDanmakuFactory.createDanmakuByContext(BaseDanmaku.TYPE_SCROLL_RL, context)
+    if (item === null) {
+      return DanmakuSendOutcome.FAILED
+    }
+    item.setTime(posMs)
+    item.text = trimmed
+    item.textColor = 0xFFFFFF
+    item.textSize = BASE_DANMAKU_TEXT_SIZE * context.mDisplayer.getScaledDensity()
+    item.setVisibility(true)
+    this.model.addDanmaku(item)
+    const record = new SentDanmakuRecord(posMs, trimmed, -1)
+    this.sentRecords.push(record)
+    // 有官方凭据且当前剧集已匹配时同步到弹弹play（应用私有弹幕库）
+    if (DandanplayApi.isAppCredentialConfigured() && this.currentEpisodeId > 0) {
+      const cid = await DandanplayApi.sendComment(this.currentEpisodeId, posMs, 1, 0xFFFFFF, trimmed, 'AnimeZ')
+      if (cid > 0) {
+        comment.cid = cid
+        record.cid = cid
+        Logger.d('tips', `DanmakuCtrl 弹幕已同步服务端 pos=${posMs} cid=${cid} text="${trimmed}"`)
+        return DanmakuSendOutcome.SERVER
+      }
+      Logger.d('tips', `DanmakuCtrl 服务端发送失败，仅本机可见 pos=${posMs} text="${trimmed}"`)
+    } else {
+      Logger.d('tips', `DanmakuCtrl 本地弹幕已发送 pos=${posMs} text="${trimmed}"`)
+    }
+    return DanmakuSendOutcome.LOCAL
+  }
+
+  /** 本会话发送的弹幕记录（最近在前，最多 50 条，供删除列表） */
+  listSentDanmakus(): SentDanmakuRecord[] {
+    const list: SentDanmakuRecord[] = []
+    for (let i = this.sentRecords.length - 1; i >= 0 && list.length < 50; i--) {
+      list.push(this.sentRecords[i])
+    }
+    return list
+  }
+
+  /**
+   * 删除一条自己发送的弹幕：屏上实例立即隐藏（渲染每帧检查 isShown），
+   * 从源数据与发送记录中移除；已同步服务端的弹幕同时从弹弹play 弹幕库删除（异步生效）。
+   */
+  removeSentDanmaku(record: SentDanmakuRecord): DanmakuRemoveOutcome {
+    // 从发送记录中移除
+    const next: SentDanmakuRecord[] = []
+    for (const r of this.sentRecords) {
+      if (r !== record) {
+        next.push(r)
+      }
+    }
+    this.sentRecords = next
+    // 屏上实例立即隐藏
+    const visible = this.snapshotVisibleDanmakus()
+    for (const item of visible) {
+      if (item.getTime() === record.timeMs && item.text === record.text) {
+        item.setVisibility(false)
+        this.model.invalidateDanmaku(item, false)
+        this.model.forceRender()
+        break
+      }
+    }
+    // 从源数据移除，下次 prepare 起彻底消失
+    for (let i = 0; i < this.comments.length; i++) {
+      const parts = this.comments[i].p.split(',')
+      if (parts.length > 0 && Math.round(parseFloat(parts[0]) * 1000) === record.timeMs
+        && this.comments[i].m === record.text) {
+        this.comments.splice(i, 1)
+        this.loadedCount = this.comments.length
+        break
+      }
+    }
+    // 已同步服务端的弹幕同时从弹弹play 删除（异步生效，失败仅记日志）
+    let outcome = DanmakuRemoveOutcome.LOCAL_HIDE
+    if (record.cid > 0 && this.currentEpisodeId > 0) {
+      outcome = DanmakuRemoveOutcome.SERVER_DELETED
+      const episodeId = this.currentEpisodeId
+      const cid = record.cid
+      DandanplayApi.deleteComment(episodeId, cid).then((ok: boolean) => {
+        if (!ok) {
+          Logger.e('fail', `DanmakuCtrl 服务端删除弹幕失败 episodeId=${episodeId} cid=${cid}`)
+        }
+      })
+    }
+    Logger.d('tips', `DanmakuCtrl 弹幕已删除 time=${record.timeMs} server=${outcome === DanmakuRemoveOutcome.SERVER_DELETED} text="${record.text}"`)
+    return outcome
+  }
+
+  /** 当前屏幕在显弹幕快照（未就绪返回空） */
+  snapshotVisibleDanmakus(): BaseDanmaku[] {
+    if (!this.prepared) {
+      return []
+    }
+    return this.model.getCurrentVisibleDanmakus().getCollection()
   }
 
   /** 播放器开始/恢复播放 */

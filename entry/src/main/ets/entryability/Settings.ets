@@ -173,6 +173,10 @@ export class AppConfigs {
    * 周表数据源 key（空=未选择，周表页显示空态引导）
    */
   @Trace schedule_source_key: string = ''
+  /**
+   * m3u8 广告拦截：播放前剔除播放列表中注入的广告分片（如 adjump 贴片广告）
+   */
+  @Trace m3u8_ad_filter: boolean = false
 
   /** 加载/重置期间置为 true，@Monitor 触发的 save() 直接跳过，避免逐字段赋值引发多次落盘 */
   private isLoading: boolean = false
@@ -248,6 +252,7 @@ export class AppConfigs {
     this.download_location = (json["download_location"] as string) ?? this.download_location
     this.download_separate_route = (json["download_separate_route"] as boolean) ?? this.download_separate_route
     this.schedule_source_key = (json["schedule_source_key"] as string) ?? this.schedule_source_key
+    this.m3u8_ad_filter = (json["m3u8_ad_filter"] as boolean) ?? this.m3u8_ad_filter
   }
 
   /**
@@ -301,7 +306,8 @@ export class AppConfigs {
     'danmaku_block_words',
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
-    'search_result_style', 'download_location', 'download_separate_route', 'schedule_source_key')
+    'search_result_style', 'download_location', 'download_separate_route', 'schedule_source_key',
+    'm3u8_ad_filter')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -347,7 +353,8 @@ export class AppConfigs {
         "search_result_style": this.search_result_style,
         "download_location": this.download_location,
         "download_separate_route": this.download_separate_route,
-        "schedule_source_key": this.schedule_source_key
+        "schedule_source_key": this.schedule_source_key,
+        "m3u8_ad_filter": this.m3u8_ad_filter
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
     } catch (e) {
@@ -400,6 +407,7 @@ export class AppConfigs {
     this.download_location = 'sandbox'
     this.download_separate_route = false
     this.schedule_source_key = ''
+    this.m3u8_ad_filter = true
     this.isLoading = false
     await this.save()
   }

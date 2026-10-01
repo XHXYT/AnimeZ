@@ -66,3 +66,35 @@ export interface DandanplayEpisodeMatch {
   episodeId: number
   matchedTitle: string
 }
+
+/** 应用弹幕发送请求体（POST /api/v2/comment/{episodeId}/app） */
+export interface DandanplaySendBody {
+  /** 出现时间（毫秒） */
+  time: number
+  /** 弹幕模式：1=滚动 4=底部 5=顶部 */
+  mode: number
+  /** 颜色（十进制 RGB） */
+  color: number
+  /** 弹幕文本 */
+  comment: string
+  /** 发送者用户名（应用自定义标识） */
+  userName: string
+}
+
+/** 应用弹幕发送响应 */
+export interface DandanplaySendResponse {
+  errorCode: number
+  success: boolean
+  errorMessage: string
+  errorDetail: string
+  /** 发送成功的弹幕编号（删除时使用） */
+  cid: number
+}
+
+/** 弹幕删除响应（DELETE /api/v2/comment/app/{episodeId}/{cid}） */
+export interface DandanplayDeleteResponse {
+  errorCode: number
+  success: boolean
+  errorMessage: string
+  errorDetail: string
+}

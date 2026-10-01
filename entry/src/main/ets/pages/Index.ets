@@ -59,7 +59,7 @@ struct Index {
       Navigation(AnimeState.pageStack) {
         Tabs({
           barPosition: TabBarPosition(AnimeState.widthBp, AnimeState.heightBp),
-          controller: this.controller
+          controller: AnimeState.tabsController
         }) {
           TabContent() {
             HomePage()
@@ -90,7 +90,8 @@ struct Index {
         .onChange((index: number) => {
           AnimeState.currentIndex = index
         })
-        // 周表 Tab 上禁用主 Tab 滑动切换：左右滑动优先切换星期（见 SchedulePage 的 PanGesture）
+        // 仅周表 Tab 禁用主 Tab 滑动切换：左右滑动优先切换星期（见 SchedulePage 的 PanGesture），
+        // 周界后继续外滑由 SchedulePage 程序化 changeIndex 联动切换主 Tab
         .scrollable(AnimeState.currentIndex !== 1)
       }.hideToolBar(true)
       .backgroundColor($r('app.color.background_color_accent'))
@@ -106,8 +107,6 @@ struct Index {
     .height('100%')
   }
 
-  private controller: TabsController = new TabsController()
-
   @Builder TabBarBuilder(index: number, title: string, icon: Resource, iconSelected: Resource) {
     Column({space: 3}) {
       Image(AnimeState.currentIndex === index ? iconSelected : icon)
@@ -122,7 +121,8 @@ struct Index {
         .lineHeight(14)
     }
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(AnimeState.currentIndex === 0 ? $r('app.color.background_color') : $r('app.color.background_color_accent'))
+    .backgroundColor($r('app.color.background_color'))
+    .padding({ top: 8 })
     .height('100%')
     .width('100%')
   }
