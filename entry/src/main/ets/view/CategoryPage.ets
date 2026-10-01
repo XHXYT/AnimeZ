@@ -45,7 +45,7 @@ export struct CategoryPage {
         .width('100%')
         .layoutWeight(1)
     }
-    .padding({top: AnimeState.topRectHeight - 15, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

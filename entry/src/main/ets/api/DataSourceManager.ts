@@ -26,7 +26,7 @@ class DataSourceManager {
   private defaultConfigFileName: string = 'default_sources_config.json';
   private configFileName: string = 'sources_config.json';
   private context: common.UIAbilityContext
-  private searchStrategy: SearchStrategy = SearchStrategy.PRIORITIZED;
+  private searchStrategy: SearchStrategy = SearchStrategy.ALL_SOURCES;
   private currentDataSourceKey: string = '';
 
   async init(context: common.UIAbilityContext) {

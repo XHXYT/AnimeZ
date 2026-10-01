@@ -106,7 +106,7 @@ export class SearchViewModel {
 
   /**
    * 解析当前设置解析搜索范围对应的数据源 key 列表
-   * @returns undefined 表示不限定（全部源/默认策略），空数组以外的数组表示限定范围
+   * @returns undefined 表示不限定，由 DataSourceManager 默认策略并发搜索全部已启用源；非空数组表示限定范围
    */
   public getSearchSourceKeys(): string[] | undefined {
     const scope = appSettings.search_scope

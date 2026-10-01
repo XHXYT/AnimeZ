@@ -43,7 +43,7 @@ struct VideoHistoryPage {
     },
     onSelectChange: (item: VideoHistoryInfo, isSelected) => {
       this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == historyViewModel.historyList.length
+      this.hasSelectAll = this.selectCount == historyViewModel.getFilteredList().length
     }
   }
 
@@ -66,6 +66,10 @@ struct VideoHistoryPage {
       // 标题栏
       TitleBar({
         title: '观看历史',
+        searchPlaceholder: '搜索历史记录',
+        onSearchChange: (value: string) => {
+          historyViewModel.setSearchText(value)
+        },
         buttons: this.editButtons
       })
 
@@ -100,7 +104,7 @@ struct VideoHistoryPage {
             if (this.hasSelectAll) {
               this.selectionManager.clearSelections()
             } else {
-              this.selectionManager.selectItems(historyViewModel.historyList)
+              this.selectionManager.selectItems(historyViewModel.getFilteredList())
             }
           })
 
@@ -156,7 +160,7 @@ struct VideoHistoryPage {
       }
 
     }
-    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -189,7 +193,7 @@ struct VideoHistoryPage {
   @Builder
   HistoryList() {
     List({space: 16}) {
-      ForEach(historyViewModel.historyList, (item: VideoHistoryInfo) => {
+      ForEach(historyViewModel.getFilteredList(), (item: VideoHistoryInfo) => {
         ListItem() {
           HistoryItem({selectionManager: this.selectionManager, item: item})
         }

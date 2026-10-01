@@ -13,6 +13,7 @@ import { _AnimeState } from '../entryability/AnimeState';
 export class HistoryViewModel {
 
   @Trace historyList: VideoHistoryInfo[] = []
+  @Trace searchText: string = ''
 
   private db: VideoHistoryTable | null = null
 
@@ -38,6 +39,27 @@ export class HistoryViewModel {
     if (list) {
       this.historyList = list
     }
+  }
+
+  /**
+   * 设置搜索词（TitleBar 搜索框输入回调）
+   */
+  public setSearchText(text: string) {
+    this.searchText = text
+  }
+
+  /**
+   * 按搜索词过滤历史记录（匹配番剧名/剧集名，忽略大小写）
+   */
+  public getFilteredList(): VideoHistoryInfo[] {
+    const keyword = this.searchText.trim().toLowerCase()
+    if (!keyword) {
+      return this.historyList
+    }
+    return this.historyList.filter((item: VideoHistoryInfo): boolean => {
+      return item.title.toLowerCase().includes(keyword) ||
+        item.episodeName.toLowerCase().includes(keyword)
+    })
   }
 
   /**

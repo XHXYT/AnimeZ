@@ -153,7 +153,7 @@ struct VideoSourceDetail {
       .height('100%')
       .backgroundColor($r('app.color.background_color_accent'))
     }
-    .padding({ top: AnimeState.topRectHeight - 15, bottom: AnimeState.bottomRectHeight - 15 })
+    .padding({ top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 15 })
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

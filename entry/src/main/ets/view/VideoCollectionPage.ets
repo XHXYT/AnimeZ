@@ -39,7 +39,7 @@ struct VideoCollectionPage {
     },
     onSelectChange: (item: VideoCollectionInfo, isSelected) => {
       this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == collectionViewModel.collectionList.length
+      this.hasSelectAll = this.selectCount == collectionViewModel.getFilteredList().length
     }
   }
 
@@ -60,6 +60,10 @@ struct VideoCollectionPage {
       // 标题栏
       TitleBar({
         title: '我的收藏',
+        searchPlaceholder: '搜索我的收藏',
+        onSearchChange: (value: string) => {
+          collectionViewModel.setSearchText(value)
+        },
         buttons: this.editButtons
       })
 
@@ -95,7 +99,7 @@ struct VideoCollectionPage {
             if (this.hasSelectAll) {
               this.selectionManager.clearSelections()
             } else {
-              this.selectionManager.selectItems(collectionViewModel.collectionList)
+              this.selectionManager.selectItems(collectionViewModel.getFilteredList())
             }
           })
 
@@ -140,7 +144,7 @@ struct VideoCollectionPage {
       }
 
     }
-    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -173,7 +177,7 @@ struct VideoCollectionPage {
 
   @Builder CollectionList() {
     List({space: 16}) {
-      ForEach(collectionViewModel.collectionList, (item: VideoCollectionInfo) => {
+      ForEach(collectionViewModel.getFilteredList(), (item: VideoCollectionInfo) => {
         ListItem() {
           CollectionItem({selectionManager: this.selectionManager, item: item})
         }

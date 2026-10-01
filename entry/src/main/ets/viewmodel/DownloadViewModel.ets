@@ -65,6 +65,7 @@ export class DownloadViewModel {
 
   // 番剧分组列表
   @Trace groups: AnimeDownloadGroup[] = []
+  @Trace searchText: string = ''
 
   // 分组选择相关状态
   @Trace selectMode: boolean = false
@@ -120,7 +121,7 @@ export class DownloadViewModel {
     },
     onSelectChange: (item: AnimeDownloadGroup, isSelected) => {
       this.selectCount = this.selectionManager.getSelectionCount()
-      this.hasSelectAll = this.selectCount == this.groups.length
+      this.hasSelectAll = this.selectCount == this.getFilteredGroups().length
     }
   }
 
@@ -144,13 +145,33 @@ export class DownloadViewModel {
   }
 
   /**
+   * 设置搜索词（TitleBar 搜索框输入回调）
+   */
+  public setSearchText(text: string) {
+    this.searchText = text
+  }
+
+  /**
+   * 按搜索词过滤番剧分组（匹配番剧名，忽略大小写）
+   */
+  public getFilteredGroups(): AnimeDownloadGroup[] {
+    const keyword = this.searchText.trim().toLowerCase()
+    if (!keyword) {
+      return this.groups
+    }
+    return this.groups.filter((group: AnimeDownloadGroup): boolean => {
+      return group.title.toLowerCase().includes(keyword)
+    })
+  }
+
+  /**
    * 全选/全不选分组
    */
   public toggleSelectAll() {
     if (this.hasSelectAll) {
       this.selectionManager.clearSelections()
     } else {
-      this.selectionManager.selectItems(this.groups)
+      this.selectionManager.selectItems(this.getFilteredGroups())
     }
   }
 

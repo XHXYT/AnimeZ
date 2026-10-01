@@ -37,6 +37,10 @@ struct DownloadManagerPage {
         // 标题栏
         TitleBar({
           title: '下载管理',
+          searchPlaceholder: '搜索下载的番剧',
+          onSearchChange: (value: string) => {
+            downloadViewModel.setSearchText(value)
+          },
           buttons: this.editButtons
         })
         if (downloadViewModel.state == ViewState.CONTENT) {
@@ -46,7 +50,7 @@ struct DownloadManagerPage {
           }
           // 番剧分组列表
           DownloadGroupList({
-            groups: downloadViewModel.groups,
+            groups: downloadViewModel.getFilteredGroups(),
             selectionManager: downloadViewModel.selectionManager
           })
             .layoutWeight(1)
@@ -65,7 +69,7 @@ struct DownloadManagerPage {
       .width('100%')
       .height('100%')
     }
-    .padding({ top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20 })
+    .padding({ top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20 })
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

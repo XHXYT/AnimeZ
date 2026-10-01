@@ -11,6 +11,7 @@ import { _AnimeState } from '../entryability/AnimeState';
 export class CollectionViewModel {
 
   @Trace collectionList: VideoCollectionInfo[] = []
+  @Trace searchText: string = ''
 
   private db: VideoCollectionTable | null = null
 
@@ -28,6 +29,26 @@ export class CollectionViewModel {
     const list = await this.getDB().queryAll()
     this.collectionList = list
     console.log(`CollectionViewModel 收藏页数据：${JSON.stringify(this.collectionList)}`)
+  }
+
+  /**
+   * 设置搜索词（TitleBar 搜索框输入回调）
+   */
+  public setSearchText(text: string) {
+    this.searchText = text
+  }
+
+  /**
+   * 按搜索词过滤收藏（匹配标题，忽略大小写）
+   */
+  public getFilteredList(): VideoCollectionInfo[] {
+    const keyword = this.searchText.trim().toLowerCase()
+    if (!keyword) {
+      return this.collectionList
+    }
+    return this.collectionList.filter((item: VideoCollectionInfo): boolean => {
+      return item.title.toLowerCase().includes(keyword)
+    })
   }
 
   /**

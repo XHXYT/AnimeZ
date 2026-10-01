@@ -249,6 +249,8 @@ struct SettingsPage {
         value: appSettings.danmaku_enabled,
         onChange: (value) => {
           appSettings.danmaku_enabled = value as boolean
+          // 联动弹幕配置入口可用态：重建列表刷新其置灰状态
+          this.listVersion++
         }
       }),
       new CustomItemInfo({
@@ -256,6 +258,7 @@ struct SettingsPage {
         title: '弹幕配置',
         subtitle: '不透明度、字体大小、滚动速度与显示区域',
         type: ItemActionType.ROUTER,
+        enabled: appSettings.danmaku_enabled,
         onChange: () => {
           AnimeState.pageStack.pushPathByName("DanmakuSettingsPage", '')
         }
@@ -304,7 +307,7 @@ struct SettingsPage {
         .padding(8)
 
     }
-    .padding({top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20})
+    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)

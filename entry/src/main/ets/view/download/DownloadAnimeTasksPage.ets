@@ -152,7 +152,7 @@ struct DownloadAnimeTasksPage {
       .width('100%')
       .height('100%')
     }
-    .padding({ top: AnimeState.topRectHeight - 20, bottom: AnimeState.bottomRectHeight - 20 })
+    .padding({ top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20 })
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
