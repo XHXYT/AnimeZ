@@ -1293,7 +1293,7 @@ export struct VideoPlayerController {
               this.playerManager.exitFullScreen()
               return
             }
-            AnimeState.pageStack.pop(true)
+            AnimeState.popPage(true)
           })
         Text(this.title)
           .fontColor(Color.White)

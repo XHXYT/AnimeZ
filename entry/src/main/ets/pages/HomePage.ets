@@ -70,7 +70,7 @@ export struct HomePage {
       .width('100%')
       .padding({
         left: 16,
-        right: AnimeState.windowMode ? Math.max(16, AnimeState.titleButtonWidth + 12) : 16
+        right: AnimeState.windowMode ? Math.max(16, AnimeState.titleButtonWidth) : 16
       })
       // 视频推荐区
       StateView(

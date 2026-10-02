@@ -188,7 +188,7 @@ export struct VideoList {
         cover: item.imgUrl as string
       }
       console.log('VideoTest 视频列表传递的params：', JSON.stringify(params))
-      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pushPage("VideoDetailPage", params)
       appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }

@@ -723,7 +723,7 @@ export class VideoDetailViewModel {
       await this.playerManager.pause()
       if (pop) {
         ToastUtil.showToast({ message: '已进入小窗播放' })
-        AnimeState.pageStack.pop(true)
+        AnimeState.popPage(true)
       }
     } else if (pop) {
       ToastUtil.showToast({ message: '小窗启动失败' })

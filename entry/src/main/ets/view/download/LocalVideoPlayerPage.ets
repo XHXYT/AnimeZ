@@ -44,7 +44,7 @@ struct LocalVideoPlayerPage {
       this.isFullScreen = isFullScreen
       // TODO 退出全屏时暂时直接退出
       if (wasFullScreen && !isFullScreen) {
-        AnimeState.pageStack.pop(true)
+        AnimeState.popPage(true)
       }
     },
     onVideoSizeChange: (w: number, h: number) => {
@@ -107,7 +107,7 @@ struct LocalVideoPlayerPage {
       if (!episode || !episode.videoUrl) {
         Logger.e('fail', 'LocalVideoPlayerPage invalid episode param: ' + JSON.stringify(value.pathInfo.param))
         ToastUtil.showToast({ message: '视频信息无效，无法播放' })
-        AnimeState.pageStack.pop(true)
+        AnimeState.popPage(true)
         return
       }
       // 本地m3u8：AVPlayer等后端不支持播放本地HLS，单分片未加密时直接播放分片媒体文件

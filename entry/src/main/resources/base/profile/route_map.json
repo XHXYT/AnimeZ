@@ -84,6 +84,11 @@
       "name": "CategoryPage",
       "pageSourceFile": "src/main/ets/view/CategoryPage.ets",
       "buildFunction": "CategoryPageBuilder"
+    },
+    {
+      "name": "ThirdPartyServicesPage",
+      "pageSourceFile": "src/main/ets/view/settings/ThirdPartyServicesPage.ets",
+      "buildFunction": "ThirdPartyServicesPageBuilder"
     }
   ]
 }

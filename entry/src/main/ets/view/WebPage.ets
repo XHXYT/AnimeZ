@@ -135,7 +135,7 @@ struct WebPage {
       try {
         const url: string = ctx?.pathInfo?.param as string
         if (!url) {
-          AnimeState.pageStack.pop(true)
+          AnimeState.popPage(true)
           return
         }
 

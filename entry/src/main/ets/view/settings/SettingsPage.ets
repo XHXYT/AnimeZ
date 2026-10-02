@@ -283,6 +283,15 @@ struct SettingsPage {
         onChange: () => {
           AnimeState.pageStack.pushPathByName("AboutMePage", '')
         }
+      }),
+      new CustomItemInfo({
+        id: 'third_party_services',
+        title: '三方服务',
+        subtitle: '开源三方库列表',
+        type: ItemActionType.ROUTER,
+        onChange: () => {
+          AnimeState.pageStack.pushPathByName("ThirdPartyServicesPage", '')
+        }
       })
     ].filter((item: CustomItemInfo) => {
       // 小窗播放仅支持部分播放器后端：选了不支持的后端时隐藏自动小窗开关

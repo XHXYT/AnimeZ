@@ -210,7 +210,7 @@ struct VideoHistoryPage {
             cover: item.coverUrl as string
           }
           console.log('VideoTest 历史记录页传递的params：', JSON.stringify(params))
-          AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+          AnimeState.pushPage("VideoDetailPage", params)
         })
         .swipeAction({
           end: {

@@ -294,7 +294,7 @@ struct DownloadAnimeTasksPage {
             this.animeTasks.forEach((task: M3U8DownloadTask) => {
               task.delete()
             })
-            AnimeState.pageStack.pop(true)
+            AnimeState.popPage(true)
           }
         }
       }, 'DownloadAnimeTasksPage')
@@ -407,7 +407,7 @@ struct AnimeTaskList {
             }
             // LocalVideoPlayerPage 期望参数为 { episode: EpisodeInfo }，直接传对象会取到 undefined
             let params: Record<string, EpisodeInfo> = { 'episode': episode }
-            AnimeState.pageStack.pushPathByName("LocalVideoPlayerPage", params, true)
+            AnimeState.pushPage("LocalVideoPlayerPage", params, true)
           }
         })
         .gesture(LongPressGesture({ repeat: false })

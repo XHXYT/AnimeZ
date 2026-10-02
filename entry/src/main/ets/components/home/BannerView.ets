@@ -80,7 +80,7 @@ export struct BannerView {
         cover: item.imgUrl as string
       }
       console.log('VideoTest 主页轮播图传递的params：', JSON.stringify(params))
-      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pushPage("VideoDetailPage", params)
     })
   }
 

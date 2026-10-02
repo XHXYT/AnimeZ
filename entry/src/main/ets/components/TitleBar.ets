@@ -114,7 +114,7 @@ export default struct TitleBar {
             .fontSize(24)
             .fontColor([$r('app.color.color_text_major')])
             .onClick(() => {
-              AnimeState.pageStack.pop(true)
+              AnimeState.popPage(true)
             })
         }
         if (this.title !== '' || this.subtitle !== '') {
@@ -204,7 +204,7 @@ export default struct TitleBar {
     .padding({
       left: 16,
       right: this.rightInset >= 0 ? this.rightInset :
-        (AnimeState.windowMode ? Math.max(14, AnimeState.titleButtonWidth + 12) : 14)
+        (AnimeState.windowMode ? Math.max(14, AnimeState.titleButtonWidth - 3) : 14)
     })
   }
 }

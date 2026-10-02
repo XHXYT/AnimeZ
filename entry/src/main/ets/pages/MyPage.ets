@@ -234,7 +234,7 @@ export struct MyPage {
         cover: item.coverUrl as string
       }
       console.log('VideoTest 我的页面历史栏传递的params：', JSON.stringify(params))
-      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pushPage("VideoDetailPage", params)
     })
   }
 

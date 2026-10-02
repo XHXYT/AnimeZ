@@ -195,7 +195,7 @@ struct VideoCollectionPage {
             cover: item.coverUrl as string
           }
           console.log('VideoTest 视频收藏页传递的params：', JSON.stringify(params))
-          AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+          AnimeState.pushPage("VideoDetailPage", params)
         })
         .swipeAction({
           end: {

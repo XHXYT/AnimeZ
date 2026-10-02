@@ -173,7 +173,7 @@ struct VideoSourceDetail {
             value: '确认',
             fontColor: Color.Red,
             action: () => {
-              AnimeState.pageStack.pop()
+              AnimeState.popPage()
             }
           }
         })

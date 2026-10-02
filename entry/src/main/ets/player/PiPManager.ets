@@ -432,7 +432,7 @@ export class _PiPManager {
       isPiPRestore: true,
       pipPosition: nav.position,
     }
-    AnimeState.pageStack.pushPathByName('VideoDetailPage', params)
+    AnimeState.pushPage('VideoDetailPage', params)
   }
 
   /** 小窗当前播放位置（收回播放时续播用） */

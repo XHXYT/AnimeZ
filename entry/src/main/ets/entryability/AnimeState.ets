@@ -23,8 +23,10 @@ export class _AnimeState {
   /** 窗口宽度 -vp */
   @Trace windowWidth: number = 0
 
-  /** 全局路由栈 */
+  /** 全局路由栈（侧边栏内） */
   @Trace pageStack: NavPathStack = new NavPathStack()
+  /** 全屏路由栈（PC 模式下视频详情/本地播放等全屏页面） */
+  @Trace fullScreenStack: NavPathStack = new NavPathStack()
   /** 全局 Tabs 控制器 */
   @Trace tabsController: TabsController = new TabsController()
   /** 当前 Tab 索引 */
@@ -44,6 +46,33 @@ export class _AnimeState {
   @Trace titleButtonCenter: number = 0
   /** 当前生效颜色模式 */
   @Trace currentColorMode: ConfigurationConstant.ColorMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
+
+  /** PC 全屏页面集合（在 windowMode 下推送至 fullScreenStack） */
+  private static readonly FULLSCREEN_PAGES: Set<string> = new Set(['VideoDetailPage', 'LocalVideoPlayerPage'])
+
+  /** 智能推栈：全屏页面走 fullScreenStack，其余走 pageStack */
+  pushPage(name: string, param: Object, isSingle: boolean = false): void {
+    if (this.windowMode && _AnimeState.FULLSCREEN_PAGES.has(name)) {
+      this.fullScreenStack.pushPathByName(name, param, isSingle)
+    } else {
+      this.pageStack.pushPathByName(name, param, isSingle)
+    }
+  }
+
+  /** 智能弹栈：优先弹 fullScreenStack，空则弹 pageStack */
+  popPage(useAnim: boolean = false): void {
+    if (this.fullScreenStack.size() > 0) {
+      this.fullScreenStack.pop(useAnim)
+    } else {
+      this.pageStack.pop(useAnim)
+    }
+  }
+
+  /** 清空所有栈 + 切 Tab */
+  clearAllStacks(): void {
+    this.fullScreenStack.clear()
+    this.pageStack.clear()
+  }
 
   /** WebView JS 解析通道：是否显示隐藏 WebView */
   @Trace showWebView: boolean = false

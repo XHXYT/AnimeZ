@@ -168,7 +168,7 @@ struct SearchResultItem {
         title: this.item.title,
         cover: this.item.imgUrl as string
       }
-      AnimeState.pageStack.pushPathByName("VideoDetailPage", params)
+      AnimeState.pushPage("VideoDetailPage", params)
       appContinueModel.jumpVideoDetail("VideoDetailPage", params)
     })
   }
