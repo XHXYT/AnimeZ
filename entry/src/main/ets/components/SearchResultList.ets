@@ -12,12 +12,14 @@ import { sourceBadgeColor } from '../utils/SourceBadgeUtils';
 export struct SearchResultList {
 
   @Require @Param videoList: VideoInfo[] = []
+  // 点击回调（换源等嵌入场景）：未设置时保持默认跳转详情页行为
+  @Param onItemClick: ((item: VideoInfo) => void) | undefined = undefined
 
   build() {
     List({ space: 10 }) {
       ForEach(this.videoList, (item: VideoInfo) => {
         ListItem() {
-          SearchResultItem({ item: item })
+          SearchResultItem({ item: item, onItemClick: this.onItemClick })
         }
       }, (item: VideoInfo): string => `${item.sourceKey}|${item.url ?? ''}|${item.title}`)
     }
@@ -35,6 +37,8 @@ export struct SearchResultList {
 struct SearchResultItem {
 
   @Require @Param item: VideoInfo
+  // 点击回调（换源等嵌入场景）：未设置时保持默认跳转详情页行为
+  @Param onItemClick: ((item: VideoInfo) => void) | undefined = undefined
 
   private get sourceTitle(): string {
     return dataSourceManager.getSourceTitle(this.item.sourceKey) ?? ''
@@ -161,6 +165,10 @@ struct SearchResultItem {
     .borderRadius(12)
     .backgroundColor($r('app.color.background_color'))
     .onClick(() => {
+      if (this.onItemClick) {
+        this.onItemClick(this.item)
+        return
+      }
       const params: VideoNavigateInfo = {
         id: null,
         url: this.item.url as string,

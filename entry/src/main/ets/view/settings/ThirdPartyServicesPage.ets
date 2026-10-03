@@ -18,35 +18,50 @@ struct ThirdPartyServicesPage {
       title: '@ohos/danmakuflamemaster',
       subtitle: '弹幕渲染引擎 · ^2.1.3',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE
+      type: ItemActionType.ROUTER,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://gitcode.com/CPF-ApplicationTPC/ohos_danmaku_flame_master")
+      }
     }),
     new CustomItemInfo({
       id: 'ijkplayer',
       title: '@ohos/ijkplayer',
       subtitle: 'IjkPlayer 视频播放 · ^2.0.11',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE
+      type: ItemActionType.ROUTER,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://gitcode.com/CPF-ApplicationTPC/ohos_ijkplayer")
+      }
     }),
     new CustomItemInfo({
       id: 'redplayer',
       title: '@rte-xhs/redplayer',
       subtitle: 'RedPlayer 视频播放（小红书）· ^1.0.0',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE
+      type: ItemActionType.ROUTER,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://ohpm.openharmony.cn/#/cn/detail/@rte-xhs%2Fredplayer")
+      }
     }),
     new CustomItemInfo({
       id: 'mpv_arkts',
       title: '@mpv-ohos/mpv-arkts',
       subtitle: 'MPV 视频播放 · ^1.0.0',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE
+      type: ItemActionType.ROUTER,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://github.com/mpv-ohos/mpv-arkts")
+      }
     }),
     new CustomItemInfo({
       id: 'webdav',
       title: '@ya520/webdav',
       subtitle: 'WebDAV 远程存储客户端 · ^1.0.1',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE
+      type: ItemActionType.NONE,
+      onChange: () => {
+        AnimeState.pageStack.pushPathByName("WebPage", "https://gitcode.com/Ya520/WebDAV")
+      }
     })
   ]
 

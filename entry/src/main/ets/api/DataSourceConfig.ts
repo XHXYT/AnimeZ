@@ -222,6 +222,8 @@ export interface DataSourceConfig {
   defaultSource: boolean; // 是否为默认数据源
   // 登录配置：配置后源列表长按菜单出现"账号登录"入口
   login?: LoginConfig;
+  // m3u8 广告拦截源级开关：true=该源参与广告拦截（跟随应用全局开关），未配置/false=该源强制不过滤
+  adFilter?: boolean;
   parserConfig: ParserConfig;
 }
 

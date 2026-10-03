@@ -263,6 +263,44 @@ export class VideoDetailViewModel {
     this.checkCollectionInfo();
   }
 
+  /**
+   * 换源：原地切换到同名的其他源播放。
+   * 以当前集索引与播放进度作为新源的续播对齐提示（新源有自己的历史记录时以历史为准），
+   * 并清空跨源残留的历史/收藏/视频ID（initialize 未命中时不会覆盖这些字段）。
+   */
+  public async switchSource(params: VideoNavigateInfo) {
+    const hint: VideoHistoryInfo = {
+      id: null,
+      link: '',
+      title: '',
+      totalTime: this.historyInfo.totalTime,
+      currentTime: this.historyInfo.currentTime,
+      coverUrl: '',
+      episodeListIndex: this.historyInfo.episodeListIndex,
+      episodeIndex: this.historyInfo.episodeIndex,
+      episodeName: this.historyInfo.episodeName,
+      videoUrl: '',
+      videoProgress: 0,
+      sourceKey: '',
+      accessTime: Date.now()
+    };
+    this.historyInfo = hint;
+    this.videoID = null;
+    this.collectID = 0;
+    this.isCollect = false;
+    this.collectionInfo = {
+      id: null,
+      link: '',
+      title: '',
+      coverUrl: '',
+      sourceKey: '',
+      accessTime: 0
+    };
+    this.resumePosition = -1;
+    this.errorMessage = '';
+    await this.initialize(params);
+  }
+
   // 获取视频详情
   public async getDetailInfo() {
     this.state = ViewState.LOADING
@@ -351,6 +389,8 @@ export class VideoDetailViewModel {
   // 播放视频
   public async playVideo(episodeListIndex: number, episodeIndex: number) {
     Logger.e('tips', `playVideo episodeListIndex = ${episodeListIndex} episodeIndex=${episodeIndex}`);
+    // 源级广告拦截开关：优先于全局设置，null=该源未配置、跟随全局
+    M3u8AdFilter.setSourceAdFilter(dataSourceManager.getSourceAdFilter(this.sourceKey));
     // 新播放接管：关闭仍在活跃的小窗，防止双音频
     if (PiPManager.isActive) {
       PiPManager.stopPiP()

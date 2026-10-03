@@ -43,6 +43,14 @@ class DataSourceManager {
   }
 
   /**
+   * 指定数据源的 m3u8 广告拦截源级开关（true=参与过滤、跟随全局；未配置/false 返回 null 或 false，均不过滤）
+   */
+  getSourceAdFilter(key: string): boolean | null {
+    const value = this.dataSourceConfigs.get(key)?.adFilter;
+    return value === undefined ? null : value;
+  }
+
+  /**
    * 指定数据源是否已登录
    */
   async isLoggedIn(key: string): Promise<boolean> {

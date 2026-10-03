@@ -28,7 +28,14 @@ export function SearchPageBuilder(name: string, param: Object) {
 }
 
 @ComponentV2
-struct SearchPage {
+export struct SearchPage {
+
+  /** 嵌入模式（换源等模态场景）：隐藏返回键、无系统栏避让、结果点击走回调 */
+  @Param embedded: boolean = false
+  /** 嵌入模式预填关键词（非空时进入即自动搜索） */
+  @Param initialKeyword: string = ''
+  /** 嵌入模式结果选中回调：设置后点击结果不再跳转详情页 */
+  @Param onPicked: ((item: VideoInfo) => void) | undefined = undefined
 
   @Local keyword: string = ''
   private searchRecommends: string[] = ['冰菓', '进击的巨人', '电锯人', '鲁路修', '命运石之门', '史莱姆', '天降之物']
@@ -107,6 +114,11 @@ struct SearchPage {
     CaptchaBridge.register((challenge: CaptchaChallenge): Promise<string> => {
       return this.handleCaptchaChallenge(challenge)
     })
+
+    // 嵌入模式：预填关键词进入即搜索（在验证码桥注册完成后发起）
+    if (this.embedded && this.initialKeyword.trim() !== '') {
+      this.doSearch(this.initialKeyword)
+    }
   }
 
   aboutToDisappear(): void {
@@ -229,6 +241,8 @@ struct SearchPage {
   build() {
     NavDestination() {
       TitleBar({
+        showBack: !this.embedded,
+        rightInset: this.embedded ? 56 : -1,
         searchPlaceholder: '输入关键字...',
         searchText: this.keyword,
         onSearchChange: (value: string) => {
@@ -281,7 +295,8 @@ struct SearchPage {
         .layoutWeight(1)
 
     }
-    .padding({top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20})
+    .padding(this.embedded ? { top: 8, bottom: 0 } :
+      { top: AnimeState.topRectHeight, bottom: AnimeState.bottomRectHeight - 20 })
     .backgroundColor($r('app.color.background_color_accent'))
     .hideTitleBar(true)
     .hideToolBar(true)
@@ -317,10 +332,10 @@ struct SearchPage {
 
   @Builder content() {
     if (this.resultStyle === 'list') {
-      SearchResultList({ videoList: this.categoryViewModel.videoList })
+      SearchResultList({ videoList: this.categoryViewModel.videoList, onItemClick: this.onPicked })
         .height('100%')
     } else {
-      VideoList({ videoList: this.categoryViewModel.videoList, showSourceBadge: true })
+      VideoList({ videoList: this.categoryViewModel.videoList, showSourceBadge: true, onItemClick: this.onPicked })
         .height('100%')
     }
   }

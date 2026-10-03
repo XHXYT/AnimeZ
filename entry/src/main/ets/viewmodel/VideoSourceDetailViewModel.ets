@@ -203,6 +203,16 @@ export class VideoSourceDetailViewModel {
     SCHEDULE_SOURCE_CHANGED_EVENT.emit()
   }
 
+  // 切换源级广告过滤：勾选=该源参与广告拦截、跟随全局开关（adFilter: true），
+  // 取消=移除字段（未配置与 false 等效，均强制不过滤）
+  setAdFilter(isOn: boolean) {
+    if (isOn === (this.editingConfig.adFilter === true)) {
+      return
+    }
+    this.editingConfig.adFilter = isOn ? true : undefined
+    this.markAsChanged()
+  }
+
   // 切换搜索拼接基础URL
   setSearchUrlNeedBaseUrl(isOn: boolean) {
     const videos = this.editingConfig.parserConfig.search.videos

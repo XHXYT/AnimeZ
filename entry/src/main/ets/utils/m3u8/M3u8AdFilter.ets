@@ -14,13 +14,21 @@ const AD_SEGMENT_PATTERN =
  * 夹在两个 EXT-X-DISCONTINUITY 之间，约 5 分钟处）。播放前抓取播放列表，
  * 剔除广告分片并将相对分片地址改写为绝对地址，经本地 HTTP 服务下发
  * （播放器对本地 m3u8 文件解析不一致，统一走 HTTP 加载路径）。
- * 由设置项 m3u8_ad_filter 控制开关；任何失败均回退原始地址，不影响正常播放。
+ * 仅当源配置 adFilter 为 true（参与过滤）且全局设置 m3u8_ad_filter 开启时过滤，
+ * 未配置/false 的源一律不过滤；任何失败均回退原始地址，不影响正常播放。
  */
 export default class M3u8AdFilter {
   /** 原始地址 -> 本地服务播放地址（进程内缓存） */
   private static cache: Record<string, string> = {}
   /** 进行中的抓取任务：预热与正式播放并发时复用同一请求 */
   private static inflight: Record<string, Promise<string>> = {}
+  /** 源级开关（详情页按当前源注入）：true=跟随全局设置参与过滤，false/null=该源不过滤 */
+  private static sourceAdFilter: boolean | null = null
+
+  /** 注入源级广告拦截开关：adFilter 为 true 且全局开关开启时才过滤 */
+  static setSourceAdFilter(value: boolean | null): void {
+    M3u8AdFilter.sourceAdFilter = value
+  }
 
   /**
    * 预热：地址解析完成后立即抓取并过滤播放列表，
@@ -32,7 +40,7 @@ export default class M3u8AdFilter {
   }
 
   static getPlayableUrl(url: string): Promise<string> {
-    if (!appSettings.m3u8_ad_filter) {
+    if (M3u8AdFilter.sourceAdFilter !== true || !appSettings.m3u8_ad_filter) {
       return Promise.resolve(url)
     }
     if (!url || !url.startsWith('http') || url.toLowerCase().indexOf('.m3u8') < 0) {

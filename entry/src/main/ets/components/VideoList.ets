@@ -21,6 +21,8 @@ export struct VideoList {
   @Param videoListDataSource: CategoryDataSource = new CategoryDataSource([])
   // 是否在封面左上角显示数据源角标（默认样式同集数角标）
   @Param showSourceBadge: boolean = false
+  // 点击回调（换源等嵌入场景）：未设置时保持默认跳转详情页行为
+  @Param onItemClick: ((item: VideoInfo) => void) | undefined = undefined
   // 滚动联动：自身优先滚动，滚动到边缘后交给父组件滚动（如主页旁周表 Tab）
   @Param nestedScrollSelfFirst: boolean = false
 
@@ -179,6 +181,10 @@ export struct VideoList {
     .alignContent(Alignment.BottomEnd)
     .shadow({ radius: 14, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#cccccc', offsetX: 6, offsetY: 6 })
     .onClick(() => {
+      if (this.onItemClick) {
+        this.onItemClick(item)
+        return
+      }
       // 默认为新增
       const params: VideoNavigateInfo = {
         id: null,

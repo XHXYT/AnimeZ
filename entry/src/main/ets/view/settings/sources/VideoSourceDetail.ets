@@ -114,6 +114,16 @@ struct VideoSourceDetail {
                 .fontColor($r('app.color.color_text_major'))
             }
             .alignItems(VerticalAlign.Center)
+            Row({ space: 5 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.vm.editingConfig.adFilter === true })
+                .onChange((isOn: boolean) => {
+                  this.vm.setAdFilter(isOn)
+                })
+              Text('广告过滤')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+            }
+            .alignItems(VerticalAlign.Center)
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)

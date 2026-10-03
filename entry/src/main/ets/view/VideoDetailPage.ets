@@ -29,6 +29,9 @@ import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { VideoCacheList } from '../components/VideoCacheList';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { permissionManage } from '../utils/PermissionManage';
+import { SearchPage } from './SearchPage';
+import VideoInfo from '../entity/VideoInfo';
+import { dataSourceManager } from '../api/DataSourceManager';
 
 // 系统路由
 @Builder
@@ -48,6 +51,8 @@ struct VideoDetailPage {
     this.getUIContext().getHostContext()!
   )
   private panelController: PanelController = new PanelController()
+  // 换源半模态开关（内嵌搜索页，选中原地切换数据源）
+  @Local showSourceSheet: boolean = false
 
   aboutToAppear() {
     // 设备互联权限（投播用）仅播放场景需要：从冷启动移到详情页进入时申请（已授权则直接跳过）
@@ -116,6 +121,46 @@ struct VideoDetailPage {
 
       return true;
     })
+    .bindSheet(this.showSourceSheet!!, this.SourceSwitchSheet(), {
+      detents: [SheetSize.LARGE],
+      showClose: true,
+      dragBar: false,
+      backgroundColor: $r('app.color.background_color_accent'),
+      preferType: SheetType.CENTER,
+      onDisappear: () => {
+        this.showSourceSheet = false
+      }
+    })
+  }
+
+  /**
+   * 换源半模态：内嵌搜索页（预填当前标题自动搜索），结果点击原地切换数据源
+   */
+  @Builder SourceSwitchSheet() {
+    SearchPage({
+      embedded: true,
+      initialKeyword: this.viewModel.videoDetailInfo.title || this.viewModel.title,
+      onPicked: (item: VideoInfo): void => {
+        this.onSourcePicked(item)
+      }
+    })
+  }
+
+  /**
+   * 换源结果选中：关闭模态并原地切换（携带当前集与进度作为新源续播对齐提示）
+   */
+  private onSourcePicked(item: VideoInfo): void {
+    this.showSourceSheet = false
+    const sourceTitle: string = dataSourceManager.getSourceTitle(item.sourceKey) ?? item.sourceKey
+    ToastUtil.showToast({ message: `已切换为「${sourceTitle}」，正在加载...` })
+    const params: VideoNavigateInfo = {
+      id: null,
+      url: item.url as string,
+      sourceKey: item.sourceKey,
+      title: item.title,
+      cover: item.imgUrl as string
+    }
+    this.viewModel.switchSource(params)
   }
 
   /**
@@ -395,8 +440,9 @@ struct VideoDetailPage {
       .height(160)
       .padding(16)
 
+      // 简介标题行常驻（右侧带换源入口），简介文本按有无条件渲染
+      this.IntroHeader()
       if (this.viewModel.videoDetailInfo.desc) {
-        Header('简介')
         Text(this.viewModel.videoDetailInfo.desc)
           .fontColor($r('app.color.color_text_normal'))
           .fontSize(12)
@@ -427,6 +473,34 @@ struct VideoDetailPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
+  }
+
+  /**
+   * 简介标题行（同 Header 样式，右侧带"换源"入口打开内嵌搜索模态）
+   */
+  @Builder IntroHeader() {
+    Row() {
+      Row()
+        .height(14)
+        .width(6)
+        .margin({ right: 2 })
+        .borderRadius(4)
+        .backgroundColor($r('app.color.primary_color'))
+      Text('简介')
+        .fontColor($r('app.color.color_text_major'))
+        .fontSize(16)
+        .fontWeight(500)
+      Blank()
+      Text('换源')
+        .fontColor($r('app.color.primary_color'))
+        .fontSize(14)
+        .padding({ left: 8, top: 4, bottom: 4, right: 8 })
+        .onClick(() => {
+          this.showSourceSheet = true
+        })
+    }
+    .width('100%')
+    .padding({ left: 16, top: 16, right: 16, bottom: 4 })
   }
 
   /** 播出年月（详情扩展字段 year/month，任一存在即显示） */
