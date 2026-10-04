@@ -15,6 +15,7 @@ import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 import SQLite from '../db/SQLite';
 import { initConcurrentTasks } from '../api/ConcurrentTasks';
 import { initWebVideoResolver } from '../utils/WebVideoResolver';
+import { WINDOW_HIDDEN_EVENT } from '../utils/EventBus';
 
 
 export default class EntryAbility extends UIAbility {
@@ -63,6 +64,12 @@ export default class EntryAbility extends UIAbility {
         } else if (data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
             const bottomRectHeight: number = this.uiContext.px2vp(data.area.bottomRect.height);
             AnimeState.bottomRectHeight = bottomRectHeight;
+        }
+    };
+    // 窗口生命周期监听（锁屏/退后台时转发事件，供播放器暂停与进度保存，持有引用供解绑）
+    private onWindowEvent: (event: window.WindowEventType) => void = (event: window.WindowEventType) => {
+        if (event === window.WindowEventType.WINDOW_HIDDEN) {
+            WINDOW_HIDDEN_EVENT.emit();
         }
     };
 
@@ -258,6 +265,12 @@ export default class EntryAbility extends UIAbility {
                 const err = error as BusinessError
                 console.error(`三键区域监听注册失败，code: ${err.code} message: ${err.message}`);
             }
+            try {
+                mainWindow.on('windowEvent', this.onWindowEvent)
+            } catch (error) {
+                const err = error as BusinessError
+                console.error(`窗口生命周期监听注册失败，code: ${err.code} message: ${err.message}`);
+            }
         } catch (error) {
             const err = error as BusinessError
             console.error(`UI上下文获取失败，code: ${err.code} message: ${err.message}`);
@@ -364,6 +377,7 @@ export default class EntryAbility extends UIAbility {
             this.mainWindow?.off('avoidAreaChange', this.onAvoidAreaChange)
             this.mainWindow?.off('freeWindowModeChange', this.onFreeWindowModeChange)
             this.mainWindow?.off('windowTitleButtonRectChange', this.onTitleButtonRectChange)
+            this.mainWindow?.off('windowEvent', this.onWindowEvent)
         } catch (error) {
             hilog.error(0x0000, 'testTag', 'onWindowStageDestroy off failed: %{public}s', JSON.stringify(error));
         }

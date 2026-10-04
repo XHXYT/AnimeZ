@@ -1,4 +1,5 @@
 import media from '@ohos.multimedia.media';
+import emitter from '@ohos.events.emitter';
 import { IPlayer } from '../player/model/IPlayer';
 import IPlayerManager, { PlayerStatus, VideoFit, PlayerListener } from '../player/model/IPlayerManager';
 import window from '@ohos.window';
@@ -7,15 +8,61 @@ import EpisodeInfo from '../entity/EpisodeInfo';
 import Logger from '../utils/Logger';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel } from './AppContinueModel';
-import { APP_RESUME_PROGRESS_EVENT } from '../utils/EventBus';
+import { APP_RESUME_PROGRESS_EVENT, WINDOW_HIDDEN_EVENT } from '../utils/EventBus';
 import { AnimeState } from '../entryability/AnimeState';
 import { appSettings } from '../entryability/Settings';
+import { PiPManager } from '../player/PiPManager';
 import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
+
+// 窗口隐藏事件（EntryAbility 由主窗口 windowEvent 转发）：暂停前台播放
+WINDOW_HIDDEN_EVENT.on((data: emitter.EventData) => {
+  PlayerManagerImpl.handleWindowHidden()
+})
 
 /**
  * 播放器管理（总）
  */
 export default class PlayerManagerImpl implements IPlayerManager {
+  /** 活跃实例注册表：窗口隐藏（锁屏/退后台）时逐个检查暂停 */
+  private static readonly activeInstances: PlayerManagerImpl[] = []
+
+  constructor() {
+    PlayerManagerImpl.activeInstances.push(this)
+  }
+
+  /**
+   * 窗口隐藏（锁屏/退后台）：暂停前台播放并保持播放器就绪，
+   * 避免系统挂起导致画面卡死、进度丢失；
+   * 画中画已激活时由小窗继续播放；已武装后台自动拉起时优先等待
+   * 系统拉起小窗接管，超时仍未拉起（如锁屏场景）再暂停兜底
+   */
+  static handleWindowHidden(): void {
+    if (PiPManager.isActive) {
+      return
+    }
+    const waitPiPMs: number = PiPManager.isAutoStartEnabled ? 1500 : 0
+    setTimeout(() => {
+      if (PiPManager.isActive) {
+        return
+      }
+      PlayerManagerImpl.activeInstances.forEach((instance: PlayerManagerImpl) => {
+        if (instance.isPlaying()) {
+          instance.pause()
+        }
+      })
+    }, waitPiPMs)
+  }
+
+  /** 播放中保持屏幕常亮（与主流视频应用一致），暂停/停止/结束时恢复系统默认息屏策略 */
+  private syncKeepScreenOn(status: number): void {
+    const keep: boolean = status == PlayerStatus.PLAY
+    window.getLastWindow(getContext(this)).then((win: window.Window) => {
+      return win.setWindowKeepScreenOn(keep)
+    }).catch((e: BusinessError) => {
+      Logger.e('fail', `setWindowKeepScreenOn(${keep}) code=${e.code}`, e)
+    })
+  }
+
   private url: string = ''
   //  private episode: EpisodeInfo
   private episodeList: EpisodeInfo[] = []
@@ -353,6 +400,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }
     Logger.e('tips', 'setStatus status=' + status + ' playAfterInit=' + this.playAfterInit)
     this.status = status;
+    this.syncKeepScreenOn(status)
     for (let listener of this.listeners) {
       listener.onStatusChanged(status)
     }
@@ -488,6 +536,13 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   async destroy() {
+    // 从活跃注册表摘除：窗口隐藏时不再参与暂停检查
+    const idx = PlayerManagerImpl.activeInstances.indexOf(this)
+    if (idx >= 0) {
+      PlayerManagerImpl.activeInstances.splice(idx, 1)
+    }
+    // 恢复系统默认息屏策略（stop 不一定触发状态事件）
+    this.syncKeepScreenOn(PlayerStatus.IDLE)
     // 先关闭自动续播开关：视频加载完成前退出页面时，
     // 异步到达的 PREPARED 不应再自动起播（否则画面已销毁仍有声音）
     this.playAfterInit = false

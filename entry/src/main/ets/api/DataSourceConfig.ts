@@ -61,8 +61,19 @@ export interface ProcessConfig {
 }
 
 
+/** JSON 请求方式声明（JSON 模式各请求端点可选配置；缺省 GET。支持 POST 型接口，如 Connect-RPC） */
+export interface JsonMethodConfig {
+  /** 请求方法：缺省 GET；设为 POST 时按 body 模板发送 JSON 请求体 */
+  method?: 'GET' | 'POST';
+  /** POST 请求体模板（JSON 字符串），占位符按端点上下文取值并做 JSON 字符串转义后嵌入。
+   *  可用占位符——搜索/更多列表：{keyword}/{page}；周表：{weekday}/{weekday0}；
+   *  详情接口/播放地址接口：{link}；选集接口/推荐接口：详情字段点分路径（同对应 urlTemplate 上下文）；
+   *  首页分类卡片/轮播：无（写固定请求体即可） */
+  body?: string;
+}
+
 /** 视频集配置接口 */
-export interface VideoConfig {
+export interface VideoConfig extends JsonMethodConfig {
   urlTemplate: string;
   listSelector: string;
   // 可选：条目容器的选择器。在分类“更多”页等整页文档中，先用它定位列表容器，
@@ -74,7 +85,7 @@ export interface VideoConfig {
 }
 
 /** 首页分类卡片配置（每个卡片对应一个独立接口/页面：JSON 模式用 listPath，HTML 模式用 listSelector） */
-export interface CategoryCardConfig {
+export interface CategoryCardConfig extends JsonMethodConfig {
   title: string;            // 卡片标题
   url: string;              // 数据地址（相对 baseUrl 或绝对）：JSON=接口地址，HTML=页面地址
   moreUrl?: string;         // "更多"页地址，支持 {page} 占位符（JSON）或页面地址（HTML）
@@ -99,7 +110,7 @@ export interface CategoryConfig {
 }
 
 /** 剧集配置接口 */
-export interface EpisodeConfig {
+export interface EpisodeConfig extends JsonMethodConfig {
   containerSelector?: string;
   itemSelector: string;
   itemSelectors: SelectorConfig;
@@ -113,7 +124,7 @@ export interface EpisodeConfig {
 }
 
 /** 推荐配置接口 */
-export interface RecommendConfig {
+export interface RecommendConfig extends JsonMethodConfig {
   listSelector: string;
   itemSelectors: SelectorConfig;
   urlNeedBaseUrl: boolean;
@@ -123,7 +134,7 @@ export interface RecommendConfig {
 }
 
 /** 周表配置接口（番剧更新时间表；不配置则应用不显示周表入口） */
-export interface ScheduleConfig {
+export interface ScheduleConfig extends JsonMethodConfig {
   urlTemplate: string;      // 地址模板，{weekday} 占位符为星期（1-7，周一=1），相对路径拼 baseUrl
   listSelector: string;     // HTML=条目 CSS 选择器 / JSON=列表 JSON 路径（如 data.list.0.videos）
   itemSelectors: SelectorConfig; // 字段选择器/模板（同列表卡片）
@@ -135,11 +146,17 @@ export interface ScheduleConfig {
 }
 
 /** 番剧详情配置接口 */
-export interface DetailConfig {
-  titleSelector: string;
-  descSelector: string;
+export interface DetailConfig extends JsonMethodConfig {
+  // 字符串形式为 CSS 选择器（支持 selector@attr 取属性值）；
+  // 对象形式可附加 postProcess（ScriptProcessor 后处理，如剥离混入标题的杂质文本）
+  titleSelector: string | { selector: string; postProcess?: ProcessConfig };
+  descSelector: string | { selector: string; postProcess?: ProcessConfig };
   coverSelector: string;
-  // JSON 模式：详情数据在响应中的 JSON 路径，默认 data（支持数组索引，如 PostgREST 数组响应的 0）
+  // JSON 模式：详情请求端点地址模板（相对 baseUrl 或绝对），占位符 {link} 为条目 url；
+  // 缺省直接请求条目 url。用于条目 url 仅携带业务 ID、详情需 POST 固定端点的接口（如 Connect-RPC）
+  urlTemplate?: string;
+  // JSON 模式：详情数据在响应中的 JSON 路径，默认 data（支持数组索引，如 PostgREST 数组响应的 0；
+  // 显式配置为空字符串表示响应根对象）
   dataPath?: string;
   // JSON 模式：封面地址后处理（如改写为站点图片代理）
   coverPostProcess?: ProcessConfig;
@@ -154,7 +171,7 @@ export interface DetailConfig {
 }
 
 /** 视频URL配置接口 */
-export interface VideoUrlConfig {
+export interface VideoUrlConfig extends JsonMethodConfig {
   urlSelector?: string;
   // attribute?: string; // 指定提取视频链接的URL属性名
   pattern?: 'regex' | 'javascript' | 'json' | 'link';
@@ -180,6 +197,7 @@ export interface LoginConfig {
 export interface SearchCaptchaConfig {
   detectSelector: string;         // 命中该选择器说明搜索响应为验证码页
   imageUrlSelector: string;       // 验证码图片选择器（selector@attr 形式；选择器部分留空时回退为 detectSelector+@属性，默认 src，仅当判定元素是 img）
+  imageUrlTemplate?: string;      // 可选：验证码图片固定地址模板（相对 baseUrl 或绝对），页面无 img 元素（图片由 JS 注入）或选择器取不到时回退使用
   imageNeedBaseUrl?: boolean;     // 图片地址是否拼接 baseUrl，默认 true
   imageCacheBustParam?: string;   // 获取图片时附加的随机参数名（如 r），拼接 ?r=随机数避免缓存
   verifyUrlTemplate: string;      // 验证码提交地址模板（相对 baseUrl 或绝对），{code} 为用户输入占位

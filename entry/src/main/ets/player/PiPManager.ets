@@ -171,6 +171,8 @@ export class _PiPManager {
 
   /** 同步后台自动拉起开关 */
   setAutoStartEnabledSafe(enabled: boolean): void {
+    // 记录开关状态：窗口隐藏（锁屏/退后台）时据此决定等待小窗接管还是立即暂停主播放器
+    this.isAutoStartEnabled = enabled
     if (!this.controller) {
       return
     }
@@ -180,6 +182,9 @@ export class _PiPManager {
       Logger.e('tips', 'setAutoStartEnabled error: ' + JSON.stringify(err))
     }
   }
+
+  /** 后台自动拉起开关当前是否开启 */
+  isAutoStartEnabled: boolean = false
 
   /** 确保 typeNode 节点与 PiP 控制器就绪（幂等） */
   private async ensureController(): Promise<boolean> {

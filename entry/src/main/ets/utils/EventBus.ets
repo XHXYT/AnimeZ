@@ -74,3 +74,8 @@ export const PLAYER_SETTINGS_EVENT: Event = new EventImpl(6)
  * 周表数据源改变（设置页"周表数据源"选择后发出，周表页按新源重新加载）
  */
 export const SCHEDULE_SOURCE_CHANGED_EVENT: Event = new EventImpl(7)
+
+/**
+ * 应用主窗口不可见（锁屏/退后台，EntryAbility 由主窗口 windowEvent 转发）
+ */
+export const WINDOW_HIDDEN_EVENT: Event = new EventImpl(8)

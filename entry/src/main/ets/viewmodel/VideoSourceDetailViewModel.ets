@@ -830,6 +830,39 @@ export class VideoSourceDetailViewModel {
     return result
   }
 
+  // 请求方式字段组（JSON 模式各请求端点通用）：请求方式下拉 + POST 请求体模板（选 POST 才展开）。
+  // 选 GET 时清除 method（保持配置干净，等价于未配置）
+  private methodBodyFields(getMethod: () => string | undefined,
+    setMethod: (m: 'GET' | 'POST' | undefined) => void,
+    getBody: () => string | undefined, setBody: (b: string | undefined) => void,
+    bodyPlaceholder: string): EditField[] {
+    const methodField: EditField = {
+      title: '请求方式',
+      placeholder: '',
+      getValue: (): string => getMethod() === 'POST' ? 'POST' : 'GET',
+      setValue: (v: string): void => {
+        setMethod(v === 'POST' ? 'POST' : undefined)
+        this.markAsChanged()
+      }
+    }
+    methodField.select = {
+      options: ['GET', 'POST'],
+      selected: (): number => getMethod() === 'POST' ? 1 : 0,
+      onChange: (index: number): void => {
+        setMethod(index === 1 ? 'POST' : undefined)
+        this.markAsChanged()
+      }
+    }
+    const bodyField = this.field('POST请求体模板', bodyPlaceholder,
+      () => getBody() || '',
+      (v: string) => {
+        setBody(v === '' ? undefined : v)
+        this.markAsChanged()
+      })
+    bodyField.visible = (): boolean => getMethod() === 'POST'
+    return [methodField, bodyField]
+  }
+
   // ---------- 后处理表单 ----------
 
   private static readonly PP_TYPE_IDS: string[] =
@@ -1160,6 +1193,50 @@ export class VideoSourceDetailViewModel {
     return [main, ...this.postProcessFormFields(label, ppEnabled, getPP, setPP)]
   }
 
+  /**
+   * 详情单字段（HTML 模式 titleSelector/descSelector）的编辑字段组：
+   * 字符串形式或 { selector, postProcess } 复杂形式；勾选「后处理」后展开后处理表单。
+   * 编辑主字段仅替换 selector，保留已有 postProcess
+   */
+  private detailTextFieldGroup(label: string, fieldHint: string,
+    get: () => string | SelectorFieldConfig,
+    set: (v: string | SelectorFieldConfig) => void): EditField[] {
+    const value = (): SelectorValue => get()
+    const ppEnabled = (): boolean => {
+      const v = value()
+      return typeof v === 'object' && v !== undefined && v.postProcess !== undefined
+    }
+    const main = this.field(label, fieldHint,
+      () => this.selectorToText(value()),
+      (v: string) => { set(this.updateSelectorValue(v, value())) })
+    main.toggle = {
+      isOn: () => ppEnabled(),
+      onChange: (isOn: boolean) => {
+        if (isOn) {
+          set({ selector: this.selectorToText(value()), postProcess: this.defaultPostProcess('replace') })
+        } else {
+          set(this.selectorToText(value()))
+        }
+        this.markAsChanged()
+      }
+    }
+    const getPP = (): ProcessConfig | undefined => {
+      const v = value()
+      if (typeof v === 'object' && v !== undefined) {
+        return v.postProcess
+      }
+      return undefined
+    }
+    const setPP = (pp: ProcessConfig | undefined) => {
+      if (pp === undefined) {
+        set(this.selectorToText(value()))
+        return
+      }
+      set({ selector: this.selectorToText(value()), postProcess: pp })
+    }
+    return [main, ...this.postProcessFormFields(label, ppEnabled, getPP, setPP)]
+  }
+
   // ---------- 字段列表（数据驱动） ----------
 
   // 基本信息字段
@@ -1273,6 +1350,12 @@ export class VideoSourceDetailViewModel {
       fields.push(this.field('列表容器选择器(可选)', '整页文档中先定位列表容器，再在其中用列表选择器找条目',
         () => this.editingConfig.parserConfig.search.videos.containerSelector || '',
         (v: string) => { this.editingConfig.parserConfig.search.videos.containerSelector = v; this.markAsChanged() }))
+    } else {
+      const videos = () => this.editingConfig.parserConfig.search.videos
+      fields.push(...this.methodBodyFields(
+        () => videos().method, (m: 'GET' | 'POST' | undefined) => { videos().method = m },
+        () => videos().body, (b: string | undefined) => { videos().body = b },
+        'POST 请求体 JSON 模板，占位符 {keyword}（自动 JSON 转义，非 URL 编码）/ {page}'))
     }
     return fields
   }
@@ -1300,6 +1383,16 @@ export class VideoSourceDetailViewModel {
       this.field('验证码图片选择器', 'selector@attr 形式，如 img.ds-verify-img@src；留空且判定元素是 img 时自动取其 src',
         () => { const c = captcha(); return c ? (c.imageUrlSelector || '') : '' },
         (v: string) => { const c = captcha(); if (c) { c.imageUrlSelector = v; this.markAsChanged() } }),
+      this.field('图片地址模板兜底(可选)', '页面无验证码img元素（图片由JS注入）或选择器取不到时，改用此固定地址（相对基础URL或绝对），如 /index.php/verify/index.html?',
+        () => { const c = captcha(); return c && c.imageUrlTemplate ? c.imageUrlTemplate : '' },
+        (v: string) => {
+          const c = captcha()
+          if (c) {
+            const trimmed = v.trim()
+            c.imageUrlTemplate = trimmed === '' ? undefined : trimmed
+            this.markAsChanged()
+          }
+        }),
       imageNeedBaseUrl,
       this.field('防缓存参数名(可选)', '获取图片时附加 ?参数名=随机数 防缓存，如 r，留空不附加',
         () => { const c = captcha(); return c && c.imageCacheBustParam ? c.imageCacheBustParam : '' },
@@ -1344,6 +1437,12 @@ export class VideoSourceDetailViewModel {
       fields.push(this.field('列表容器选择器(可选)', '整页文档中先定位轮播容器，再在其中用列表选择器找条目',
         () => this.editingConfig.parserConfig.homepage.banner.containerSelector || '',
         (v: string) => { this.editingConfig.parserConfig.homepage.banner.containerSelector = v; this.markAsChanged() }))
+    } else {
+      const banner = () => this.editingConfig.parserConfig.homepage.banner
+      fields.push(...this.methodBodyFields(
+        () => banner().method, (m: 'GET' | 'POST' | undefined) => { banner().method = m },
+        () => banner().body, (b: string | undefined) => { banner().body = b },
+        'POST 请求体 JSON 模板（固定请求体，无占位符）'))
     }
     return fields
   }
@@ -1422,6 +1521,13 @@ export class VideoSourceDetailViewModel {
         '每个区块内标识星期的标题元素，如 h4（文本形如"星期三/周三"）；配合星期区块选择器使用',
         () => this.editingConfig.parserConfig.schedule?.weekdayTitleSelector || '',
         (v: string) => { this.ensureSchedule().weekdayTitleSelector = v; this.markAsChanged() }))
+    } else {
+      fields.push(...this.methodBodyFields(
+        () => this.editingConfig.parserConfig.schedule?.method,
+        (m: 'GET' | 'POST' | undefined) => { this.ensureSchedule().method = m },
+        () => this.editingConfig.parserConfig.schedule?.body,
+        (b: string | undefined) => { this.ensureSchedule().body = b },
+        'POST 请求体 JSON 模板，占位符 {weekday}（1-7，周一=1）/ {weekday0}（0-6）'))
     }
     return fields
   }
@@ -1472,14 +1578,20 @@ export class VideoSourceDetailViewModel {
       }
     }
     const fields: EditField[] = [
-      this.field(json ? '标题模板' : '标题选择器',
-        json ? '如 {title}' : '视频详情页标题的CSS选择器',
-        () => detail().titleSelector,
-        (v: string) => { detail().titleSelector = v; this.markAsChanged() }),
-      this.field(json ? '描述模板' : '描述选择器',
-        json ? '如 {description}' : '视频详情页描述的CSS选择器',
-        () => detail().descSelector,
-        (v: string) => { detail().descSelector = v; this.markAsChanged() }),
+      ...(json
+        ? [this.field('标题模板', '如 {title}',
+          () => { const t = detail().titleSelector; return typeof t === 'string' ? t : t.selector },
+          (v: string) => { detail().titleSelector = v; this.markAsChanged() })]
+        : this.detailTextFieldGroup('标题选择器', '视频详情页标题的CSS选择器（支持 selector@attr 取属性）',
+          () => detail().titleSelector,
+          (v: string | SelectorFieldConfig) => { detail().titleSelector = v; this.markAsChanged() })),
+      ...(json
+        ? [this.field('描述模板', '如 {description}',
+          () => { const d = detail().descSelector; return typeof d === 'string' ? d : d.selector },
+          (v: string) => { detail().descSelector = v; this.markAsChanged() })]
+        : this.detailTextFieldGroup('描述选择器', '视频详情页描述的CSS选择器（支持 selector@attr 取属性）',
+          () => detail().descSelector,
+          (v: string | SelectorFieldConfig) => { detail().descSelector = v; this.markAsChanged() })),
       coverField,
       this.field(json ? '分类模板(可选)' : '分类选择器(可选)',
         json ? '如 {categories}' : '视频分类的CSS选择器',
@@ -1491,17 +1603,31 @@ export class VideoSourceDetailViewModel {
         (v: string) => { detail().updateTimeSelector = v; this.markAsChanged() })
     ]
     if (json) {
-      fields.push(this.field('详情数据JSON路径(可选)', '详情数据在响应中的JSON路径，默认 data；接口直接返回数组时填 0，留空恢复默认',
-        () => detail().dataPath || '',
+      fields.push(this.field('详情端点地址模板(可选)', '详情请求端点，占位符 {link} 为条目url；留空直接请求条目url。用于条目url仅携带ID、详情需POST固定端点的接口（如 Connect-RPC）',
+        () => detail().urlTemplate || '',
         (v: string) => {
           const trimmed = v.trim()
-          detail().dataPath = trimmed === '' ? undefined : trimmed
+          detail().urlTemplate = trimmed === '' ? undefined : trimmed
+          this.markAsChanged()
+        }))
+      fields.push(this.field('详情数据JSON路径(可选)', '详情数据在响应中的JSON路径，默认 data；接口直接返回数组时填 0，填 . 表示响应根对象',
+        () => {
+          const p = detail().dataPath
+          return p === undefined ? '' : (p === '' ? '.' : p)
+        },
+        (v: string) => {
+          const trimmed = v.trim()
+          detail().dataPath = trimmed === '' ? undefined : (trimmed === '.' ? '' : trimmed)
           this.markAsChanged()
         }))
       fields.push(...this.postProcessFormFields('封面',
         () => detail().coverPostProcess !== undefined,
         () => detail().coverPostProcess,
         (pp: ProcessConfig | undefined) => { detail().coverPostProcess = pp }))
+      fields.push(...this.methodBodyFields(
+        () => detail().method, (m: 'GET' | 'POST' | undefined) => { detail().method = m },
+        () => detail().body, (b: string | undefined) => { detail().body = b },
+        'POST 请求体 JSON 模板，占位符 {link}（搜索结果里存的详情地址/ID，自动 JSON 转义）'))
     }
     return fields
   }
@@ -1523,7 +1649,11 @@ export class VideoSourceDetailViewModel {
           (v: string) => { episodes().jsonSectionsUrlTemplate = v; this.markAsChanged() }),
         this.field('选集列表JSON路径', '选集列表在响应中的JSON路径，默认 data.list',
           () => episodes().jsonListPath || '',
-          (v: string) => { episodes().jsonListPath = v; this.markAsChanged() })
+          (v: string) => { episodes().jsonListPath = v; this.markAsChanged() }),
+        ...this.methodBodyFields(
+          () => episodes().method, (m: 'GET' | 'POST' | undefined) => { episodes().method = m },
+          () => episodes().body, (b: string | undefined) => { episodes().body = b },
+          'POST 请求体 JSON 模板，占位符为详情字段点分路径（与选集接口地址模板同上下文）')
       ]
     }
     return [
@@ -1553,7 +1683,11 @@ export class VideoSourceDetailViewModel {
           (v: string) => { recommends().jsonUrlTemplate = v; this.markAsChanged() }),
         this.field('推荐列表JSON路径', '推荐列表在响应中的JSON路径，如 data.list',
           () => recommends().listSelector,
-          (v: string) => { recommends().listSelector = v; this.markAsChanged() })
+          (v: string) => { recommends().listSelector = v; this.markAsChanged() }),
+        ...this.methodBodyFields(
+          () => recommends().method, (m: 'GET' | 'POST' | undefined) => { recommends().method = m },
+          () => recommends().body, (b: string | undefined) => { recommends().body = b },
+          'POST 请求体 JSON 模板，占位符为详情字段点分路径（与推荐接口地址模板同上下文）')
       ]
     }
     return [
@@ -1576,6 +1710,10 @@ export class VideoSourceDetailViewModel {
         fields.push(this.field('后处理', '视频链接后处理脚本',
           () => videoUrl().postProcess || '',
           (v: string) => { videoUrl().postProcess = v; this.markAsChanged() }))
+        fields.push(...this.methodBodyFields(
+          () => videoUrl().method, (m: 'GET' | 'POST' | undefined) => { videoUrl().method = m },
+          () => videoUrl().body, (b: string | undefined) => { videoUrl().body = b },
+          'POST 请求体 JSON 模板，占位符 {link}（剧集链接，自动 JSON 转义）'))
       } else {
         // 链接透传：选集链接即播放页地址，仅在此时内嵌JS才有意义（后处理不参与）
         fields.push(this.field('内嵌视频解析JS(可选)', '选集链接作为播放页在WebView中打开后执行此JS，最终需返回真实播放地址；返回ERR_开头字符串表示失败原因',
@@ -1749,6 +1887,12 @@ export class VideoSourceDetailViewModel {
       fields.push(this.field('列表JSON路径', '列表在响应中的JSON路径，如 data.list',
         () => { const c = cardAt(); return c ? (c.listPath || '') : '' },
         (v: string) => { const c = cardAt(); if (c) { c.listPath = v; this.markAsChanged() } }))
+      fields.push(...this.methodBodyFields(
+        () => { const c = cardAt(); return c ? c.method : undefined },
+        (m: 'GET' | 'POST' | undefined) => { const c = cardAt(); if (c) { c.method = m } },
+        () => { const c = cardAt(); return c ? c.body : undefined },
+        (b: string | undefined) => { const c = cardAt(); if (c) { c.body = b } },
+        'POST 请求体 JSON 模板（固定请求体，无占位符）'))
     } else {
       fields.push(this.field('列表选择器', '列表的CSS选择器，如 .anime-card',
         () => { const c = cardAt(); return c ? (c.listSelector || '') : '' },

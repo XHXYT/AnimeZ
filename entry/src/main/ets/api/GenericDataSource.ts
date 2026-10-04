@@ -137,14 +137,19 @@ export default class GenericDataSource implements DataSource {
 
   async search(keyword: string, page: number): Promise<VideoInfo[]> {
     const config = this.parserConfig.search;
-    const url = this.baseUrl + config.videos.urlTemplate
+    const rawUrl = config.videos.urlTemplate
       .replace('{keyword}', encodeURIComponent(keyword))
       .replace('{page}', page.toString());
+    // POST 型端点（如 Connect-RPC）地址可能为绝对地址（独立接口域名），不再强拼 baseUrl
+    const url = rawUrl.startsWith('http') ? rawUrl : this.baseUrl + rawUrl;
 
     const videos: VideoInfo[] = [];
     try {
       if (this.isJsonMode()) {
-        const resp = await this.requestJson(url);
+        const body = config.videos.body
+          ? this.renderJsonBodyTemplate(config.videos.body, { keyword: keyword, page: page })
+          : undefined;
+        const resp = await this.requestJson(url, true, config.videos.method, body);
         return this.parseJsonVideoList(resp, config.videos.listSelector,
           config.videos.itemSelectors as ExtendedSelectorConfig,
           config.videos.urlNeedBaseUrl, config.videos.enabledHttps);
@@ -218,6 +223,14 @@ export default class GenericDataSource implements DataSource {
    * 仅当判定元素本身是 img 时生效）
    */
   private resolveCaptchaImageUrl(doc: AnyNode, captcha: SearchCaptchaConfig): string {
+    // 固定图片地址模板兜底（相对路径拼 baseUrl）：用于验证码图片由站点 JS 注入、响应里没有 img 元素的站点
+    const resolveTemplate = (): string => {
+      const tpl = captcha.imageUrlTemplate || '';
+      if (!tpl) {
+        return '';
+      }
+      return tpl.includes('http') ? tpl : this.baseUrl + tpl;
+    };
     let imageSelector = captcha.imageUrlSelector || '';
     let parts = imageSelector.split('@');
     if (parts[0].trim() === '') {
@@ -230,11 +243,19 @@ export default class GenericDataSource implements DataSource {
       }
     }
     if (parts.length < 2 || parts[0].trim() === '') {
+      const tpl = resolveTemplate();
+      if (tpl) {
+        return tpl;
+      }
       throw new Error('captcha.imageUrlSelector 需为 selector@attr 形式');
     }
     const el = selectFirst(doc, parts[0]);
     const imageUrl = el ? el.attr(parts[1]) : '';
     if (!imageUrl) {
+      const tpl = resolveTemplate();
+      if (tpl) {
+        return tpl;
+      }
       throw new Error('未找到验证码图片');
     }
     if (captcha.imageNeedBaseUrl !== false && !imageUrl.includes('http')) {
@@ -270,13 +291,28 @@ export default class GenericDataSource implements DataSource {
       // parse + 字段提取整体移入 taskpool 子线程，避免大页面解析卡住主线程
       const cards = config.category?.cards;
       const homepageHtml = await HttpUtils.getString(this.baseUrl);
+      // banner.urlTemplate 配置时轮播图独立请求该页面（HTML=轮播页地址，如复用剧场版/电影列表页），
+      // 未配置时沿用首页文档（旧源 urlTemplate 为 '' 或 '/'，'/' 仍取首页，行为不变）
+      const bannerTpl = config.banner ? config.banner.urlTemplate : '';
+      const bannerHtml = bannerTpl
+        ? await HttpUtils.getString(bannerTpl.startsWith('http') ? bannerTpl : this.baseUrl + bannerTpl)
+        : homepageHtml;
       if (cards && cards.length > 0) {
         // 卡片模式：每个卡片独立请求自己的页面，解析在子线程
         const [bannerList, categoryList] = await Promise.all([
-          getConcurrentTaskFns().homepageBannerParseInTask(homepageHtml, this.baseUrl, this.key, config.banner),
+          getConcurrentTaskFns().homepageBannerParseInTask(bannerHtml, this.baseUrl, this.key, config.banner),
           Promise.all(cards.map(card => this.processHtmlCategoryCard(card)))
         ]);
         return { bannerList, categoryList };
+      }
+
+      if (bannerHtml !== homepageHtml) {
+        // 同页模式 + 轮播图独立页面：分类照常解析首页文档（banner 结果丢弃），轮播图单独解析
+        const [bannerList, homepageData] = await Promise.all([
+          getConcurrentTaskFns().homepageBannerParseInTask(bannerHtml, this.baseUrl, this.key, config.banner),
+          getConcurrentTaskFns().parseHomepageInTask(homepageHtml, this.baseUrl, this.key, config.banner, config.category)
+        ]);
+        return { bannerList, categoryList: homepageData.categoryList };
       }
 
       // 同页模式：banner 与分类在同一首页文档中
@@ -298,7 +334,10 @@ export default class GenericDataSource implements DataSource {
           url += (url.includes('?') ? '&' : '?') + 'page=' + page;
         }
         const videosConfig = this.parserConfig.homepage.category.videos;
-        const resp = await this.requestJson(url);
+        const moreBody = videosConfig.body
+          ? this.renderJsonBodyTemplate(videosConfig.body, { page: page > 0 ? page : 1 })
+          : undefined;
+        const resp = await this.requestJson(url, true, videosConfig.method, moreBody);
         return this.parseJsonVideoList(resp, videosConfig.listSelector,
           videosConfig.itemSelectors as ExtendedSelectorConfig,
           videosConfig.urlNeedBaseUrl, videosConfig.enabledHttps);
@@ -363,7 +402,10 @@ export default class GenericDataSource implements DataSource {
     const url = weekdayUrl.startsWith('http') ? weekdayUrl : this.baseUrl + weekdayUrl;
     try {
       if (this.isJsonMode()) {
-        const resp = await this.requestJson(url);
+        const scheduleBody = schedule.body
+          ? this.renderJsonBodyTemplate(schedule.body, { weekday: weekday, weekday0: weekday - 1 })
+          : undefined;
+        const resp = await this.requestJson(url, true, schedule.method, scheduleBody);
         return this.parseJsonVideoList(resp, schedule.listSelector,
           schedule.itemSelectors as ExtendedSelectorConfig,
           schedule.urlNeedBaseUrl, schedule.enabledHttps);
@@ -431,8 +473,8 @@ export default class GenericDataSource implements DataSource {
         recommends,
         episodesList
       ] = await Promise.all([
-        this.selectText(doc, config.titleSelector),
-        this.selectText(doc, config.descSelector).then(t => t.trim()),
+        this.extractDetailTextField(doc, config.titleSelector),
+        this.extractDetailTextField(doc, config.descSelector).then(t => t.trim()),
         this.selectAttribute(doc, coverSel, coverAttr),
         config.categorySelector ? this.selectText(doc, config.categorySelector) : Promise.resolve(''),
         config.directorSelector ? this.selectText(doc, config.directorSelector) : Promise.resolve(''),
@@ -493,7 +535,8 @@ export default class GenericDataSource implements DataSource {
 
       if (config.pattern === 'json') {
         // JSON 模式：link 即播放地址接口，直接请求并按路径取值
-        const resp = await this.requestJson(link);
+        const urlBody = config.body ? this.renderJsonBodyTemplate(config.body, { link: link }) : undefined;
+        const resp = await this.requestJson(link, true, config.method, urlBody);
         const valuePath = config.valuePath || 'data.url';
         const value = this.getJsonPath(resp, valuePath);
         if (value === null || value === undefined || String(value) === '') {
@@ -935,10 +978,61 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
-   * 请求 JSON 接口：自动拼接 baseUrl、附加自定义请求头与登录凭证，
-   * 响应 code 非 0 时抛出业务错误
+   * JSON 字符串值转义：请求体模板占位符取值后安全嵌入（引号/反斜杠/控制字符）
    */
-  private async requestJson(urlOrPath: string, needAuth: boolean = true): Promise<any> {
+  private jsonEscapeValue(value: string): string {
+    let escaped = '';
+    for (const ch of value) {
+      if (ch === '"') {
+        escaped += '\\"';
+      } else if (ch === '\\') {
+        escaped += '\\\\';
+      } else if (ch === '\n') {
+        escaped += '\\n';
+      } else if (ch === '\r') {
+        escaped += '\\r';
+      } else if (ch === '\t') {
+        escaped += '\\t';
+      } else if (ch.charCodeAt(0) < 0x20) {
+        escaped += '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0');
+      } else {
+        escaped += ch;
+      }
+    }
+    return escaped;
+  }
+
+  /**
+   * 渲染 POST 请求体模板：与 renderTemplate 同构，
+   * 但占位符取值做 JSON 字符串转义（而非直接拼接），保证请求体始终为合法 JSON
+   */
+  private renderJsonBodyTemplate(template: string, context: object | null): string {
+    if (!template) {
+      return '';
+    }
+    return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
+      const name = key.trim();
+      if (name === 'baseUrl') {
+        return this.baseUrl;
+      }
+      const value = this.getJsonPath(context, name);
+      if (value === null || value === undefined) {
+        return '';
+      }
+      if (Array.isArray(value)) {
+        return value.filter(item => item !== null && item !== undefined).map(item => String(item)).join('/');
+      }
+      return this.jsonEscapeValue(String(value));
+    });
+  }
+
+  /**
+   * 请求 JSON 接口：自动拼接 baseUrl、附加自定义请求头与登录凭证，
+   * method 为 POST 时按 body 发送 JSON 请求体（支持 Connect-RPC 等 POST 型接口），
+    * 响应 code 非 0 时抛出业务错误（200 视为成功，兼容 code:200 的接口约定）
+    */
+  private async requestJson(urlOrPath: string, needAuth: boolean = true,
+    method?: string, body?: string): Promise<any> {
     const url = urlOrPath.startsWith('http') ? urlOrPath : this.baseUrl + urlOrPath;
     const headers: Record<string, string> = {};
     if (this.requestHeaders) {
@@ -951,10 +1045,13 @@ export default class GenericDataSource implements DataSource {
         headers[headerName] = (this.loginConfig.authValueTemplate || '{token}').replace('{token}', token);
       }
     }
-    const text = await HttpUtils.getString(url, headers);
+    const isPost = method !== undefined && method.toUpperCase() === 'POST';
+    const text = isPost
+      ? await HttpUtils.postJson(url, body ?? '', headers)
+      : await HttpUtils.getString(url, headers);
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      && parsed.code !== undefined && parsed.code !== 0) {
+      && parsed.code !== undefined && parsed.code !== 0 && parsed.code !== 200) {
       throw new Error(parsed.msg || `接口返回错误码 ${parsed.code}`);
     }
     return parsed;
@@ -1056,7 +1153,7 @@ export default class GenericDataSource implements DataSource {
         return this.parseJsonVideoList(bannerArray, '',
           config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
       }
-      const resp = await this.requestJson(url);
+      const resp = await this.requestJson(url, true, config.method, config.body);
       return this.parseJsonVideoList(resp, config.listSelector,
         config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
     } catch (e) {
@@ -1081,7 +1178,7 @@ export default class GenericDataSource implements DataSource {
     const maxAttempts = 2;
     for (let attempt = 0; attempt < maxAttempts && videoList.length === 0; attempt++) {
       try {
-        const resp = await this.requestJson(card.url);
+        const resp = await this.requestJson(card.url, true, card.method, card.body);
         videoList = await this.parseJsonVideoList(resp, card.listPath,
           card.itemSelectors as ExtendedSelectorConfig,
           card.urlNeedBaseUrl ?? false, card.enabledHttps ?? true);
@@ -1114,12 +1211,15 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
-   * JSON 模式：获取视频详情（url 即详情接口地址）
+   * JSON 模式：获取视频详情（url 即详情接口地址；配置 urlTemplate 时以 {link}=条目url 渲染端点地址）
    */
   private async getJsonVideoDetail(url: string): Promise<VideoDetailInfo> {
     const config = this.parserConfig.detail;
-    const resp = await this.requestJson(url);
-    const data = this.getJsonPath(resp, config.dataPath || 'data');
+    const detailBody = config.body ? this.renderJsonBodyTemplate(config.body, { link: url }) : undefined;
+    const requestUrl = config.urlTemplate ? this.renderTemplate(config.urlTemplate, { link: url }) : url;
+    const resp = await this.requestJson(requestUrl, true, config.method, detailBody);
+    // dataPath 未配置（undefined）时默认 data；显式配置为空字符串表示响应根对象
+    const data = this.getJsonPath(resp, config.dataPath === undefined ? 'data' : config.dataPath);
     if (!data || typeof data !== 'object') {
       throw new Error('详情数据为空');
     }
@@ -1140,7 +1240,7 @@ export default class GenericDataSource implements DataSource {
       ? this.baseUrl + coverUrl : coverUrl;
 
     // 简介字段可能内嵌 HTML 标签与实体，去除标签并解码常见实体
-    const rawDesc = this.renderTemplate(config.descSelector, data);
+      const rawDesc = this.renderTemplate(typeof config.descSelector === 'string' ? config.descSelector : config.descSelector.selector, data);
     const desc = rawDesc
       .replace(/<[^>]*>/g, '')
       .replace(/&nbsp;/g, ' ')
@@ -1152,7 +1252,7 @@ export default class GenericDataSource implements DataSource {
 
     const info: VideoDetailInfo = {
       sourceKey: this.key,
-      title: this.renderTemplate(config.titleSelector, data),
+      title: this.renderTemplate(typeof config.titleSelector === 'string' ? config.titleSelector : config.titleSelector.selector, data),
       url: url,
       desc: desc,
       coverUrl: finalCoverUrl,
@@ -1211,7 +1311,8 @@ export default class GenericDataSource implements DataSource {
         if (sectionsUrlTemplate) {
           // 每条路线独立请求选集接口
           const sectionsUrl = this.renderTemplate(sectionsUrlTemplate, context);
-          const resp = await this.requestJson(sectionsUrl);
+          const sectionsBody = config.body ? this.renderJsonBodyTemplate(config.body, context) : undefined;
+          const resp = await this.requestJson(sectionsUrl, true, config.method, sectionsBody);
           list = this.getJsonPath(resp, listPath);
         } else {
           // 未配置选集接口：剧集列表内嵌在路线对象中（jsonListPath 相对路线项取值）
@@ -1252,7 +1353,8 @@ export default class GenericDataSource implements DataSource {
     }
     try {
       const url = this.renderTemplate(config.jsonUrlTemplate, detailData);
-      const resp = await this.requestJson(url);
+      const recommendBody = config.body ? this.renderJsonBodyTemplate(config.body, detailData) : undefined;
+      const resp = await this.requestJson(url, true, config.method, recommendBody);
       return this.parseJsonVideoList(resp, config.listSelector,
         config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
     } catch (e) {
@@ -1284,6 +1386,20 @@ export default class GenericDataSource implements DataSource {
     }
 
     return text;
+  }
+
+  /**
+   * 详情字段提取：字符串形式支持 selector@attr（取属性值），对象形式可附加 postProcess
+   */
+  private async extractDetailTextField(doc: AnyNode,
+    selector: string | { selector: string; postProcess?: ProcessConfig }): Promise<string> {
+    const sel = typeof selector === 'string' ? selector : selector.selector;
+    const postProcess = typeof selector === 'string' ? undefined : selector.postProcess;
+    const at = sel.lastIndexOf('@');
+    if (at >= 0) {
+      return this.selectAttribute(doc, sel.substring(0, at), sel.substring(at + 1), postProcess);
+    }
+    return this.selectText(doc, sel, postProcess);
   }
 
   /**

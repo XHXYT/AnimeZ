@@ -58,7 +58,7 @@ struct ThirdPartyServicesPage {
       title: '@ya520/webdav',
       subtitle: 'WebDAV 远程存储客户端 · ^1.0.1',
       icon: $r('app.media.ic_community'),
-      type: ItemActionType.NONE,
+      type: ItemActionType.ROUTER,
       onChange: () => {
         AnimeState.pageStack.pushPathByName("WebPage", "https://gitcode.com/Ya520/WebDAV")
       }

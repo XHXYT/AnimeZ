@@ -151,6 +151,10 @@ export class VideoDetailViewModel {
   private initPlayerListener() {
     const playerListener: PlayerListener = {
       onStatusChanged: (status: number) => {
+        if (status == PlayerStatus.PAUSE) {
+          // 暂停即保存：锁屏/退后台触发的自动暂停也能立即落库，避免进度丢失
+          this.saveHistoryInfo(true)
+        }
         if (status == PlayerStatus.DONE && this.appSettings.auto_play_next_episode && this.videoDetailInfo.episodes) {
           const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex];
           if (this.episodeIndex < episodeList.episodes.length - 1) {

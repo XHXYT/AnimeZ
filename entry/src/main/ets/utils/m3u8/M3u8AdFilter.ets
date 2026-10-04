@@ -2,6 +2,7 @@ import Logger from '../Logger';
 import HttpUtils from '../HttpUtils';
 import M3U8Utils from './M3U8Utils';
 import LocalPlaylistServer from './LocalPlaylistServer';
+import M3u8PtsFilter from './M3u8PtsFilter';
 import { appSettings } from '../../entryability/Settings';
 
 // 广告分片路径特征：具体标识来自 MoviePilot lunatvsource 的 DEFAULT_HLS_AD_FILTER_REGEX，
@@ -10,10 +11,14 @@ const AD_SEGMENT_PATTERN =
   /adjump|redtraffic|alimama|chenggao|laomaotao|[/_.-](?:ad|ads|advert|advertisement|promo|sponsor)[/_.-]/i;
 
 /**
- * m3u8 广告拦截：部分 CDN 会在播放列表中注入贴片广告分片（如 /video/adjump/...，
- * 夹在两个 EXT-X-DISCONTINUITY 之间，约 5 分钟处）。播放前抓取播放列表，
- * 剔除广告分片并将相对分片地址改写为绝对地址，经本地 HTTP 服务下发
- * （播放器对本地 m3u8 文件解析不一致，统一走 HTTP 加载路径）。
+ * m3u8 广告拦截：部分 CDN 会在播放列表中注入贴片广告分片，播放前抓取播放列表，
+ * 两级过滤后经本地 HTTP 服务下发（播放器对本地 m3u8 文件解析不一致，统一走 HTTP 加载路径）：
+ * 1. URL 特征过滤（removeAdSegments）：剔除路径含 ad/advert/promo 等特征的广告分片；
+ * 2. PTS 连续性过滤（M3u8PtsFilter）：处理分片名无 URL 特征的混入广告——
+ *    正片分片按 EXT-X-DISCONTINUITY 分组后 PTS 时钟全程连续，广告组拥有独立 PTS 时钟，
+ *    小流量探测各组首分片后剔除不在主时间线上的广告组。
+ * 地址为多码率主列表时下钻：单变体主列表抓取唯一变体继续过滤（WebView 嗅探常捕获到
+ * 主列表而非媒体列表），多变体主列表不做改写。
  * 仅当源配置 adFilter 为 true（参与过滤）且全局设置 m3u8_ad_filter 开启时过滤，
  * 未配置/false 的源一律不过滤；任何失败均回退原始地址，不影响正常播放。
  */
@@ -60,19 +65,36 @@ export default class M3u8AdFilter {
 
   private static async filterPlaylist(url: string): Promise<string> {
     try {
-      const content = await HttpUtils.getString(url)
+      let content = await HttpUtils.getString(url)
       if (!content || content.indexOf('#EXTM3U') < 0) {
         return url
       }
-      if (content.indexOf('#EXT-X-ENDLIST') < 0 || content.indexOf('#EXT-X-STREAM-INF') >= 0) {
-        // 直播列表/多码率主列表不做改写
+      // 分片地址解析基准：默认为列表自身，主列表下钻后为其变体地址
+      let baseUrl = url
+      if (content.indexOf('#EXT-X-STREAM-INF') >= 0) {
+        // 多码率主列表：仅单变体时下钻到媒体列表过滤（WebView 嗅探常捕获到主列表，
+        // 不下钻会导致变体列表中的广告全部漏过滤）；多变体保持原样
+        const variantUrl = M3u8AdFilter.singleVariantUrl(content, url)
+        if (!variantUrl) {
+          return url
+        }
+        baseUrl = variantUrl
+        content = await HttpUtils.getString(variantUrl)
+        if (!content || content.indexOf('#EXTM3U') < 0) {
+          return url
+        }
+      }
+      if (content.indexOf('#EXT-X-ENDLIST') < 0) {
+        // 直播列表不做改写
         return url
       }
-      const filtered = M3u8AdFilter.removeAdSegments(content)
+      const urlFiltered = M3u8AdFilter.removeAdSegments(content)
+      // PTS 连续性过滤：处理分片名无 URL 特征的混入广告（详见 M3u8PtsFilter）
+      const filtered = await M3u8PtsFilter.filter(urlFiltered, baseUrl)
       if (filtered === content) {
         return url
       }
-      const rewritten = M3u8AdFilter.absolutizeUrls(filtered, url)
+      const rewritten = M3u8AdFilter.absolutizeUrls(filtered, baseUrl)
       const httpUrl = await LocalPlaylistServer.register(rewritten, M3u8AdFilter.hashUrl(url))
       if (httpUrl) {
         M3u8AdFilter.cache[url] = httpUrl
@@ -85,6 +107,32 @@ export default class M3u8AdFilter {
       Logger.e('fail', 'M3u8AdFilter 过滤失败，回退原始地址', e)
       return url
     }
+  }
+
+  /**
+   * 单变体主列表下钻：返回唯一变体（媒体列表）的绝对地址；
+   * 无变体或多变体（逐一探测过滤成本高，保持原样）返回 null
+   */
+  private static singleVariantUrl(content: string, playlistUrl: string): string | null {
+    const lines: string[] = content.split('\n')
+    let variant: string | null = null
+    let expectUri = false
+    for (const raw of lines) {
+      const line = raw.trim()
+      if (line.startsWith('#EXT-X-STREAM-INF')) {
+        if (variant !== null) {
+          return null
+        }
+        expectUri = true
+      } else if (expectUri && line.length > 0 && !line.startsWith('#')) {
+        variant = line
+        expectUri = false
+      }
+    }
+    if (!variant) {
+      return null
+    }
+    return M3U8Utils.getM3U8MasterUrl(playlistUrl, variant)
   }
 
   /**
