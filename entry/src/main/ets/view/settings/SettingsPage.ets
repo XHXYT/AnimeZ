@@ -172,7 +172,6 @@ struct SettingsPage {
           new MenuOption('mpv', 'MPVPlayer'),
           new MenuOption('ijk', 'IjkPlayer'),
           new MenuOption('red', 'RedPlayer(仅本地)'),
-          new MenuOption('video', 'VideoPlayer'),
         ],
         onChange: (value) => {
           appSettings.default_player = value as string

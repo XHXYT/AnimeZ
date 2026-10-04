@@ -60,7 +60,6 @@ const PLAYER_OPTIONS: PlayerOption[] = [
   new PlayerOption('AVPlayer', 'av'),
   new PlayerOption('MPVPlayer', 'mpv'),
   new PlayerOption('IjkPlayer', 'ijk'),
-  new PlayerOption('VideoPlayer', 'video'),
   new PlayerOption('RedPlayer', 'red'),
 ]
 

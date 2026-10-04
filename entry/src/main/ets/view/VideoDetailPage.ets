@@ -527,7 +527,6 @@ struct VideoDetailPage {
           new MenuOption('av', 'AVPlayer'),
           new MenuOption('mpv', 'MPVPlayer'),
           new MenuOption('ijk', 'IjkPlayer'),
-          new MenuOption('video', 'VideoPlayer'),
           new MenuOption('red', 'RedPlayer(仅本地)')
         ],
         onChange: (value) => {

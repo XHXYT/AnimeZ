@@ -5,6 +5,11 @@ import { ColorUtils } from "../utils/ColorUtils";
 import { ToastUtil } from "../utils/ToastUtils";
 import { appSettings } from "../entryability/Settings";
 
+// 菜单弹出面板尺寸：条目固定高度，超过最大可见条数后内部滚动
+export const MENU_ITEM_HEIGHT = 48
+export const MENU_MAX_VISIBLE = 8
+export const MENU_PANEL_WIDTH = 183.7
+
 
 @ComponentV2
 export struct CustomListItem {
@@ -16,6 +21,7 @@ export struct CustomListItem {
   @Param itemPadding: Padding = { left: 0, right: 0, top: 0, bottom: 0 }
 
   @Local showMenu: boolean = false
+  @Local menuScroller: Scroller = new Scroller()
   @Local dialogController: CustomDialogController | undefined
 
   aboutToAppear(): void {
@@ -63,6 +69,39 @@ export struct CustomListItem {
           }
         },
         width: this.item.dialogConfig?.width,
+      })
+    }
+  }
+
+  // 菜单弹出时把勾选项滚动到可视区中央（列表超出最大可见条数才需要滚动）
+  private scrollMenuToSelected(): void {
+    const options = this.item.menuOptions
+    if (!options || options.length <= MENU_MAX_VISIBLE) {
+      return
+    }
+    const index = options.findIndex((m: MenuOption): boolean => m.value == this.item.value)
+    if (index <= 0) {
+      return
+    }
+    // 弹窗内容布局完成后再定位，直接调用时布局未完成会不生效
+    setTimeout(() => {
+      this.menuScroller.scrollToIndex(index, false, ScrollAlign.CENTER)
+    }, 100)
+  }
+
+  @Builder
+  menuPopupBuilder() {
+    if (this.item.type == ItemActionType.MENU) {
+      MenuSelectPanel({
+        item: this.item,
+        scroller: this.menuScroller,
+        onSelect: (menu: MenuOption) => {
+          // 先关闭弹窗：onChange 内的 setColorMode 会同步触发整页重渲染，
+          // 若 showMenu 仍为 true，弹窗会随 @Param 更新重新弹出
+          this.showMenu = false
+          this.item.value = menu.value
+          ToastUtil.showToast({ message: `${this.item.title}切换为: ${menu.title ?? menu.value}` }, 'CustomListItem')
+        }
       })
     }
   }
@@ -133,22 +172,24 @@ export struct CustomListItem {
     .padding(this.itemPadding)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .bindMenu(
-      this.showMenu,
-      this.item.type == ItemActionType.MENU ? MenuSelectWitch(this.item, (menu) => {
-        // 先置 false：onChange 内的 setColorMode 会同步触发整页重渲染，
-        // 此时若 showMenu 仍为 true，bindMenu 会随 @Param 更新重新弹出菜单
-        this.showMenu = false
-        this.item.value = menu.value
-        ToastUtil.showToast({ message: `${this.item.title}切换为: ${menu.title ?? menu.value}` }, 'CustomListItem')
-      }) : undefined,
-      {
-        placement: Placement.BottomRight,
-        backgroundBlurStyle: BlurStyle.NONE,
-        onDisappear: () => {
+    .bindPopup(this.showMenu, {
+      builder: (): void => {
+        this.menuPopupBuilder()
+      },
+      placement: Placement.BottomRight,
+      popupColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      enableArrow: false,
+      autoCancel: true,
+      width: MENU_PANEL_WIDTH,
+      onStateChange: (event) => {
+        if (event.isVisible) {
+          this.scrollMenuToSelected()
+        } else {
           this.showMenu = false
         }
-      })
+      }
+    })
     .width("100%")
     .onClick(() => {
       if (!this.item.enabled) return
@@ -284,42 +325,83 @@ function menuSymbolGlyph(size: number, enable: boolean = true) {
   .fontColor([enable ? $r("sys.color.menu_text_normal_color") : ColorUtils.getUnableColor($r("sys.color.menu_text_normal_color"))])
 }
 
-// 菜单通用组件
-@Builder
-export function MenuSelectWitch(item: CustomItemInfo, onSelect: (item: MenuOption) => void) {
-  Menu() {
-    MenuItem({ content: item.title }).contentFont({ weight: FontWeight.Bold })
+// 菜单通用组件：自绘弹出面板（List 可控滚动，弹出时定位到勾选项）
+@ComponentV2
+export struct MenuSelectPanel {
+  @Require @Param item: CustomItemInfo
+  @Require @Param scroller: Scroller
+  @Event onSelect: (menu: MenuOption) => void
 
-    Repeat<MenuOption>(item.menuOptions || [])
-      .each((ri: RepeatItem<MenuOption>) => {
-        MenuItem({
-          content: ri.item.title ?? ri.item.value,
-          symbolStartIcon: ri.item.symbolIcon ? defaultIcon(ri) : undefined,
-          symbolEndIcon: item.value == ri.item.value ? new SymbolGlyphModifier($r("sys.symbol.checkmark")).fontColor([menuColor(item, ri)]) : undefined,
-        })
-          .contentFont({ size: 16 })
-          .contentFontColor(menuColor(item, ri))
-          .onClick(() => {
-            if (item.menuDisabled && item.menuDisabled(ri.item, ri.index)) {
-              // 禁用状态不处理
-            } else {
-              onSelect(ri.item)
-              if (item.onChange) {
-                item.onChange(ri.item.value)
+  private selectedIndex(): number {
+    const options = this.item.menuOptions
+    if (!options) {
+      return 0
+    }
+    const index = options.findIndex((m: MenuOption): boolean => m.value == this.item.value)
+    return index < 0 ? 0 : index
+  }
+
+  build() {
+    Column() {
+      Text(this.item.title)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .height(MENU_ITEM_HEIGHT)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .padding({ left: 16, right: 16 })
+
+      Divider()
+        .color($r('app.color.menu_divider_color'))
+        .margin({ left: 12, right: 12 })
+
+      List({ scroller: this.scroller, initialIndex: this.selectedIndex() }) {
+        Repeat<MenuOption>(this.item.menuOptions || [])
+          .each((ri: RepeatItem<MenuOption>) => {
+            ListItem() {
+              Row({ space: 8 }) {
+                Text(ri.item.title ?? ri.item.value)
+                  .fontSize(16)
+                  .fontColor(menuColor(this.item, ri))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                if (this.item.value == ri.item.value) {
+                  SymbolGlyph($r("sys.symbol.checkmark"))
+                    .fontSize(18)
+                    .fontColor([menuColor(this.item, ri)])
+                }
               }
-              item.value = ri.item.value
+              .width('100%')
+              .height(MENU_ITEM_HEIGHT)
+              .padding({ left: 16, right: 16 })
+              .onClick(() => {
+                if (this.item.menuDisabled && this.item.menuDisabled(ri.item, ri.index)) {
+                  // 禁用状态不处理
+                  return
+                }
+                this.onSelect(ri.item)
+                if (this.item.onChange) {
+                  this.item.onChange(ri.item.value)
+                }
+                this.item.value = ri.item.value
+              })
             }
           })
-      }).key((menu: MenuOption) => menu.value.toString())
+          .key((menu: MenuOption) => menu.value)
+      }
+      .width('100%')
+      .height(Math.min(this.item.menuOptions?.length ?? 0, MENU_MAX_VISIBLE) * MENU_ITEM_HEIGHT)
+      .divider({ color: $r('app.color.menu_divider_color'), strokeWidth: 1, startMargin: 12, endMargin: 12 })
+      .scrollBar(BarState.Off)
+    }
+    .width(MENU_PANEL_WIDTH)
+    .backgroundColor($r("app.color.start_window_background"))
+    .borderRadius(20)
+    .clip(true)
+    .shadow({ radius: 16, color: '#55000000', offsetY: 4 })
   }
-  .menuItemDivider({ color: $r("sys.color.alert_divider_color"), strokeWidth: LengthMetrics.vp(1), startMargin: LengthMetrics.vp(12), endMargin: LengthMetrics.vp(12) })
-  .backgroundColor($r("app.color.start_window_background"))
-  .borderRadius(20)
-}
-
-function defaultIcon(menu: RepeatItem<MenuOption>) {
-  if (menu.item.symbolIcon == null) return new SymbolGlyphModifier($r("sys.symbol.checkmark"))
-  return menu.item.symbolIcon
 }
 
 function menuColor(item: CustomItemInfo, menu: RepeatItem<MenuOption>): ResourceColor {

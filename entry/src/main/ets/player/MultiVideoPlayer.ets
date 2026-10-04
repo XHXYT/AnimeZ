@@ -1,6 +1,5 @@
 import IPlayerManager from './model/IPlayerManager';
 import { IjkVideoPlayer } from './IJK/IjkVideoPlayer';
-import { SystemVideoPlayer } from './Video/SystemVideoPlayer';
 import { AVideoPlayer } from './AVPlayer/AVideoPlayer';
 import { appSettings } from '../entryability/Settings';
 import { RedVideoPlayer } from './REDPlayer/RedPlayer';
@@ -37,10 +36,7 @@ export struct MultiVideoPlayer {
 
   build() {
     Stack() {
-      if (appSettings.default_player === 'video') {
-        // 系统Video组件
-        SystemVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
-      } else if (appSettings.default_player === 'av') {
+      if (appSettings.default_player === 'av') {
         // AVPlayer
         AVideoPlayer({ playerManager: this.playerManager, fillHeight: this.fillHeight })
       } else if (appSettings.default_player === 'red') {

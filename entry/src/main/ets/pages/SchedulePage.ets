@@ -2,7 +2,7 @@ import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import { scheduleViewModel } from '../viewmodel/ScheduleViewModel';
 import { AnimeState } from '../entryability/AnimeState';
-import { MenuSelectWitch } from '../components/CustomListItem';
+import { MenuSelectPanel, MENU_MAX_VISIBLE, MENU_PANEL_WIDTH } from '../components/CustomListItem';
 import { CustomItemInfo, ItemActionType, MenuOption } from '../entity/CusItemInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
 import { appSettings } from '../entryability/Settings';
@@ -15,8 +15,9 @@ const WEEKDAY_NAMES: string[] = ['周一', '周二', '周三', '周四', '周五
 @ComponentV2
 export struct SchedulePage {
 
-  /** 周表源切换菜单是否展示（bindMenu 布尔受控） */
+  /** 周表源切换菜单是否展示（bindPopup 布尔受控） */
   @Local showSourceMenu: boolean = false
+  @Local sourceMenuScroller: Scroller = new Scroller()
 
   aboutToAppear() {
     scheduleViewModel.ensureLoaded()
@@ -155,20 +156,54 @@ export struct SchedulePage {
       .onClick(() => {
         this.showSourceMenu = true
       })
-      .bindMenu(
-        this.showSourceMenu,
-        MenuSelectWitch(this.scheduleSourceItem(), (menu: MenuOption) => {
-          // 先收起菜单：切换源会触发整页重渲染，菜单开着会随状态更新重复弹出
-          this.showSourceMenu = false
-          this.switchScheduleSource(menu.value)
-        }),
-        {
-          placement: Placement.BottomRight,
-          onDisappear: () => {
+      .bindPopup(this.showSourceMenu, {
+        builder: (): void => {
+          this.SourceMenuPopup()
+        },
+        placement: Placement.BottomRight,
+        popupColor: Color.Transparent,
+        backgroundBlurStyle: BlurStyle.NONE,
+        enableArrow: false,
+        autoCancel: true,
+        width: MENU_PANEL_WIDTH,
+        onStateChange: (event) => {
+          if (event.isVisible) {
+            this.scrollSourceMenuToSelected()
+          } else {
             this.showSourceMenu = false
           }
-        })
+        }
+      })
     }
+  }
+
+  @Builder
+  SourceMenuPopup() {
+    MenuSelectPanel({
+      item: this.scheduleSourceItem(),
+      scroller: this.sourceMenuScroller,
+      onSelect: (menu: MenuOption) => {
+        // 先收起菜单：切换源会触发整页重渲染，菜单开着会随状态更新重复弹出
+        this.showSourceMenu = false
+        this.switchScheduleSource(menu.value)
+      }
+    })
+  }
+
+  /** 菜单弹出时把已选周表源滚动到可视区中央（源数量超出最大可见条数才需要滚动） */
+  private scrollSourceMenuToSelected(): void {
+    const keys: string[] = dataSourceManager.getScheduleSourceKeys()
+    if (keys.length <= MENU_MAX_VISIBLE) {
+      return
+    }
+    const index = keys.indexOf(scheduleViewModel.scheduleSourceKey())
+    if (index <= 0) {
+      return
+    }
+    // 弹窗内容布局完成后再定位，直接调用时布局未完成会不生效
+    setTimeout(() => {
+      this.sourceMenuScroller.scrollToIndex(index, false, ScrollAlign.CENTER)
+    }, 100)
   }
 
   @Builder

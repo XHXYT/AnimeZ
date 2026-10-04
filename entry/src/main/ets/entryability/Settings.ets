@@ -215,7 +215,9 @@ export class AppConfigs {
       (json["auto_resume_download_on_wifi"] as boolean) ?? this.auto_resume_download_on_wifi
     this.need_blur = (json["need_blur"] as boolean) ?? this.need_blur
     this.max_downloading_count = (json["max_downloading_count"] as number) ?? this.max_downloading_count
-    this.default_player = (json["default_player"] as string) ?? this.default_player
+    const savedPlayer = (json["default_player"] as string) ?? this.default_player
+    // VideoPlayer（Video 组件）后端已移除：存量选择迁移到 AVPlayer
+    this.default_player = savedPlayer === 'video' ? 'av' : savedPlayer
     this.color_mode = (json["color_mode"] as number) ?? this.color_mode
     this.auto_sensor_rotate = (json["auto_sensor_rotate"] as boolean) ?? this.auto_sensor_rotate
     this.category_UI_type = (json["category_UI_type"] as number) ?? this.category_UI_type

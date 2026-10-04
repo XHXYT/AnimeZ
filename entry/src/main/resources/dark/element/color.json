@@ -47,6 +47,10 @@
     {
       "name": "image_mask_color",
       "value": "#80000000"
+    },
+    {
+      "name": "menu_divider_color",
+      "value": "#14FFFFFF"
     }
   ]
 }

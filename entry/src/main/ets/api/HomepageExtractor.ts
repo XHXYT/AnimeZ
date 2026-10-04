@@ -80,7 +80,13 @@ async function extractBannerListFromDoc(doc: AnyNode, config: VideoConfig,
   if (!config) {
     return [];
   }
-  const list = select(doc, config.listSelector);
+  // 配置了容器选择器时先在整页文档中定位轮播容器，再在其中用列表选择器找条目
+  // （同 extractVideoListFromHtml；未配置时沿用旧行为，直接在整页文档中选取）
+  const scope = config.containerSelector ? selectFirst(doc, config.containerSelector) : doc;
+  if (!scope) {
+    return [];
+  }
+  const list = select(scope, config.listSelector);
   const banners: VideoInfo[] = [];
   for (const li of list) {
     banners.push(await extractVideoInfoFromNode(li, config.itemSelectors as ExtendedSelectorConfig,

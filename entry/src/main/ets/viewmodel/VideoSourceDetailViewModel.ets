@@ -1425,7 +1425,7 @@ export class VideoSourceDetailViewModel {
     const json = this.isJson()
     const fields: EditField[] = [
       this.field(json ? '接口地址模板' : '基础URL拼接模板',
-        json ? '轮播数据接口地址，支持 {today} 占位符(1=周一..7=周日)' : '轮播图的基础链接拼接模板',
+        json ? '轮播数据接口地址，支持 {today} 占位符(1=周一..7=周日)' : '留空解析首页本身；可填独立轮播页地址(相对拼基础URL或绝对)',
         () => this.editingConfig.parserConfig.homepage.banner.urlTemplate,
         (v: string) => { this.editingConfig.parserConfig.homepage.banner.urlTemplate = v; this.markAsChanged() }),
       this.field(json ? '列表JSON路径' : '列表选择器',
