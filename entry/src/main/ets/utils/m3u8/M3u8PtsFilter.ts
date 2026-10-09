@@ -51,7 +51,7 @@ interface M3u8PtsProbe {
 }
 
 /**
- * PTS 连续性广告过滤：针对分片文件名无 URL 特征的混入广告（如 agedm 经 jx 解析服务
+ * PTS 连续性广告过滤：针对分片文件名无 URL 特征的混入广告（如经第三方 jx 解析服务
  * 生成的 mixed.m3u8，广告与正片同主机同路径、文件名为 hex 哈希）。
  *
  * 原理：正片分片按 EXT-X-DISCONTINUITY 分组后 PTS 时钟全程连续，广告组拥有独立的

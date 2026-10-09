@@ -1,5 +1,6 @@
 
 import VideoInfo from '../entity/VideoInfo';
+import { CoverImage } from './CoverImage';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { VideoListColumnsTemplate, VideoListColumnsTemplate2, VideoListColumnsCount, VideoListColumnsCount2 } from '../utils/breakpoint/BreakPoint';
@@ -109,19 +110,11 @@ export struct VideoList {
       Column() {
         // 封面
         Stack() {
-          if (item.imgUrl) {
-            Image(item.imgUrl)
+            CoverImage({ imgUrl: item.imgUrl, imageFit: ImageFit.Fill })
               .borderRadius({ topLeft: 8, topRight: 8 })
-              .alt($r('app.media.pic_load_failed'))
-              .objectFit(ImageFit.Fill)
-              .width('100%')
-              .height('100%')
-          } else {
-            Image($r('app.media.pic_load_failed'))
-              .borderRadius({ topLeft: 8, topRight: 8 })
-              .width('100%')
-              .height('100%')
-          }
+              .clip(true)
+            .width('100%')
+            .height('100%')
           // 深色模式轻蒙版压暗封面颜色
           if (AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK) {
             Row()

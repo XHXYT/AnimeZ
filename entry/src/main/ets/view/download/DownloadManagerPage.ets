@@ -1,4 +1,5 @@
 import { OnSelectChangeObserver, SelectionManager } from '../../utils/SelectionManager';
+import { CoverImage } from '../../components/CoverImage';
 import { TaskStatus, TaskStatusObserver } from '../../utils/download/core/Task';
 import TaskObserver from '../../utils/download/core/TaskObserver';
 import { M3U8DownloadTask } from '../../utils/m3u8/M3U8Downloader';
@@ -351,13 +352,12 @@ struct DownloadGroupItem {
         .margin({ left: this.selectionIconMargin })
         .visibility(this.selectionMode ? Visibility.Visible : Visibility.None)
         .fillColor(this.isSelected ? $r('app.color.primary_color') : $r('app.color.color_text_minor'))
-      Image(this.group.coverUrl)
-        .alt($r('app.media.pic_load_failed'))
+      CoverImage({ imgUrl: this.group.coverUrl })
         .height('100%')
         .aspectRatio(1.6)
         .borderRadius(8)
+        .clip(true)
         .margin({ left: 16, right: 16 })
-        .objectFit(ImageFit.Cover)
         .shadow({ radius: 12, color: AnimeState.darkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
 
       Column() {
@@ -548,13 +548,12 @@ export struct DownloadItem {
           .margin({ left: this.selectionIconMargin })
           .visibility(this.selectionMode ? Visibility.Visible : Visibility.None)
           .fillColor(this.isSelected ? $r('app.color.primary_color') : $r('app.color.color_text_minor'))
-        Image(this.task.videoInfo.coverUrl)
-          .alt($r('app.media.pic_load_failed'))
+        CoverImage({ imgUrl: this.task.videoInfo.coverUrl })
           .height('100%')
           .aspectRatio(1.6)
           .borderRadius(8)
+          .clip(true)
           .margin({ left: 16, right: 16 })
-          .objectFit(ImageFit.Cover)
           .shadow({ radius: 12, color: AnimeState.darkModeImage ? '#333333' : '#aaaaaa', offsetX: 6, offsetY: 6 })
 
         Column() {

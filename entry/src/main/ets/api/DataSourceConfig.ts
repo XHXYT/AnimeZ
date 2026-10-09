@@ -116,6 +116,13 @@ export interface EpisodeConfig extends JsonMethodConfig {
   itemSelectors: SelectorConfig;
   routeTitlesSelector?: string;
   routeContainersSelector?: string;
+  // 多路线-按路线选择器模式：每条路线的剧集选择器，与 routeTitlesSelector 结果按序（索引）配对。
+  // 适用于线路按钮与剧集组无父子关系、仅靠选择器区分的页签式页面（如 E站弹幕网 line_buttonN/circuit_switchN）
+  routeItemSelectors?: string[];
+  // 路线标题后处理（如去除按钮角标数字），配 routeItemSelectors 模式使用
+  routeTitleProcess?: ProcessConfig;
+  // 多路线过滤：路线标题命中任一关键词时整条路线跳过（标题与容器同索引对应，如"已下线"线路）
+  routeExcludeKeywords?: string[];
   // JSON 模式：路线/选集接口配置
   jsonRoutesPath?: string;          // 详情响应中的路线数组路径，如 play_from
   jsonRouteTitleTemplate?: string;  // 路线标题模板，上下文为详情字段+路线项字段
@@ -131,6 +138,8 @@ export interface RecommendConfig extends JsonMethodConfig {
   enabledHttps: boolean;
   // JSON 模式：推荐列表接口地址模板，上下文为详情字段
   jsonUrlTemplate?: string;
+  // HTML 模式：推荐列表独立页地址（相对路径拼 baseUrl 或绝对），不配置时解析详情页本身
+  urlTemplate?: string;
 }
 
 /** 周表配置接口（番剧更新时间表；不配置则应用不显示周表入口） */
@@ -170,6 +179,28 @@ export interface DetailConfig extends JsonMethodConfig {
   extra?: SelectorConfig;
 }
 
+/** 视频URL多步提取配置：每步请求上一步结果页面并提取下一步地址 */
+export interface VideoUrlStepConfig {
+  // regex=按正则提取（urlSelector 即正则，取捕获组1）；selector或不填=按CSS选择器提取（urlSelector 形如 sel@attr）
+  pattern?: 'regex' | 'selector';
+  urlSelector?: string;
+  // 旧版后处理指令或 script: 脚本（如补全协议头）；
+  // script 也可返回 JSON 请求指令 {"__request":true,"url":"...","method":"POST","body":"...","headers":{...}}，
+  // 下一步将按该指令发起请求（POST 表单接口、带 Referer 的 GET 等），而非请求上一步结果
+  postProcess?: string;
+}
+
+/** 播放地址本地代理配置：直链流无法被原生播放器解复用（如伪装图片的 TS 分片）时启用 */
+export interface VideoUrlProxyConfig {
+  // tsStrip：本地代理代抓（带 Referer）并剥离伪装头还原 TS，m3u8 播放列表同步改写走代理
+  type: 'tsStrip';
+  // 代抓请求所需 Referer，空串表示不带
+  referer?: string;
+  // 可选：仅当最终播放地址匹配该正则时才走代理（如 '\.m3u8'，避免 mp4 直链被包装进 m3u8 代理路径）；
+  // 缺省=总是包装
+  urlPattern?: string;
+}
+
 /** 视频URL配置接口 */
 export interface VideoUrlConfig extends JsonMethodConfig {
   urlSelector?: string;
@@ -177,19 +208,29 @@ export interface VideoUrlConfig extends JsonMethodConfig {
   pattern?: 'regex' | 'javascript' | 'json' | 'link';
   postProcess?: string; // 后处理
   iframeSelector?: string
+  // 多步精准提取：依次请求上一步结果页面并提取下一步地址（纯 HTTP，无 WebView，无 hls.js 竞态）；
+  // 第一步输入为剧集链接，最后一步输出即播放地址。配置后优先于 pattern/urlSelector 生效
+  steps?: VideoUrlStepConfig[];
   // JSON 模式：播放地址在响应中的 JSON 路径，默认 data.url
   valuePath?: string;
+  // JSON 模式可选：请求地址模板（相对 baseUrl 或绝对；剧集链接仅作 {link} 占位符上下文），
+  // 用于剧集链接与播放接口地址不同的站点（如 Connect-RPC 站剧集链接为 watch 页、接口为 /xxx.Service/GetEpisode）；
+  // 未配置时回退为直接请求剧集链接
+  urlTemplate?: string;
+  // 播放地址本地代理（可选）：仅显式配置的源生效，其它源零影响
+  proxy?: VideoUrlProxyConfig;
 }
 
-/** 登录配置接口（当前支持 JSON API 登录） */
+/** 登录配置接口（api=JSON API token 登录；cookie=登录后捕获响应 Set-Cookie 会话作为凭证） */
 export interface LoginConfig {
-  type: 'api';
+  // 登录模式：api（默认，从登录响应 JSON 取凭证）、cookie（从登录响应 Set-Cookie 取会话）
+  type?: 'api' | 'cookie';
   loginUrl: string;            // 登录接口地址（相对 baseUrl 或绝对）
   usernameField?: string;      // 请求体中用户名字段名，默认 username
   passwordField?: string;      // 请求体中密码字段名，默认 password
-  extraBody?: Record<string, string>; // 额外的固定请求体字段
-  tokenPath?: string;          // 凭证在登录响应中的 JSON 路径，默认 data.token
-  authHeaderName?: string;     // 携带凭证的请求头名，默认 Authorization
+  extraBody?: Record<string, string | boolean>; // 额外的固定请求体字段（Connect-RPC 布尔字段如 keepLoggedIn）
+  tokenPath?: string;          // 凭证在登录响应中的 JSON 路径（api 模式），默认 data.token
+  authHeaderName?: string;     // 携带凭证的请求头名，默认 Authorization（cookie 模式配为 Cookie）
   authValueTemplate?: string;  // 请求头值模板，默认 {token}
 }
 
@@ -242,6 +283,8 @@ export interface DataSourceConfig {
   login?: LoginConfig;
   // m3u8 广告拦截源级开关：true=该源参与广告拦截（跟随应用全局开关），未配置/false=该源强制不过滤
   adFilter?: boolean;
+  // 源级 User-Agent：WebView 嗅探解析时使用（部分站点按 UA 返回不同页面，如桌面版可自动播放、移动版需跳 APP）
+  userAgent?: string;
   parserConfig: ParserConfig;
 }
 

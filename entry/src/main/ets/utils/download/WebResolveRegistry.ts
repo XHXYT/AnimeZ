@@ -11,6 +11,11 @@ export interface WebResolveFns {
      * @param skipCache true 时跳过缓存强制走 WebView 重新解析（链接过期重试场景）
      */
     resolveWebVideoUrl: (url: string, skipCache: boolean) => Promise<string>;
+    /**
+     * 设置 WebView 解析通道的 User-Agent（源级配置）
+     * @param ua 源配置的 userAgent，空串表示恢复系统默认
+     */
+    setWebViewUserAgent: (ua: string) => void;
 }
 
 let webResolveFns: WebResolveFns | null = null;

@@ -104,7 +104,7 @@ function ButtonContent(config: ButtonConfig) {
         else if (config.symbolSrc) {
           SymbolGlyph($r('sys.symbol.' + config.symbolSrc))
             .fontSize(config.iconSize || 24)
-            .fontWeight(FontWeight.Medium)
+            .fontWeight(config.fontWeight ?? FontWeight.Medium)
             .fontColor([config.fontColor || Color.Transparent])
         }
       }
@@ -136,6 +136,7 @@ export interface ButtonConfig {
   imageSrc?: ResourceStr; // 图片图标资源 (如: $r('app.media.ic_settings'))
   symbolSrc?: ResourceStr; // Symbol图标资源 (如: $r('app.symbol.settings'))
   iconSize?: number; // 图标大小，默认 24vp
+  fontWeight?: FontWeight; // Symbol 图标字重，默认 FontWeight.Medium
 
   // 菜单属性
   needCheckmark?: boolean

@@ -126,6 +126,8 @@ export struct VideoPlayerController {
   @Local isLoading: boolean = false
   /** @description 链接解析中（数据源/WebView 解析阶段，驱动加载圈与文案） */
   @Local isParsing: boolean = false
+  /** @description 播放失败原因（展示在中部错误提示，空串表示无详情） */
+  @Local errorText: string = ''
   @Local episodeList: EpisodeInfo[] = []
   @Local episodeIndex: number = 0
   @Require @Param playerManager: IPlayerManager
@@ -218,6 +220,14 @@ export struct VideoPlayerController {
     onStatusChanged: (status: number) => {
       this.playerStatus = status
       this.initLoading()
+      if (status == PlayerStatus.ERROR) {
+        // 各失败点在置 ERROR 前已设置原因：此处读取兜底（组件晚挂载错过 onErrorChanged 时）
+        this.errorText = this.playerManager.getErrorMessage()
+      }
+      if (status == PlayerStatus.IDLE) {
+        // 新一轮加载开始：清除上次失败原因
+        this.errorText = ''
+      }
       if (status == PlayerStatus.DONE || status == PlayerStatus.ERROR) {
         // 播放结束/出错时终止手势驱动的快退与倍速，防止计时器残留
         this.stopRewind()
@@ -324,6 +334,10 @@ export struct VideoPlayerController {
       // 链接解析阶段（含 WebView 内解析/手动辅助）：显示加载圈，避免界面看似卡死
       this.isParsing = parsing
       this.initLoading()
+    },
+    onErrorChanged: (message: string) => {
+      // 失败原因可能晚于 ERROR 广播到达（如自动换线路全部失败后才置文案）
+      this.errorText = message
     }
   }
 
@@ -431,6 +445,8 @@ export struct VideoPlayerController {
       // 页面挂载可能晚于解析开始（详情加载期间 state=LOADING 不构建播放区，控制器会错过
       // notifyParseState(true)）：主动补同步解析态，保证解析期间加载圈立即可见
       this.isParsing = this.playerManager.isParsing()
+      // 补同步失败原因（晚挂载时错过 onErrorChanged）
+      this.errorText = this.playerManager.getErrorMessage()
       this.initLoading()
       this.playerManager.addListener(this.playerListenerVC)
     } else {
@@ -929,8 +945,8 @@ export struct VideoPlayerController {
 
   /** 单击/快捷键：切换控制层显示隐藏（暂停态保持常显） */
   private toggleControllerVisibility(): void {
-    // 暂停态不隐藏控制层，保持常显
-    if (this.isCenterPauseMarkVisible()) {
+    // 暂停态/播放出错/结束态不隐藏控制层，保持常显
+    if (this.isCenterPauseMarkVisible() || this.isGestureDisabledByStatus()) {
       this.showController = true
       this.closeController()
       return
@@ -1440,9 +1456,13 @@ export struct VideoPlayerController {
             .height(32)
             .fillColor(Color.White)
             .objectFit(ImageFit.Contain)
-          Text(this.playerStatus === PlayerStatus.DONE ? '重新播放' : '出错了...')
+          Text(this.playerStatus === PlayerStatus.DONE ? '重新播放'
+            : (this.errorText !== '' ? this.errorText : '出错了...'))
             .fontColor(Color.White)
             .fontSize(14)
+            .textAlign(TextAlign.Center)
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
@@ -2622,6 +2642,12 @@ export struct VideoPlayerController {
     }
     // 暂停态控制层保持常显，不启动自动隐藏
     if (this.isCenterPauseMarkVisible()) {
+      this.showController = true
+      this.showControllerTimer = -1
+      return
+    }
+    // 播放出错/结束态控制层保持常显，错误信息与重试入口需持续可见
+    if (this.isGestureDisabledByStatus()) {
       this.showController = true
       this.showControllerTimer = -1
       return

@@ -1,4 +1,4 @@
-import { DataSourceConfig, SelectorConfig, ProcessConfig, StringProcessConfig, CategoryCardConfig, LoginConfig, VideoConfig, ParserConfig, CategoryConfig, RecommendConfig, SearchCaptchaConfig, ScheduleConfig } from "../api/DataSourceConfig"
+import { DataSourceConfig, SelectorConfig, ProcessConfig, StringProcessConfig, CategoryCardConfig, LoginConfig, VideoConfig, ParserConfig, CategoryConfig, RecommendConfig, SearchCaptchaConfig, ScheduleConfig, VideoUrlStepConfig } from "../api/DataSourceConfig"
 import { UIUtils } from '@kit.ArkUI'
 import { dataSourceManager } from "../api/DataSourceManager"
 import { SOURCE_CHANGED_EVENT, VIDEO_SOURCE_EVENT, SCHEDULE_SOURCE_CHANGED_EVENT } from "../utils/EventBus"
@@ -25,8 +25,12 @@ export interface EditField {
   visible?: () => boolean
   /** 可选：提供后渲染为勾选开关行而非输入框 */
   toggle?: EditToggleField
+  /** 可选：配合 toggle 使用，仅渲染标题+开关行，不渲染输入框 */
+  toggleOnly?: boolean
   /** 可选：提供后渲染为下拉选择行而非输入框 */
   select?: EditSelectField
+  /** 可选：输入框下方渲染快捷片段按钮（点击插入文本；以 ':' 结尾的片段作前缀插入，其余追加到末尾） */
+  snippets?: string[]
 }
 
 /** 勾选开关行描述 */
@@ -41,6 +45,10 @@ export interface EditSelectField {
   selected: () => number
   onChange: (index: number) => void
 }
+
+/** 后处理快捷片段：与 applyLegacyPostProcess 指令一一对应（script: 走 QuickJS，其余旧版指令可串联） */
+const POST_PROCESS_SNIPPETS: string[] = ['script:', "substringBetween('', '')", 'base64Decode()',
+  'decodeUri()', 'jsonDecode', "replaceAll('', '')"]
 
 /** 新建数据源的默认配置 */
 function createDefaultConfig(): DataSourceConfig {
@@ -133,6 +141,11 @@ export class VideoSourceDetailViewModel {
   private cardKeySeq: number = 0
   // HTML 模式取消「使用统一字段」的卡片 key（会话级自定义标记，不落配置；整体重赋值保证 @Trace 通知）
   @Trace public customCardKeys: string[] = []
+  // 视频多步提取步骤（独立状态驱动增删/排序，保存时写回配置）
+  @Trace public videoSteps: VideoUrlStepConfig[] = []
+  // 步骤 ForEach 稳定 key（与 videoSteps 下标对应）
+  public stepKeys: string[] = []
+  private stepKeySeq: number = 0
   // 原始配置 key（'new' 表示新建）
   public originalKey: string = ''
 
@@ -610,6 +623,8 @@ export class VideoSourceDetailViewModel {
         this.editingConfig.parserConfig.homepage.category.cards = undefined
       }
     }
+    // 多步提取步骤写回（空列表清除配置）
+    this.editingConfig.parserConfig.videoUrl.steps = this.videoSteps.length > 0 ? this.videoSteps : undefined
   }
 
   // ---------- 私有工具 ----------
@@ -634,13 +649,16 @@ export class VideoSourceDetailViewModel {
     this.cardKeys = []
     this.cardKeySeq = 0
     this.customCardKeys = []
+    this.videoSteps = []
+    this.stepKeys = []
+    this.stepKeySeq = 0
   }
 
   // 初始化编辑数据源
   private initEditSource(sourceConfig: DataSourceConfig) {
     // 深拷贝传入的配置，避免直接修改原始数据
     const plain: DataSourceConfig = JSON.parse(JSON.stringify(sourceConfig))
-    // 补齐可选缺失的配置段：导入的配置可能省略（如 tvtfun 无 recommends），
+    // 补齐可选缺失的配置段：导入的配置可能省略（部分源无 recommends），
     // 而编辑页字段闭包会直接解引用这些对象，缺失会导致运行时 TypeError 闪退
     if (!plain.parserConfig) {
       plain.parserConfig = createDefaultConfig().parserConfig
@@ -663,6 +681,20 @@ export class VideoSourceDetailViewModel {
     this.cardKeys = copied.map((item: CategoryCardConfig, index: number) => `card_${index}`)
     this.cardKeySeq = copied.length
     this.customCardKeys = []
+    const steps = parser && parser.videoUrl ? parser.videoUrl.steps : undefined
+    const copiedSteps: VideoUrlStepConfig[] = []
+    if (steps) {
+      for (const step of steps) {
+        copiedSteps.push(UIUtils.makeObserved({
+          pattern: step.pattern,
+          urlSelector: step.urlSelector,
+          postProcess: step.postProcess
+        }))
+      }
+    }
+    this.videoSteps = copiedSteps
+    this.stepKeys = copiedSteps.map((item: VideoUrlStepConfig, index: number) => `step_${index}`)
+    this.stepKeySeq = copiedSteps.length
   }
 
   // 旧版详情基础字段（directorSelector/protagonistSelector）及 extra.protagonist 统一迁移：
@@ -817,9 +849,9 @@ export class VideoSourceDetailViewModel {
     return value
   }
 
-  // 构造编辑字段描述
+  // 构造编辑字段描述（可选 snippets：输入框下方渲染快捷片段按钮）
   private field(title: string, placeholder: string, getValue: () => string,
-    setValue: (value: string) => void, inputType?: string): EditField {
+    setValue: (value: string) => void, inputType?: string, snippets?: string[]): EditField {
     const result: EditField = {
       title: title,
       placeholder: placeholder,
@@ -827,7 +859,26 @@ export class VideoSourceDetailViewModel {
       setValue: setValue,
       inputType: inputType
     }
+    if (snippets !== undefined) {
+      result.snippets = snippets
+    }
     return result
+  }
+
+  /** 快捷片段插入：以 ':' 结尾的片段（如 script:）作前缀插入；其余以 ';' 追加到末尾（引擎按串联顺序执行） */
+  applySnippet(field: EditField, snippet: string): void {
+    const current: string = field.getValue()
+    if (snippet.endsWith(':')) {
+      if (current.startsWith(snippet)) {
+        return
+      }
+      field.setValue(snippet + current)
+      return
+    }
+    if (current.includes(snippet)) {
+      return
+    }
+    field.setValue(current === '' ? snippet : current + ';' + snippet)
   }
 
   // 请求方式字段组（JSON 模式各请求端点通用）：请求方式下拉 + POST 请求体模板（选 POST 才展开）。
@@ -1248,6 +1299,13 @@ export class VideoSourceDetailViewModel {
       this.field('基础URL', '数据源基础地址，如：https://example.com',
         () => this.editingConfig.baseUrl,
         (v: string) => { this.editingConfig.baseUrl = v; this.markAsChanged() }),
+      this.field('User-Agent(可选)', '源级UA，WebView嗅探播放页时生效，如桌面Chrome UA；留空用系统默认',
+        () => this.editingConfig.userAgent || '',
+        (v: string) => {
+          const t = v.trim()
+          this.editingConfig.userAgent = t === '' ? undefined : t
+          this.markAsChanged()
+        }),
       this.field('名称', '数据源显示名称',
         () => this.editingConfig.name,
         (v: string) => {
@@ -1290,6 +1348,9 @@ export class VideoSourceDetailViewModel {
   // 登录配置字段（JSON 模式）
   loginFields(): EditField[] {
     return [
+      this.field('登录类型', 'api=登录响应JSON中取凭证(默认)；cookie=捕获登录响应Set-Cookie作会话凭证',
+        () => this.editingConfig.login ? (this.editingConfig.login.type || 'api') : '',
+        (v: string) => { if (this.editingConfig.login) { this.editingConfig.login.type = v.trim() === 'cookie' ? 'cookie' : 'api'; this.markAsChanged() } }),
       this.field('登录接口地址', '如 /api/auth/login，相对路径将拼接基础URL',
         () => this.editingConfig.login ? (this.editingConfig.login.loginUrl || '') : '',
         (v: string) => { if (this.editingConfig.login) { this.editingConfig.login.loginUrl = v; this.markAsChanged() } }),
@@ -1308,7 +1369,7 @@ export class VideoSourceDetailViewModel {
       this.field('凭证请求头模板', '请求头值模板，默认 {token}',
         () => this.editingConfig.login ? (this.editingConfig.login.authValueTemplate || '') : '',
         (v: string) => { if (this.editingConfig.login) { this.editingConfig.login.authValueTemplate = v; this.markAsChanged() } }),
-      this.field('额外请求体JSON(可选)', '登录请求体的额外固定字段，如 {"device":"web"}，留空清除',
+      this.field('额外请求体JSON(可选)', '登录请求体的额外固定字段，如 {"device":"web"}、{"remember":true}（布尔值可填），留空清除',
         () => this.editingConfig.login && this.editingConfig.login.extraBody ? JSON.stringify(this.editingConfig.login.extraBody) : '',
         (v: string) => {
           if (!this.editingConfig.login) {
@@ -1321,7 +1382,7 @@ export class VideoSourceDetailViewModel {
             return
           }
           try {
-            const parsed: Record<string, string> = JSON.parse(trimmed)
+            const parsed: Record<string, string | boolean> = JSON.parse(trimmed)
             if (parsed) {
               this.editingConfig.login.extraBody = parsed
               this.markAsChanged()
@@ -1363,9 +1424,10 @@ export class VideoSourceDetailViewModel {
   // 搜索验证码字段（HTML 模式，高级字段开关展开后渲染）
   captchaFields(): EditField[] {
     const captcha = () => this.editingConfig.parserConfig.search.captcha
-    const imageNeedBaseUrl = this.field('图片拼接基础URL', '',
+    const imageNeedBaseUrl = this.field('图片地址拼接基础URL', '',
       () => '',
       (v: string) => {})
+    imageNeedBaseUrl.toggleOnly = true
     imageNeedBaseUrl.toggle = {
       isOn: () => { const c = captcha(); return c ? c.imageNeedBaseUrl !== false : false },
       onChange: (isOn: boolean) => {
@@ -1644,6 +1706,13 @@ export class VideoSourceDetailViewModel {
         this.field('路线标题模板', '如 {title}，可用详情字段与路线项字段',
           () => episodes().jsonRouteTitleTemplate || '',
           (v: string) => { episodes().jsonRouteTitleTemplate = v; this.markAsChanged() }),
+        this.field('路线排除关键词(可选)', '路线标题命中任一关键词即过滤该路线，逗号分隔，如：已下线,APP专线',
+          () => (episodes().routeExcludeKeywords || []).join(','),
+          (v: string) => {
+            const arr = v.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+            episodes().routeExcludeKeywords = arr.length > 0 ? arr : undefined
+            this.markAsChanged()
+          }),
         this.field('选集接口地址模板', '如 {baseUrl}/api/videos/{id}/sections?player_code={code}&page=1&page_size=100',
           () => episodes().jsonSectionsUrlTemplate || '',
           (v: string) => { episodes().jsonSectionsUrlTemplate = v; this.markAsChanged() }),
@@ -1656,20 +1725,56 @@ export class VideoSourceDetailViewModel {
           'POST 请求体 JSON 模板，占位符为详情字段点分路径（与选集接口地址模板同上下文）')
       ]
     }
-    return [
+    const fields: EditField[] = [
       this.field('多路线标题选择器(可选)', '多路线标题的CSS选择器',
         () => episodes().routeTitlesSelector || '',
         (v: string) => { episodes().routeTitlesSelector = v; this.markAsChanged() }),
       this.field('多路线剧集选择器(可选)', '多路线剧集的CSS选择器',
         () => episodes().routeContainersSelector || '',
         (v: string) => { episodes().routeContainersSelector = v; this.markAsChanged() }),
+      this.field('各路线剧集选择器(可选)', '每条路线的剧集选择器，逗号分隔，与多路线标题选择器结果按序配对；适用于线路按钮与剧集组无父子关系的页签页，配置后优先于多路线剧集选择器生效',
+        () => (episodes().routeItemSelectors || []).join(','),
+        (v: string) => {
+          const arr = v.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+          episodes().routeItemSelectors = arr.length > 0 ? arr : undefined
+          this.markAsChanged()
+        })
+    ]
+    // 路线标题后处理：开关行 + 后处理表单（配各路线剧集选择器模式使用，如去除按钮角标数字）
+    const rtpEnabled = (): boolean => episodes().routeTitleProcess !== undefined
+    const rtpToggle: EditField = {
+      title: '路线标题后处理(可选)',
+      placeholder: '',
+      getValue: (): string => '',
+      setValue: (v: string): void => {},
+      toggleOnly: true,
+      toggle: {
+        isOn: (): boolean => rtpEnabled(),
+        onChange: (isOn: boolean): void => {
+          episodes().routeTitleProcess = isOn ? this.defaultPostProcess('replace') : undefined
+          this.markAsChanged()
+        }
+      }
+    }
+    fields.push(rtpToggle)
+    fields.push(...this.postProcessFormFields('路线标题', rtpEnabled,
+      () => episodes().routeTitleProcess,
+      (pp: ProcessConfig | undefined) => { episodes().routeTitleProcess = pp }))
+    fields.push(
+      this.field('路线排除关键词(可选)', '路线标题命中任一关键词即过滤该路线，逗号分隔，如：已下线,APP专线',
+        () => (episodes().routeExcludeKeywords || []).join(','),
+        (v: string) => {
+          const arr = v.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+          episodes().routeExcludeKeywords = arr.length > 0 ? arr : undefined
+          this.markAsChanged()
+        }),
       this.field('单路线剧集选择器(仅单路线时必选)', '单路线剧集的CSS选择器',
         () => episodes().containerSelector || '',
         (v: string) => { episodes().containerSelector = v; this.markAsChanged() }),
       this.field('剧集列表选择器', '剧集列表的CSS选择器',
         () => episodes().itemSelector,
-        (v: string) => { episodes().itemSelector = v; this.markAsChanged() })
-    ]
+        (v: string) => { episodes().itemSelector = v; this.markAsChanged() }))
+    return fields
   }
 
   // 推荐配置字段（模式自适应）
@@ -1691,6 +1796,9 @@ export class VideoSourceDetailViewModel {
       ]
     }
     return [
+      this.field('推荐独立页地址(可选)', '留空=解析详情页本身；填地址=单独请求该页解析推荐（相对路径拼基础URL或绝对地址，如站内热门搜索页）；支持 {rand:最小,最大,步长} 随机翻页占位符',
+        () => recommends().urlTemplate || '',
+        (v: string) => { recommends().urlTemplate = v; this.markAsChanged() }),
       this.field('推荐列表选择器', '推荐视频列表的CSS选择器',
         () => recommends().listSelector,
         (v: string) => { recommends().listSelector = v; this.markAsChanged() })
@@ -1707,13 +1815,16 @@ export class VideoSourceDetailViewModel {
         fields.push(this.field('播放地址JSON路径', '播放地址在响应中的JSON路径，默认 data.url',
           () => videoUrl().valuePath || '',
           (v: string) => { videoUrl().valuePath = v; this.markAsChanged() }))
-        fields.push(this.field('后处理', '视频链接后处理脚本',
+        fields.push(this.field('后处理', '视频链接后处理：旧版指令 substringBetween(\'a\', \'b\')/base64Decode/decodeUri/jsonDecode/replaceAll，或 script: 开头的 JS 代码（result 为输入，return 返回，QuickJS 引擎可用 JSON/RegExp/encodeURIComponent 等）',
           () => videoUrl().postProcess || '',
-          (v: string) => { videoUrl().postProcess = v; this.markAsChanged() }))
+          (v: string) => { videoUrl().postProcess = v; this.markAsChanged() }, undefined, POST_PROCESS_SNIPPETS))
+        fields.push(this.field('播放接口地址模板(可选)', '播放地址接口模板（相对路径拼基础URL或绝对地址），留空=直接请求选集链接；占位符 {link}（选集链接），支持 {link#正则#替换} 值变换',
+          () => videoUrl().urlTemplate || '',
+          (v: string) => { videoUrl().urlTemplate = v.trim() === '' ? undefined : v; this.markAsChanged() }))
         fields.push(...this.methodBodyFields(
           () => videoUrl().method, (m: 'GET' | 'POST' | undefined) => { videoUrl().method = m },
           () => videoUrl().body, (b: string | undefined) => { videoUrl().body = b },
-          'POST 请求体 JSON 模板，占位符 {link}（剧集链接，自动 JSON 转义）'))
+          'POST 请求体 JSON 模板，占位符 {link}（剧集链接，自动 JSON 转义），支持 {link#正则#替换} 值变换'))
       } else {
         // 链接透传：选集链接即播放页地址，仅在此时内嵌JS才有意义（后处理不参与）
         fields.push(this.field('内嵌视频解析JS(可选)', '选集链接作为播放页在WebView中打开后执行此JS，最终需返回真实播放地址；返回ERR_开头字符串表示失败原因',
@@ -1723,17 +1834,155 @@ export class VideoSourceDetailViewModel {
       return fields
     }
     const isRegex = videoUrl().pattern === 'regex'
+    // 链接透传：选集链接即播放页地址，WebView 嗅探解析；仅内嵌JS有意义（不请求、无后处理）
+    if (videoUrl().pattern === 'link') {
+      return [
+        this.field('内嵌视频解析JS(可选)', '选集链接作为播放页在WebView中打开后执行此JS，最终需返回真实播放地址；返回ERR_开头字符串表示失败原因；嗅探模式可填 (function(){return \'PENDING\';})()',
+          () => videoUrl().iframeSelector || '',
+          (v: string) => { videoUrl().iframeSelector = v; this.markAsChanged() })
+      ]
+    }
     return [
       this.field(isRegex ? '播放链接正则' : '播放链接选择器',
         isRegex ? '正则表达式，捕获组1为播放地址，如 "url":"([^"]+)"' : '视频播放链接的CSS选择器，如 video@src',
         () => videoUrl().urlSelector || '',
         (v: string) => { videoUrl().urlSelector = v; this.markAsChanged() }),
-      this.field('后处理', '视频链接后处理脚本',
+      this.field('后处理', '视频链接后处理：旧版指令 substringBetween(\'a\', \'b\')/base64Decode/decodeUri/jsonDecode/replaceAll，或 script: 开头的 JS 代码（result 为输入，return 返回，QuickJS 引擎可用 JSON/RegExp/encodeURIComponent 等）',
         () => videoUrl().postProcess || '',
-        (v: string) => { videoUrl().postProcess = v; this.markAsChanged() }),
+        (v: string) => { videoUrl().postProcess = v; this.markAsChanged() }, undefined, POST_PROCESS_SNIPPETS),
       this.field('内嵌视频选择器(执行JS，最终需返回播放链接)', '提取到的是播放器页地址时，可在该页内执行此JS获取真实播放链接',
         () => videoUrl().iframeSelector || '',
         (v: string) => { videoUrl().iframeSelector = v; this.markAsChanged() })
+    ]
+  }
+
+  // ---------- 多步提取步骤 ----------
+
+  // 添加提取步骤
+  addVideoStep() {
+    const step: VideoUrlStepConfig = { pattern: 'selector', urlSelector: '' }
+    this.stepKeys.push(`step_${++this.stepKeySeq}`)
+    this.videoSteps = this.videoSteps.concat([UIUtils.makeObserved(step)])
+    this.markAsChanged()
+  }
+
+  // 删除提取步骤
+  deleteVideoStep(index: number) {
+    if (index < 0 || index >= this.videoSteps.length) {
+      return
+    }
+    this.stepKeys.splice(index, 1)
+    const arr = this.videoSteps.slice()
+    arr.splice(index, 1)
+    this.videoSteps = arr
+    this.markAsChanged()
+  }
+
+  // 上移/下移提取步骤（key 随条目交换，保证 ForEach 身份跟随）
+  moveVideoStep(index: number, delta: number) {
+    const target = index + delta
+    if (index < 0 || index >= this.videoSteps.length || target < 0 || target >= this.videoSteps.length) {
+      return
+    }
+    const arr = this.videoSteps.slice()
+    const keys = this.stepKeys.slice()
+    const tmp = arr[index]
+    arr[index] = arr[target]
+    arr[target] = tmp
+    const tmpKey = keys[index]
+    keys[index] = keys[target]
+    keys[target] = tmpKey
+    this.videoSteps = arr
+    this.stepKeys = keys
+    this.markAsChanged()
+  }
+
+  canMoveStep(index: number, delta: number): boolean {
+    const target = index + delta
+    return index >= 0 && index < this.videoSteps.length && target >= 0 && target < this.videoSteps.length
+  }
+
+  // 单个提取步骤字段（按下标实时定位，步骤替换后仍有效）
+  stepFields(index: number): EditField[] {
+    const stepAt = (): VideoUrlStepConfig | undefined => this.videoSteps[index]
+    const patternField: EditField = {
+      title: '提取方式',
+      placeholder: '',
+      getValue: (): string => {
+        const s = stepAt()
+        return s && s.pattern === 'regex' ? '正则表达式' : 'CSS选择器'
+      },
+      setValue: (v: string): void => {}
+    }
+    patternField.select = {
+      options: ['CSS选择器', '正则表达式'],
+      selected: (): number => {
+        const s = stepAt()
+        return s && s.pattern === 'regex' ? 1 : 0
+      },
+      onChange: (idx: number): void => {
+        const s = stepAt()
+        if (s) {
+          s.pattern = idx === 1 ? 'regex' : 'selector'
+          this.markAsChanged()
+        }
+      }
+    }
+    return [
+      patternField,
+      this.field('提取表达式', 'CSS选择器（可 sel@attr 取属性）或正则表达式（捕获组1为提取结果）；第一步输入为剧集链接，本步结果作为下一步输入',
+        () => { const s = stepAt(); return s ? (s.urlSelector || '') : '' },
+        (v: string) => { const s = stepAt(); if (s) { s.urlSelector = v; this.markAsChanged() } }),
+      this.field('后处理(可选)', '旧版指令 substringBetween(\'a\', \'b\')/base64Decode/decodeUri/jsonDecode/replaceAll，或 script: 开头的 JS 代码（result 为输入，return 返回；返回 {"__request":true,"url":"...","method":"POST","body":"...","headers":{...},"fallbackUrl":"..."} 请求指令时，下一步按指令发请求而非请求提取结果）',
+        () => { const s = stepAt(); return s ? (s.postProcess || '') : '' },
+        (v: string) => { const s = stepAt(); if (s) { s.postProcess = v === '' ? undefined : v; this.markAsChanged() } },
+        undefined, POST_PROCESS_SNIPPETS)
+    ]
+  }
+
+  // ---------- 本地代理（tsStrip） ----------
+
+  isProxyEnabled(): boolean {
+    const p = this.editingConfig.parserConfig.videoUrl.proxy
+    return p !== undefined && p.type === 'tsStrip'
+  }
+
+  setProxyEnabled(isOn: boolean) {
+    if (isOn === this.isProxyEnabled()) {
+      return
+    }
+    this.editingConfig.parserConfig.videoUrl.proxy = isOn ? { type: 'tsStrip', referer: '' } : undefined
+    this.markAsChanged()
+  }
+
+  proxyFields(): EditField[] {
+    return [
+      this.field('代抓Referer(可选)', '本地代理代抓分片时携带的 Referer 请求头，留空=不带；m3u8 播放列表同步改写走代理。适用于直链流为伪装图片的 TS、原生播放器无法解复用的站点',
+        () => {
+          const p = this.editingConfig.parserConfig.videoUrl.proxy
+          return p && p.referer ? p.referer : ''
+        },
+        (v: string) => {
+          const p = this.editingConfig.parserConfig.videoUrl.proxy
+          if (p) {
+            const t = v.trim()
+            p.referer = t === '' ? undefined : t
+            this.markAsChanged()
+          }
+        }),
+      this.field('代理URL过滤(可选)', '正则表达式，仅当最终播放地址匹配时才走代理（如 \\.m3u8 只包装 m3u8、mp4 直链不进代理）；留空=总是包装',
+        () => {
+          const p = this.editingConfig.parserConfig.videoUrl.proxy
+          return p && p.urlPattern ? p.urlPattern : ''
+        },
+        (v: string) => {
+          const p = this.editingConfig.parserConfig.videoUrl.proxy
+          if (p) {
+            const t = v.trim()
+            p.urlPattern = t === '' ? undefined : t
+            this.markAsChanged()
+          }
+        })
     ]
   }
 

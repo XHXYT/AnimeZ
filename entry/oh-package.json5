@@ -11,7 +11,8 @@
     "@ohos/ijkplayer": "^2.0.11",
     "@rte-xhs/redplayer": "^1.0.0",
     "@mpv-ohos/mpv-arkts": "^1.0.0",
-    "@ya520/webdav": "^1.0.1"
+    "@ya520/webdav": "^1.0.1",
+    "@ohos/imageknifepro": "^1.0.19"
   },
   "dynamicDependencies": {}
 }

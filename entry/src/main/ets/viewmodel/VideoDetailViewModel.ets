@@ -63,7 +63,7 @@ export class VideoDetailViewModel {
   // 视频信息
   public videoID: number | null = -1;
   public collectID: number | null = 0;
-  public sourceKey: string = '';
+  @Trace public sourceKey: string = '';
   public title: string = '';
   public url: string = ''; // 剧集链接
 
@@ -161,8 +161,13 @@ export class VideoDetailViewModel {
             this.playVideo(this.episodeListIndex, this.episodeIndex + 1);
           }
         }
+        if (status == PlayerStatus.IDLE) {
+          // 新一轮加载开始（换集/换线路/手动重试重置都会广播 IDLE）：递增尝试序号
+          this.playAttemptSeq++
+        }
         if (status == PlayerStatus.ERROR) {
           this.invalidateCurrentEpisodeLink();
+          this.tryNextRouteOnFailure();
         }
         this.syncPiPAutoStart(status)
       },
@@ -224,6 +229,17 @@ export class VideoDetailViewModel {
   // 历史续播：仅首次进入详情页时携带，消费后立即复位，换集/重试不续播旧位置
   private resumePosition: number = -1;
 
+  /** 播放尝试序号：playVideo 新尝试 / IDLE 广播（手动重试等新加载）时递增 */
+  private playAttemptSeq: number = 0
+  /** 已消费过自动换线路的尝试序号：同一尝试的重复 ERROR 只处理一次 */
+  private failoverAttemptSeq: number = -1
+  /** 本次播放尝试的续播起点（毫秒，-1 表示从头）：解析阶段失败时播放器位置不可信，用它代替 */
+  private playAttemptStartPos: number = -1
+  /** 本次播放尝试是否已到达播放器（playEpisodeList 已调用）：决定换线路时取哪个位置 */
+  private attemptReachedPlayer: boolean = false
+  /** 页面已销毁：拦截退出详情页后仍在途的解析回调/换线路重试，防止后台继续请求 */
+  private destroyed: boolean = false
+
   /**
    * 播放出错时失效当前集的解析结果（episode 直链 + 历史记录 + WebVideoResolver 缓存）：
    * 直链多为带时效的签名地址，播放失败大概率已过期；
@@ -242,6 +258,39 @@ export class VideoDetailViewModel {
     if (this.historyInfo) {
       this.historyInfo.videoUrl = '';
     }
+  }
+
+  /**
+   * 播放/解析失败自动换线路：ERROR 可能重复上报（后端多次回调、解析失败也经 setStatus(ERROR)），
+   * 用尝试序号保证同一播放尝试只处理一次（换集/换线路/手动重试都会开启新尝试）；
+   * 从当前线路向后寻找存在当前集的第一条线路，以合适的进度续播；
+   * 无可用线路时提示切换数据源
+   */
+  private tryNextRouteOnFailure(): void {
+    if (this.destroyed) {
+      return
+    }
+    if (this.failoverAttemptSeq >= this.playAttemptSeq) {
+      return
+    }
+    this.failoverAttemptSeq = this.playAttemptSeq
+    const episodeLists = this.videoDetailInfo.episodes
+    const episodeIndex = this.episodeIndex
+    for (let listIndex = this.episodeListIndex + 1; listIndex < episodeLists.length; listIndex++) {
+      const list = episodeLists[listIndex]
+      if (list && list.episodes && episodeIndex < list.episodes.length) {
+        // 已到播放器的失败用实时位置续播；解析阶段失败用本次尝试的续播起点（播放器位置还是上一集的，不可信）
+        const pos = this.attemptReachedPlayer ? this.playerManager.getCurrentPosition() : this.playAttemptStartPos
+        this.resumePosition = pos > 0 ? pos : -1
+        const routeName = list.title ? list.title : `线路${listIndex + 1}`
+        ToastUtil.showToast({ message: `当前线路播放失败，已切换至「${routeName}」` })
+        Logger.e('tips', `播放失败自动换线路: ${this.episodeListIndex} -> ${listIndex} episodeIndex=${episodeIndex} pos=${pos}`)
+        this.playVideo(listIndex, episodeIndex)
+        return
+      }
+    }
+    ToastUtil.showToast({ message: '播放失败，请尝试切换数据源' })
+    this.playerManager.setErrorMessage('播放失败，请尝试切换数据源')
   }
 
   // 初始化数据
@@ -392,6 +441,9 @@ export class VideoDetailViewModel {
 
   // 播放视频
   public async playVideo(episodeListIndex: number, episodeIndex: number) {
+    if (this.destroyed) {
+      return
+    }
     Logger.e('tips', `playVideo episodeListIndex = ${episodeListIndex} episodeIndex=${episodeIndex}`);
     // 源级广告拦截开关：优先于全局设置，null=该源未配置、跟随全局
     M3u8AdFilter.setSourceAdFilter(dataSourceManager.getSourceAdFilter(this.sourceKey));
@@ -404,6 +456,10 @@ export class VideoDetailViewModel {
     // 读取并复位续播位置（仅首次进入详情页时为有效值）
     const startPos = this.resumePosition;
     this.resumePosition = -1;
+    // 记录本次尝试的续播起点与阶段标记：解析阶段失败时换线路用它续播（不用播放器实时位置）
+    this.playAttemptStartPos = startPos
+    this.attemptReachedPlayer = false
+    this.playAttemptSeq++
 
     const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex];
     const episode = episodeList.episodes[this.episodeIndex];
@@ -420,7 +476,11 @@ export class VideoDetailViewModel {
       M3u8AdFilter.prewarm(episode.videoUrl as string);
       await this.saveHistoryInfo(true);
       await this.checkVideoInfo();
+      if (this.destroyed) {
+        return
+      }
       this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);
+      this.attemptReachedPlayer = true
       this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos);
     } else {
       // 解析期间通知控制面板显示加载圈（与播放状态解耦，切集解析时也能看到反馈）
@@ -428,6 +488,10 @@ export class VideoDetailViewModel {
       try {
         console.log(`VideoDetailViewModel.playVideo 视频剧集链接，link：${episode.link}`)
         let url = await dataSourceManager.parseVideoUrl(episode.link, this.sourceKey)
+        // 解析期间退出页面：丢弃结果，不再喂给已销毁的播放器
+        if (this.destroyed) {
+          return
+        }
         console.log(`VideoDetailViewModel.playVideo 视频播放链接解析成功，url：${url}`)
         // 检查链接是否需要js
         const finalUrl = await this.checkParesVideoLink(url)
@@ -437,11 +501,24 @@ export class VideoDetailViewModel {
         M3u8AdFilter.prewarm(finalUrl);
         await this.saveHistoryInfo(true);
         await this.checkVideoInfo();
+        if (this.destroyed) {
+          return
+        }
         this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);
+        this.attemptReachedPlayer = true
         this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos)
       } catch (err) {
+        // 解析期间退出页面：静默终止，不再提示/换线路
+        if (this.destroyed) {
+          return
+        }
+        // 用户取消手动模态等均视为本线路解析失败：正常走换线路逻辑
         this.playerManager.notifyParseState(false);
+        this.playerManager.setErrorMessage('播放地址解析失败，请重试或换线路');
         this.playerManager.setStatus(PlayerStatus.ERROR);
+        // 解析失败时上个尝试可能残留 ERROR 态导致 setStatus 被同状态去重、广播不会到达监听器，
+        // 这里直调换线路（监听器路径再触发时会被尝试序号去重）
+        this.tryNextRouteOnFailure();
         Logger.e('fail', `VideoDetailViewModel.playVideo 视频链接解析`, err);
       }
     }
@@ -598,6 +675,8 @@ export class VideoDetailViewModel {
 
   // 处理页面显示
   public async onPageShow() {
+    // 进播放页保持屏幕常亮（暂停时由状态联动关闭）
+    this.playerManager.setKeepScreenOn(true)
     // 从叠放页面返回时恢复详情页系统栏样式（onPageHide 已还原为默认样式）
     SystemBarUtils.setWindowSystemBarTransparent(true);
     // 刷新 PiP 委托指向（叠放页面返回后保证指向当前显示页）
@@ -637,6 +716,8 @@ export class VideoDetailViewModel {
 
   // 处理页面隐藏
   public async onPageHide() {
+    // 离开播放页恢复系统默认息屏策略
+    this.playerManager.setKeepScreenOn(false)
     this.restoreOrientation();
     // 任何路径离开详情页（返回键/页面内返回/手势）都恢复默认系统栏样式
     SystemBarUtils.setWindowSystemBarTransparent(false);
@@ -691,6 +772,9 @@ export class VideoDetailViewModel {
 
   // 销毁资源
   public onDestroy() {
+    this.destroyed = true;
+    // 取消仍在途的 WebView 解析（退出页面后不再弹手动模态、不再继续轮询）
+    WebVideoResolver.cancelActive();
     this.restoreOrientation();
     PLAYER_SWITCH_EVENT.off()
     this.playerManager.destroy();

@@ -1,4 +1,6 @@
 import { More } from '../components/MoreContainer';
+import { CoverImage } from '../components/CoverImage';
+import { SettingsContent } from '../components/SettingsContent';
 import { common } from '@kit.AbilityKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
@@ -28,25 +30,38 @@ export struct MyPage {
       ListItem() {
         this.Header()
       }
-      // 快捷工具栏Start（收藏、缓存）
-      ListItem() {
-        Flex({ justifyContent: FlexAlign.SpaceAround }) {
-          this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
-            AnimeState.pageStack.pushPathByName("VideoCollectionPage", '', true)
-          })
-          this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
-            AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
-          })
+      // 快捷工具栏Start（收藏、缓存）——窗口模式下隐藏（左侧边栏已有收藏/下载入口）
+      if (!AnimeState.windowMode) {
+        ListItem() {
+          Flex({ justifyContent: FlexAlign.SpaceAround }) {
+            this.IconWithText($r('app.media.ic_star'), '我的收藏', () => {
+              AnimeState.pageStack.pushPathByName("VideoCollectionPage", '', true)
+            })
+            this.IconWithText($r('app.media.ic_download'), '离线缓存', () => {
+              AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
+            })
+          }
+          .padding(8)
+          .backgroundColor($r('app.color.background_color'))
+          .borderRadius(16)
         }
-        .padding(8)
-        .backgroundColor($r('app.color.background_color'))
-        .borderRadius(16)
       }
       // 快捷工具栏End
 
-      // 观看历史列表
-      ListItem() {
-        this.HistoryList()
+      // 观看历史列表（窗口模式下隐藏，左侧边栏已有入口）
+      if (!AnimeState.windowMode) {
+        ListItem() {
+          this.HistoryList()
+        }
+      }
+
+      // 设置列表内嵌（仅窗口模式：免路由直接展示二级设置内容，"更多"中隐藏设置项）
+      if (AnimeState.windowMode) {
+        ListItem() {
+          Column() {
+            SettingsContent({ contentPadding: { left: 0, right: 0, top: 0, bottom: 0 } })
+          }
+        }
       }
 
       // 更多设置项
@@ -205,12 +220,11 @@ export struct MyPage {
   @Builder
   HistoryItem(item: VideoHistoryInfo) {
     Column() {
-      Image(item.coverUrl)
-        .alt($r('app.media.pic_load_failed'))
+      CoverImage({ imgUrl: item.coverUrl })
         .borderRadius(8)
+        .clip(true)
         .width('100%')
         .layoutWeight(1)
-        .objectFit(ImageFit.Cover)
         .shadow({ radius: 12, color: $r('app.color.image_shadow_color'), offsetX: 6, offsetY: 6 })
       Text(item.title)
         .alignSelf(ItemAlign.Start)

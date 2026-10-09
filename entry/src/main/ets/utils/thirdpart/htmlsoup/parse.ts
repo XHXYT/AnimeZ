@@ -213,6 +213,16 @@ function followedBy(string: string, index: number, matchString: string): boolean
 	return string.substring(index, index + length) === matchString
 }
 
+//Returns whether the specified tag name matches any ancestor of parent (excluding parent itself)
+function matchesAncestor(parent: HtmlTag | null, name: string): boolean {
+	let ancestor = parent ? parent.parent : null
+	while (ancestor) {
+		if (ancestor.type.toLowerCase() === name) return true
+		ancestor = ancestor.parent
+	}
+	return false
+}
+
 interface ReadResult {
 	children: Children
 	length: number
@@ -227,6 +237,7 @@ function readChildren(string: string, index: number, parent: HtmlTag | null, tri
 		inComment = false,
 		text = '',
 		name: string,
+		tagStartIndex: number,
 		attributeName: string,
 		value: string,
 		closingTag: boolean,
@@ -241,15 +252,22 @@ function readChildren(string: string, index: number, parent: HtmlTag | null, tri
 		if (state.ignoreWhitespace && whitespace) continue
 		switch (state) {
 			case READING_TEXT:
-				if (char === '<' && (!inScript || (inScript && followedBy(string, index, '</script>'))) && !inComment) {
+				if (inComment) {
+					//comment content (including its markers) is skipped entirely
+					if (followedBy(string, index, HTML_COMMENT_END)) {
+						inComment = false
+						index += HTML_COMMENT_END.length - 1
+					}
+				}
+				else if (char === '<' && (!inScript || followedBy(string, index, '</script>'))) {
 					if (followedBy(string, index, HTML_COMMENT_START)) {
-						text += HTML_COMMENT_START
 						inComment = true
 						index += HTML_COMMENT_START.length - 1
 					}
 					else {
 						if (trimText) text = text.trim()
 						if (text) children.push(new TextNode(text))
+						tagStartIndex = index
 						state = IN_TAG
 						name = ''
 						closingTag = false
@@ -260,11 +278,6 @@ function readChildren(string: string, index: number, parent: HtmlTag | null, tri
 				else if (char === '&' && !inScript && validAmpersandCode(string, index + 1)) {
 					state = READING_ESCAPE
 					escapeCode = ''
-				}
-				else if (inComment && followedBy(string, index, HTML_COMMENT_END)) {
-					text += HTML_COMMENT_END
-					inComment = false
-					index += HTML_COMMENT_END.length - 1
 				}
 				else text += char
 				break
@@ -301,33 +314,48 @@ function readChildren(string: string, index: number, parent: HtmlTag | null, tri
 					if (name!) selfClosing = true
 					else closingTag = true
 				}
-				else if (char === '>') {
-					if (closingTag!) state = null //we have come to the end of all that had to be read
+			else if (char === '>') {
+				if (closingTag!) {
+					const lowerName = name!.toLowerCase()
+					if (parent && lowerName === parent.type.toLowerCase()) {
+						state = null //we have come to the end of all that had to be read
+					}
+					else if (matchesAncestor(parent, lowerName)) {
+						//the closing tag belongs to an ancestor: implicitly end this level
+						//without consuming the tag, so the matching ancestor level handles it
+						return {children, length: tagStartIndex! - originalIndex}
+					}
 					else {
-						if (SINGLETON_TAGS.has(name!.toLowerCase())) selfClosing = true
-						if (selfClosing!) {
-							children.push(new HtmlTag({
-								type: name!,
-								attributes: attributes!,
-								children: [],
-								parent
-							}))
-						}
-						else {
-							const tag = new HtmlTag({type: name!, attributes: attributes!, parent})
-							const {children: subChildren, length} = readChildren(string, index + 1, tag, trimText)
-							tag.setChildren(subChildren)
-							children.push(tag)
-							index += length
-						}
-						text = ''
+						//stray closing tag with no matching open element: drop it and keep reading this level
 						state = READING_TEXT
+						text = ''
 					}
 				}
 				else {
-					if (!closingTag!) name! += char //name is not necessary for a closing tag
+					if (SINGLETON_TAGS.has(name!.toLowerCase())) selfClosing = true
+					if (selfClosing!) {
+						children.push(new HtmlTag({
+							type: name!,
+							attributes: attributes!,
+							children: [],
+							parent
+						}))
+					}
+					else {
+						const tag = new HtmlTag({type: name!, attributes: attributes!, parent})
+						const {children: subChildren, length} = readChildren(string, index + 1, tag, trimText)
+						tag.setChildren(subChildren)
+						children.push(tag)
+						index += length
+					}
+					text = ''
+					state = READING_TEXT
 				}
-				break
+			}
+			else {
+				name! += char
+			}
+			break
 			case READING_ATTRIBUTE_NAME:
 				const tagChar = char === '/' || char === '>'
 				if (char === '=') state = LOOKING_FOR_VALUE_START

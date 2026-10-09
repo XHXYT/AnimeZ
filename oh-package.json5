@@ -10,6 +10,7 @@
   "version": "1.0.1",
   "dynamicDependencies": {},
   "dependencies": {
-    "@ohos/danmakuflamemaster": "^2.1.3"
+    "@ohos/danmakuflamemaster": "^2.1.3",
+    "@devzeng/quickjs": "^0.1.0"
   }
 }

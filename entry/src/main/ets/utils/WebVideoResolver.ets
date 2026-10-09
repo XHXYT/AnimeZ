@@ -33,7 +33,7 @@ export class WebVideoResolver {
    * 前 10 秒内收到的 403 视为站点残留的自动尝试，忽略不回传。
    */
   private static readonly MANUAL_HOOK_JS: string =
-    `(function(){var posted=false;var t0=Date.now();function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}function sniff(u){try{u=String(u);if(u.indexOf('http')===0&&u.indexOf('.m3u8')>=0){post(u);}}catch(e){}}function urlOk(u){if(typeof u!=='string'){return '';}if(u.indexOf('https://')===0||u.indexOf('http://')===0){return u;}return '';}function pollTry(){try{var A=window.Artplayer||window.ArtPlayer;if(A&&A.instances&&A.instances.length){for(var i=0;i<A.instances.length;i++){var a=A.instances[i];var u=(a&&a.option&&typeof a.option.url==='string')?a.option.url:'';var h=(a&&a.hls&&typeof a.hls.url==='string')?a.hls.url:'';var r=urlOk(u)||urlOk(h);if(r){post(r);return;}}}}catch(e){}try{var v=document.querySelector('video');if(v){var s=urlOk(v.currentSrc||v.src);if(s){post(s);return;}}}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{sniff(u);if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};var of=window.fetch;window.fetch=function(){try{var a=arguments[0];sniff(typeof a==='string'?a:((a&&a.url)||''));}catch(e){}return of.apply(this,arguments);};var iv=setInterval(function(){if(posted){clearInterval(iv);return;}pollTry();},500);setTimeout(function(){clearInterval(iv);},110000);return 'HOOK';})()`;
+    `(function(){var posted=false;var t0=Date.now();function pb(t){try{var vf=document.getElementById('videoiframe');var pl=document.querySelector('#playleft');console.log('MHOOK'+t+' vf='+(vf?('Y:'+String(vf.src).substring(0,60)):'N')+'|plk='+(pl?pl.childElementCount:'NULL'));}catch(e){}}pb(1);setTimeout(function(){pb(2)},3000);setTimeout(function(){pb(3)},8000);function post(v){if(posted){return;}try{window.animeBridge.onLink(String(v));posted=true;}catch(e){}}function sniff(u){try{u=String(u);if(u.indexOf('http')===0&&u.indexOf('.m3u8')>=0){post(u);}}catch(e){}}function urlOk(u){if(typeof u!=='string'){return '';}if(u.indexOf('https://')===0||u.indexOf('http://')===0){return u;}return '';}function pollTry(){try{var A=window.Artplayer||window.ArtPlayer;if(A&&A.instances&&A.instances.length){for(var i=0;i<A.instances.length;i++){var a=A.instances[i];var u=(a&&a.option&&typeof a.option.url==='string')?a.option.url:'';var h=(a&&a.hls&&typeof a.hls.url==='string')?a.hls.url:'';var r=urlOk(u)||urlOk(h);if(r){post(r);return;}}}}catch(e){}try{var v=document.querySelector('video');if(v){var s=urlOk(v.currentSrc||v.src);if(s){post(s);return;}}}catch(e){}}var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{sniff(u);if(String(u).indexOf('resolve-play-url')>=0){var x=this;x.addEventListener('load',function(){try{var st=x.status;var late=Date.now()-t0>10000;if(st>=200&&st<300){var r=JSON.parse(x.responseText);var d=(r&&r.data)?r.data:r;if(d&&d.url&&String(d.url).indexOf('http')===0){post(d.url);}else{post('ERR_SITE_BADRESP');}}else if(st===403){if(late){post('ERR_HTTP_403');}}else{if(late){post('ERR_HTTP_'+st);}}}catch(e){}});}}catch(e){}return oo.apply(this,arguments);};var of=window.fetch;window.fetch=function(){try{var a=arguments[0];sniff(typeof a==='string'?a:((a&&a.url)||''));}catch(e){}return of.apply(this,arguments);};var iv=setInterval(function(){if(posted){clearInterval(iv);return;}pollTry();},500);setTimeout(function(){clearInterval(iv);},110000);return 'HOOK';})()`;
 
   /** 解析结果缓存（key 为原始 _|_ 链接），内存级，应用重启失效 */
   private static cache: Map<string, ResolvedLinkEntry> = new Map();
@@ -41,6 +41,18 @@ export class WebVideoResolver {
   private static readonly CACHE_TTL_MS: number = 30 * 60 * 1000;
   /** 串行队列尾：解析通道单用，并发请求依次执行 */
   private static chain: Promise<void> = Promise.resolve();
+  /** 解析被取消（用户在手动模态点取消 / 详情页已销毁）：置位后当前解析链快速失败，调用方据此终止换线路重试 */
+  private static cancelled: boolean = false;
+
+  /**
+   * 取消当前解析（详情页销毁时调用）：让在途轮询立即返回并收起 WebView 悬浮层
+   */
+  static cancelActive(): void {
+    WebVideoResolver.cancelled = true
+    AnimeState.webJsVideoLink = 'ERR_CANCELLED'
+    AnimeState.showWebView = false
+    M3U8Sniffer.disarm()
+  }
 
   /**
    * 解析视频链接
@@ -51,6 +63,8 @@ export class WebVideoResolver {
     if (!input || !input.includes('_|_')) {
       return input
     }
+    // 新一轮解析开启：清掉上一次的取消残留
+    WebVideoResolver.cancelled = false
     if (!skipCache) {
       const cached = WebVideoResolver.peekCache(input)
       if (cached !== '') {
@@ -76,7 +90,7 @@ export class WebVideoResolver {
 
   /**
    * 解析含 _|_ 的网页链接
-   * 阶段一：自动解析，最多2次尝试（_r 参数供页面 JS 区分尝试序号，每次重建 WebView 获取新凭证）
+   * 阶段一：自动解析，最多2次尝试（_m 时间戳参数与站点播放器自身加载方式一致，部分站点对陌生参数如 _r 返回假页或挂起）
    * 阶段二：自动失败后进入手动点击兜底模式
    */
   private static async resolveInner(input: string): Promise<string> {
@@ -94,7 +108,7 @@ export class WebVideoResolver {
       AnimeState.webviewManual = false
       AnimeState.webviewManualReason = ''
       AnimeState.webJsVideoLink = ''
-      AnimeState.webviewUrl = `${rawLink}${sep}_r=${attempt}`
+      AnimeState.webviewUrl = `${rawLink}${sep}_m=${Date.now()}`
       AnimeState.runJs = js
       M3U8Sniffer.arm()
       // src 变化不会触发已存在的 Web 组件重新加载，必须重建组件
@@ -110,6 +124,10 @@ export class WebVideoResolver {
         return result
       }
       lastErr = result
+      // 解析被取消（页面销毁/用户取消）：不再进入手动兜底模式，快速失败
+      if (WebVideoResolver.cancelled) {
+        break
+      }
       // 仅凭证失败(403)时换帧率参数再试一次，其它错误直接进入手动兜底
       if (!lastErr.startsWith('ERR_HTTP_403')) {
         break
@@ -117,6 +135,11 @@ export class WebVideoResolver {
     }
 
     // 阶段二：自动解析失败，进入手动点击兜底模式（显示真实页面，用户点击播放后捕获站点自身解析结果）
+    // 已取消时直接失败收尾，不再弹出手动模态
+    if (WebVideoResolver.cancelled) {
+      WebVideoResolver.finishWebView()
+      throw new Error('播放解析已取消: ERR_CANCELLED')
+    }
     Logger.e('tips', `WebVideoResolver 自动解析失败(${lastErr})，进入手动点击模式`)
     let reason = '自动解析未能获取播放地址'
     if (lastErr.startsWith('ERR_HTTP_403')) {
@@ -231,6 +254,10 @@ export function initWebVideoResolver(): void {
   registerWebResolveFns({
     resolveWebVideoUrl: (url: string, skipCache: boolean): Promise<string> => {
       return WebVideoResolver.resolve(url, skipCache)
+    },
+    setWebViewUserAgent: (ua: string): void => {
+      Logger.e('tips', `WebVideoResolver 设置WebView UA: ${ua === '' ? '(默认)' : ua}`)
+      AnimeState.webviewUserAgent = ua
     }
   })
 }

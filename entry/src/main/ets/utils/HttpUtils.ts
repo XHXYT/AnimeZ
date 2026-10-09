@@ -4,6 +4,12 @@ import { AnyNode } from './thirdpart/htmlsoup/parse';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
+/** JSON POST 完整响应（postJsonFull 返回）：响应文本 + 原始 Set-Cookie 列表 */
+export interface HttpFullResponse {
+    text: string;
+    setCookies: string[];
+}
+
 /**
  * 网络工具类
  */
@@ -27,6 +33,15 @@ export default class HttpUtils {
      * 获取网页内容
      * @param url
      */
+    /**
+     * URL 规范化：非 ASCII 字符（如中文查询参数）百分号编码。
+     * http 模块与 AVPlayer 均要求编码后的 URL，原始中文会直接抛错；
+     * encodeURI 不动 & = ? / : 与已有 %XX，不会二次编码。
+     */
+    static normalizeUrl(url: string): string {
+        return /[^\x00-\x7F]/.test(url) ? encodeURI(url) : url
+    }
+
     static async getString(url: string, headers?: object): Promise<string> {
         try {
             return await HttpUtils.doGetString(url, headers)
@@ -51,7 +66,7 @@ export default class HttpUtils {
         }
        // Logger.d('HttpUtils.getString', '请求头 = ' + JSON.stringify(header))
 
-        const resp: http.HttpResponse = await httpRequest.request(url, {
+        const resp: http.HttpResponse = await httpRequest.request(HttpUtils.normalizeUrl(url), {
             method: http.RequestMethod.GET,
             readTimeout: 20000,
             connectTimeout: 20000,
@@ -64,6 +79,31 @@ export default class HttpUtils {
         } else {
             throw new Error(resp.responseCode.toString())
         }
+    }
+
+    /**
+     * 获取二进制响应体（如视频分片），可带自定义请求头（如 Referer）
+     */
+    static async getBytes(url: string, headers?: object): Promise<ArrayBuffer> {
+        let httpRequest = http.createHttp()
+        let header = {
+            'user-agent': USER_AGENT
+        }
+        if (headers) {
+            header = Object.assign(header, headers)
+        }
+        const resp: http.HttpResponse = await httpRequest.request(HttpUtils.normalizeUrl(url), {
+            method: http.RequestMethod.GET,
+            connectTimeout: 15000,
+            readTimeout: 30000,
+            expectDataType: http.HttpDataType.ARRAY_BUFFER,
+            header: header
+        })
+        httpRequest.destroy()
+        if (resp.result) {
+            return resp.result as ArrayBuffer
+        }
+        throw new Error('HTTP ' + resp.responseCode)
     }
 
     /**
@@ -97,6 +137,50 @@ export default class HttpUtils {
         } else {
             throw new Error(resp.responseCode.toString())
         }
+    }
+
+    /**
+     * JSON POST 完整响应：响应文本 + 响应 Set-Cookie 列表，
+     * 用于 cookie 登录（登录成功后从响应头捕获会话 Cookie）
+     */
+    static async postJsonFull(url: string, body: string, headers?: object): Promise<HttpFullResponse> {
+        let httpRequest = http.createHttp()
+
+        let header = {
+            'user-agent': USER_AGENT,
+            'content-type': 'application/json'
+        }
+        if (headers) {
+            header = Object.assign(header, headers)
+        }
+
+        const resp: http.HttpResponse = await httpRequest.request(url, {
+            method: http.RequestMethod.POST,
+            readTimeout: 20000,
+            connectTimeout: 20000,
+            expectDataType: http.HttpDataType.STRING,
+            header: header,
+            extraData: body
+        })
+        httpRequest.destroy()
+        const setCookies: string[] = [];
+        const raw = resp.header['set-cookie'] ?? resp.header['Set-Cookie'];
+        if (raw) {
+            const cookieItems: string[] = Array.isArray(raw)
+                ? raw
+                // 单个字符串时可能是多个 Cookie 以逗号拼接
+                : raw.split(/,(?=[^;]+?=)/);
+            cookieItems.forEach((item: string) => {
+                if (item && item.trim().length > 0) {
+                    setCookies.push(item);
+                }
+            });
+        }
+        const text = resp.result ? resp.result as string : '';
+        if (!text && setCookies.length === 0) {
+            throw new Error(resp.responseCode.toString());
+        }
+        return { text: text, setCookies: setCookies };
     }
 
     /**

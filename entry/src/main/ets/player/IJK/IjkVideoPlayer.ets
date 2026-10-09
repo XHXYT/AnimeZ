@@ -42,12 +42,14 @@ export struct IjkVideoPlayer {
       if (this.destroyed) {
         return
       }
-      // 本地沙箱文件：显式 file:// 协议并放开含 file 的白名单，否则 ffmpeg 无法打开本地路径
+      // 本地沙箱文件：显式 file:// 协议，否则 ffmpeg 无法打开本地路径
       let playUrl = url
       if (url.startsWith('/')) {
         playUrl = 'file://' + url
-        this.ijkPlayer.setDataSourceHeader(new Map<string, string>())
       }
+      // 所有地址都需放开协议白名单（含 http/tcp）：原生默认白名单不含 http，
+      // 本地代理 http://127.0.0.1 会在 avformat 打开阶段被拒（onError -10000，不发起连接）
+      this.ijkPlayer.setDataSourceHeader(new Map<string, string>())
       Logger.e('tips', 'IjkVideoPlayer setDataSource: ' + playUrl)
       this.ijkPlayer.setDataSource(playUrl);
       this.playerManager?.setStatus(PlayerStatus.INITIALIZED);
@@ -351,6 +353,7 @@ export struct IjkVideoPlayer {
           return
         }
         Logger.e('tips', 'onError what=' + what + " extra=" + extra)
+        this.playerManager?.setErrorMessage(`播放器错误（${what} ${extra}）`)
         this.playerManager?.setStatus(PlayerStatus.ERROR)
       }
     })
@@ -385,7 +388,10 @@ export struct IjkVideoPlayer {
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", '842225234');
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", '1');
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", '0');
-    this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", '0');
+    // HTTP Range 探测（ffmpeg 默认行为）：启用后 HTTP 流可 seek，
+    // 非 faststart MP4（moov 在文件尾，如 OneDrive 直链）需要 seek 到尾部读 moov 才能开播，
+    // 禁用会导致播放器线性下载整个文件找 moov，大文件必然触发加载看门狗超时
+    this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", '1');
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "timeout", '10000000');
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", '1');
     this.ijkPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", '48');

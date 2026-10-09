@@ -81,10 +81,45 @@ class DataSourceManager {
       Object.assign(headers, config.parserConfig.requestHeaders);
     }
 
+    // cookie 模式：登录后从响应头捕获 Set-Cookie，拼接为会话凭证（后续请求经 authHeaderName=Cookie 回放）
+    if ((login.type ?? 'api') === 'cookie') {
+      const full = await HttpUtils.postJsonFull(url, JSON.stringify(body), headers);
+      if (full.text) {
+        const resp = JSON.parse(full.text);
+        if (resp && typeof resp === 'object' && resp.code !== undefined && resp.code !== 0 && resp.code !== 200) {
+          throw new Error(resp.msg || resp.message || `登录失败，错误码 ${resp.code}`);
+        }
+      }
+      const cookiePairs: string[] = [];
+      let expiresAt = 0;
+      for (const rawCookie of full.setCookies) {
+        const pair = rawCookie.split(';')[0].trim();
+        if (pair) {
+          cookiePairs.push(pair);
+        }
+        if (expiresAt === 0) {
+          const expiresMatch = rawCookie.match(/[Ee]xpires=([^;]+)/);
+          if (expiresMatch) {
+            const parsed = Date.parse(expiresMatch[1]);
+            if (!isNaN(parsed)) {
+              expiresAt = parsed;
+            }
+          }
+        }
+      }
+      const cookieStr = cookiePairs.join('; ');
+      if (!cookieStr) {
+        throw new Error('登录失败：响应未返回会话 Cookie');
+      }
+      await AuthStore.saveToken(key, cookieStr, username, expiresAt);
+      Logger.i(this, `DataSourceManager.loginSource Cookie login success: ${key}, ${cookiePairs.length} cookies`);
+      return;
+    }
+
     const respText = await HttpUtils.postJson(url, JSON.stringify(body), headers);
     const resp = JSON.parse(respText);
     if (resp && typeof resp === 'object' && resp.code !== undefined && resp.code !== 0) {
-      throw new Error(resp.msg || `登录失败，错误码 ${resp.code}`);
+      throw new Error(resp.msg || resp.message || `登录失败，错误码 ${resp.code}`);
     }
 
     // 按点分路径提取凭证

@@ -24,12 +24,34 @@ import AuthStore from '../utils/AuthStore';
 import HttpSession from '../utils/HttpSession';
 import { CaptchaBridge } from './CaptchaBridge';
 import { getConcurrentTaskFns } from './TaskRegistry';
+import { getWebResolveFns } from '../utils/download/WebResolveRegistry';
+import TsStripProxyServer from '../utils/m3u8/TsStripProxyServer';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
 
 // 扩展SelectorConfig类型以支持更灵活的配置
 type SelectorValue = string | { selector: string; postProcess?: ProcessConfig };
 type ExtendedSelectorConfig = Record<string, SelectorValue>;
+
+/** 多步提取 postProcess 产出请求指令的原始 JSON 形态 */
+interface StepRequestRaw {
+  __request?: boolean;
+  url?: string;
+  // 备用地址：主地址请求失败（超时/网络错误）时改用，需与主地址接受相同请求
+  fallbackUrl?: string;
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+}
+
+/** 规范化后的请求指令：下一步按此发起 HTTP 请求 */
+interface StepRequest {
+  url: string;
+  fallbackUrl: string;
+  method: string;
+  body: string;
+  headers: Record<string, string>;
+}
 
 /**
  * 将星期标题文本解析为 1-7（周一=1）：支持"星期三/周三/Wednesday/Wed/水曜日"等写法；
@@ -74,6 +96,8 @@ export default class GenericDataSource implements DataSource {
   private sourceType: 'html' | 'json';
   private requestHeaders?: Record<string, string>;
   private loginConfig?: LoginConfig;
+  // 源级 User-Agent：WebView 嗅探解析时应用（部分站点按 UA 返回不同页面）
+  private userAgent: string;
   // 验证码会话：搜索验证码流程共享 Cookie（首次搜索种下会话，验证通过后同会话重放）
   private captchaSession: HttpSession = new HttpSession();
 
@@ -87,6 +111,7 @@ export default class GenericDataSource implements DataSource {
     this.sourceType = config.parserConfig?.sourceType || 'html';
     this.requestHeaders = config.parserConfig?.requestHeaders;
     this.loginConfig = config.login;
+    this.userAgent = config.userAgent || '';
 
     // 验证必要字段
     if (!this.key) throw new Error('Missing key in data source configuration');
@@ -480,7 +505,7 @@ export default class GenericDataSource implements DataSource {
         config.directorSelector ? this.selectText(doc, config.directorSelector) : Promise.resolve(''),
         config.updateTimeSelector ? this.selectText(doc, config.updateTimeSelector) : Promise.resolve(''),
         config.protagonistSelector ? this.selectText(doc, config.protagonistSelector) : Promise.resolve(''),
-        this.extractRecommends(doc, config.recommends),
+        this.extractRecommends(doc, config.recommends, url),
         this.extractEpisodes(doc, config.episodes).then(episodes => {
           return episodes.map(episodes => {
             return {
@@ -533,10 +558,63 @@ export default class GenericDataSource implements DataSource {
       const config = this.parserConfig.videoUrl;
       let url = ''
 
-      if (config.pattern === 'json') {
-        // JSON 模式：link 即播放地址接口，直接请求并按路径取值
+      if (config.steps && config.steps.length > 0) {
+        // 多步精准提取：纯 HTTP 逐页请求+提取，无 WebView（适用于播放器页由 hls.js 接管 video.src、
+        // WebView 注入存在 blob: 竞态的站点，如 E站弹幕网 弹幕播放器页）。
+        // 某步 postProcess 可返回请求指令（StepRequest），下一步按指令的 method/body/headers 请求，
+        // 用于链路中含 POST 表单接口的站点（如 MacCMS 解析器 api.php）
+        let current = link;
+        let pendingRequest: StepRequest | null = null;
+        for (let i = 0; i < config.steps.length; i++) {
+          const step = config.steps[i];
+          let next = '';
+          let pageText = '';
+          if (pendingRequest !== null) {
+            const req = pendingRequest;
+            pendingRequest = null;
+            pageText = await this.fetchByStepRequest(req);
+          } else {
+            pageText = await this.fetchStepText(current);
+          }
+          if (step.pattern === 'regex' && step.urlSelector) {
+            const match = pageText.match(new RegExp(step.urlSelector));
+            if (match && match[1]) {
+              next = match[1];
+            }
+          } else if (step.urlSelector) {
+            const doc = parse(pageText);
+            const urlSelectorParts = step.urlSelector.split('@');
+            next = await this.selectAttribute(doc, urlSelectorParts[0], urlSelectorParts[1]);
+          }
+          if (!next) {
+            Logger.e('tips', `parseVideoUrl 多步提取第${i + 1}步失败，输入: ${current}`);
+            throw new Error(`播放地址第${i + 1}步提取失败`);
+          }
+          if (step.postProcess) {
+            next = await this.applyLegacyPostProcess(next, step.postProcess);
+          }
+          // postProcess 产出请求指令：下一步按指令请求，当前值不作为请求地址
+          const directive = this.parseStepRequest(next);
+          if (directive !== null) {
+            pendingRequest = directive;
+            Logger.d('tips', `parseVideoUrl 多步提取第${i + 1}步产出请求指令: ${directive.method} ${directive.url}`);
+            continue;
+          }
+          // 非 ASCII 百分号编码：中间结果供下次 HTTP 请求、最终结果供播放器，均需编码
+          next = HttpUtils.normalizeUrl(next);
+          Logger.d('tips', `parseVideoUrl 多步提取第${i + 1}步: ${current} -> ${next}`);
+          current = next;
+        }
+        if (pendingRequest !== null) {
+          throw new Error('播放地址多步提取以请求指令结尾，缺少提取步骤');
+        }
+        url = current;
+      } else if (config.pattern === 'json') {
+        // JSON 模式：配置 urlTemplate 时以渲染后的模板为接口地址（剧集链接仅作 {link} 占位符上下文），
+        // 否则 link 即播放地址接口，直接请求并按路径取值
+        const requestUrl = config.urlTemplate ? this.renderTemplate(config.urlTemplate, { link: link }) : link;
         const urlBody = config.body ? this.renderJsonBodyTemplate(config.body, { link: link }) : undefined;
-        const resp = await this.requestJson(link, true, config.method, urlBody);
+        const resp = await this.requestJson(requestUrl, true, config.method, urlBody);
         const valuePath = config.valuePath || 'data.url';
         const value = this.getJsonPath(resp, valuePath);
         if (value === null || value === undefined || String(value) === '') {
@@ -587,9 +665,24 @@ export default class GenericDataSource implements DataSource {
         Logger.e('tips', `parseVideoUrl final url = ${url}`);
       }
 
+      // TS 剥壳本地代理：直链流为伪装图片的 TS（原生播放器无法解复用）时，经 127.0.0.1 代理代抓剥壳还原；
+      // 仅源显式配置 proxy 时生效，包装失败回退原始地址；配置 urlPattern 时仅匹配的地址走代理
+      if (config.proxy && config.proxy.type === 'tsStrip' && url && url.indexOf('_|_') < 0
+        && (url.startsWith('http://') || url.startsWith('https://'))
+        && (!config.proxy.urlPattern || new RegExp(config.proxy.urlPattern).test(url))) {
+        try {
+          url = await TsStripProxyServer.wrap(url, config.proxy.referer ?? '');
+          Logger.d('tips', `parseVideoUrl TS剥壳代理包装后: ${url}`);
+        } catch (e) {
+          Logger.e('fail', 'parseVideoUrl TS剥壳代理包装失败，使用原始地址', e);
+        }
+      }
+
       // 如果存在内嵌提取配置（webview）
       if (config.iframeSelector) {
         console.log(`parseVideoUrl 存在内嵌视频解析配置`)
+        // 应用源级 UA 后再发起 WebView 解析（部分站点按 UA 返回不同页面，影响嗅探成功率）
+        getWebResolveFns().setWebViewUserAgent(this.userAgent)
         // 获取iframe页 视频URL (传递到UI层去解析)
         const iframeUrl = `${url}_|_${config.iframeSelector}`
         console.log(`parseVideoUrl 内嵌视频解析为link：${iframeUrl}`)
@@ -603,10 +696,83 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
+   * 解析多步提取中间值为请求指令；非指令格式返回 null
+   */
+  private parseStepRequest(value: string): StepRequest | null {
+    if (!value || !value.startsWith('{') || value.indexOf('"__request"') < 0) {
+      return null;
+    }
+    try {
+      const raw = JSON.parse(value) as StepRequestRaw;
+      if (raw.__request !== true || typeof raw.url !== 'string' || !raw.url.startsWith('http')) {
+        return null;
+      }
+      const req: StepRequest = {
+        url: raw.url,
+        fallbackUrl: typeof raw.fallbackUrl === 'string' ? raw.fallbackUrl : '',
+        method: raw.method === 'POST' ? 'POST' : 'GET',
+        body: typeof raw.body === 'string' ? raw.body : '',
+        headers: raw.headers ?? {}
+      };
+      return req;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * 多步提取页文本获取：失败（超时/卡流/网络抖动）时同地址重试一次
+   * （部分站点响应体传输存在间歇性中途停滞，新建连接即可恢复）
+   */
+  private async fetchStepText(url: string): Promise<string> {
+    try {
+      return await HttpUtils.getString(url)
+    } catch (e) {
+      Logger.e('tips', `parseVideoUrl 步骤页获取失败，同地址重试: ${url}`, e)
+      return await HttpUtils.getString(url)
+    }
+  }
+
+  /**
+   * 按请求指令发起 HTTP 请求返回响应文本（POST 经 postJson，content-type 由指令 headers 决定）；
+   * 主地址失败（超时/网络错误）且配置了 fallbackUrl 时改用备用地址重试一次
+   */
+  private async fetchByStepRequest(req: StepRequest): Promise<string> {
+    if (req.method === 'POST') {
+      try {
+        return await HttpUtils.postJson(req.url, req.body, req.headers)
+      } catch (e) {
+        if (req.fallbackUrl === '') {
+          throw e as Error
+        }
+        Logger.e('tips', `parseVideoUrl 请求指令主地址失败，改用备用地址: ${req.fallbackUrl}`, e)
+        return await HttpUtils.postJson(req.fallbackUrl, req.body, req.headers)
+      }
+    }
+    try {
+      return await HttpUtils.getString(req.url, req.headers)
+    } catch (e) {
+      if (req.fallbackUrl === '') {
+        throw e as Error
+      }
+      Logger.e('tips', `parseVideoUrl 请求指令主地址失败，改用备用地址: ${req.fallbackUrl}`, e)
+      return await HttpUtils.getString(req.fallbackUrl, req.headers)
+    }
+  }
+
+  /**
    * 应用旧版后处理（向后兼容）
    */
   private async applyLegacyPostProcess(url: string, postProcess: string): Promise<string> {
     let processedUrl = url;
+
+    // 新版脚本后处理：以 "script:" 前缀声明，其余为 JS 代码（result 为输入值，return 返回结果）。
+    // 走 ScriptProcessor（QuickJS 引擎，可用 JSON/RegExp/encodeURIComponent/encodeURIComponent 等完整标准库），
+    // 脚本异常或返回空时保留原值
+    if (postProcess.startsWith('script:')) {
+      const out = await ScriptProcessor.execute<string>(url, { type: 'script', script: postProcess.substring(7) });
+      return out === null || out === undefined ? url : out;
+    }
 
     if (postProcess.includes("substringBetween")) {
       const [start, end] = postProcess
@@ -811,21 +977,108 @@ export default class GenericDataSource implements DataSource {
   }
 
   /**
+   * 剧集条目提取（多路线-按路线选择器模式使用）：
+   * 逐条目按 itemSelectors.url（selector@attr）取链接、itemSelectors.title 取标题
+   */
+  private async extractEpisodeItems(items: HtmlTag[], config: EpisodeConfig): Promise<EpisodeInfo[]> {
+    const episodeInfos = await Promise.all(items.map(async (item): Promise<EpisodeInfo> => {
+      const urlSelector = config.itemSelectors.url;
+      const titleSelector = config.itemSelectors.title;
+
+      const urlSelectorStr = typeof urlSelector === 'string' ? urlSelector : urlSelector.selector;
+      const urlSelectorParts = urlSelectorStr.split('@');
+      const urlSel = urlSelectorParts[0];
+      const urlAttr = urlSelectorParts[1];
+
+      const url = await this.selectAttribute(item, urlSel, urlAttr);
+
+      const titleSelectorStr = typeof titleSelector === 'string' ? titleSelector : titleSelector.selector;
+      const title = await this.selectText(item, titleSelectorStr);
+
+      console.log(`extractEpisodes 按路线选择器 提取的url：${url} link：${url.includes('http') ? url : (this.baseUrl + url)}`)
+      return {
+        link: url.includes('http') ? url : (this.baseUrl + url),
+        title,
+        desc: title
+      };
+    }));
+    return episodeInfos;
+  }
+
+  /**
    * 提取剧集列表
    */
   private async extractEpisodes(doc: AnyNode, config: EpisodeConfig): Promise<EpisodeList[]> {
     const episodes: EpisodeList[] = [];
 
-    if (config.routeTitlesSelector && config.routeContainersSelector) {
+    if (config.routeTitlesSelector && config.routeItemSelectors && config.routeItemSelectors.length > 0) {
+      // 多路线-按路线选择器模式：路线标题与各路线剧集选择器同索引配对
+      //（适用于线路按钮与剧集组无父子关系、仅靠选择器区分的页签式页面，如 E站弹幕网）
+      const routeTitles = select(doc, config.routeTitlesSelector);
+      const scope: AnyNode = config.containerSelector
+        ? (selectFirst(doc, config.containerSelector) ?? doc)
+        : doc;
+
+      for (let i = 0; i < Math.min(routeTitles.length, config.routeItemSelectors.length); i++) {
+        let routeTitle = textContent(routeTitles[i]);
+        if (config.routeTitleProcess) {
+          routeTitle = await ScriptProcessor.execute<string>(routeTitle, config.routeTitleProcess);
+        }
+        // 关键词过滤：命中即跳过整条路线
+        if (config.routeExcludeKeywords && config.routeExcludeKeywords.length > 0) {
+          let excluded = false;
+          for (let k = 0; k < config.routeExcludeKeywords.length; k++) {
+            const keyword = config.routeExcludeKeywords[k];
+            if (keyword && routeTitle.includes(keyword)) {
+              excluded = true;
+              break;
+            }
+          }
+          if (excluded) {
+            console.log(`extractEpisodes 路线"${routeTitle}"命中排除关键词，跳过`);
+            continue;
+          }
+        }
+
+        const items = select(scope, config.routeItemSelectors[i]);
+        if (items.length === 0) {
+          console.log(`extractEpisodes 路线"${routeTitle}"无剧集，跳过`);
+          continue;
+        }
+        const episodeInfos = await this.extractEpisodeItems(items, config);
+        episodes.push({ title: routeTitle, episodes: episodeInfos });
+      }
+    } else if (config.routeTitlesSelector && config.routeContainersSelector) {
       // 多路线情况
       const routeTitles = select(doc, config.routeTitlesSelector);
       const routeContainers = select(doc, config.routeContainersSelector);
 
       for (let i = 0; i < Math.min(routeTitles.length, routeContainers.length); i++) {
         const title = textContent(routeTitles[i]);
+        // 关键词过滤：命中即跳过整条路线（标题与容器同索引，天然同步跳过）
+        if (config.routeExcludeKeywords && config.routeExcludeKeywords.length > 0) {
+          let excluded = false;
+          for (let k = 0; k < config.routeExcludeKeywords.length; k++) {
+            const keyword = config.routeExcludeKeywords[k];
+            if (keyword && title.includes(keyword)) {
+              excluded = true;
+              break;
+            }
+          }
+          if (excluded) {
+            console.log(`extractEpisodes 路线"${title}"命中排除关键词，跳过`);
+            continue;
+          }
+        }
         const container = routeContainers[i];
 
         const items = select(container, config.itemSelector);
+        if (items.length === 0) {
+          // 站点常渲染全部路线页签但只为非空路线输出容器（如黑猫播放Ⅰ-Ⅵ 仅1个movurl），
+          // 索引错配出的空路线直接跳过，避免出现无剧集的幽灵线路
+          console.log(`extractEpisodes 多路线 路线"${title}"无剧集，跳过`);
+          continue;
+        }
         const episodeInfos = await Promise.all(items.map(async (item) => {
           const urlSelector = config.itemSelectors.url;
           const titleSelector = config.itemSelectors.title;
@@ -890,16 +1143,35 @@ export default class GenericDataSource implements DataSource {
 
   /**
    * 提取推荐列表
+   * urlTemplate 配置时推荐列表独立请求该页面（相对路径拼 baseUrl 或绝对，如复用站内热门搜索页），
+   * 未配置时沿用详情页文档（旧行为不变）；独立页请求失败仅放弃推荐，不影响详情
    */
-  private async extractRecommends(doc: AnyNode, config: RecommendConfig): Promise<VideoInfo[]> {
-    const items = select(doc, config.listSelector);
+  private async extractRecommends(doc: AnyNode, config: RecommendConfig, detailUrl: string): Promise<VideoInfo[]> {
+    let target: AnyNode = doc;
+    if (config.urlTemplate) {
+      // 渲染占位符（{rand:min,max,step} 随机翻页、{link} 详情页地址、{link#正则#替换} 地址变换等），
+      // 相对路径拼 baseUrl
+      const tpl = this.renderTemplate(config.urlTemplate, { link: detailUrl });
+      const requestUrl = tpl.startsWith('http') ? tpl : this.baseUrl + tpl;
+      console.log(`extractRecommends 推荐独立页请求：${requestUrl}`);
+      try {
+        target = await this.parseHtml(requestUrl);
+      } catch (e) {
+        Logger.e('fail', `推荐独立页请求失败：${requestUrl}`, e);
+        return [];
+      }
+    }
+    const items = select(target, config.listSelector);
+    console.log(`extractRecommends 推荐列表选择器 ${config.listSelector} 命中 ${items.length} 项`);
 
     // 并行处理所有推荐项
     const recommendPromises = items.map(async (item) => {
       return await this.extractVideoInfo(item, config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
     });
 
-    return await Promise.all(recommendPromises);
+    const result = await Promise.all(recommendPromises);
+    console.log(`extractRecommends 推荐提取完成：${result.length} 项`);
+    return result;
   }
 
   private async parseHtml(url: string): Promise<AnyNode> {
@@ -966,6 +1238,33 @@ export default class GenericDataSource implements DataSource {
       if (name === 'baseUrl') {
         return this.baseUrl;
       }
+      if (name.startsWith('rand:')) {
+        return this.renderRandValue(name.substring('rand:'.length));
+      }
+      // 值变换占位符 {path#search#replace}：取 context 值后做一次正则替换，
+      // 如 {link#^https?://[^/]+/show/(\d+)\.html$#/play/$1-0-0.html} 由详情页地址构造播放页地址
+      const hashIdx = name.indexOf('#');
+      if (hashIdx >= 0) {
+        const path = name.substring(0, hashIdx).trim();
+        const rest = name.substring(hashIdx + 1);
+        const hashIdx2 = rest.indexOf('#');
+        if (path !== '' && hashIdx2 >= 0) {
+          const search = rest.substring(0, hashIdx2);
+          const replace = rest.substring(hashIdx2 + 1);
+          const rawValue = this.getJsonPath(context, path);
+          if (rawValue === null || rawValue === undefined) {
+            return '';
+          }
+          const strValue = Array.isArray(rawValue)
+            ? rawValue.filter(item => item !== null && item !== undefined).map(item => String(item)).join('/')
+            : String(rawValue);
+          try {
+            return strValue.replace(new RegExp(search), replace);
+          } catch (error) {
+            return strValue;
+          }
+        }
+      }
       const value = this.getJsonPath(context, name);
       if (value === null || value === undefined) {
         return '';
@@ -975,6 +1274,25 @@ export default class GenericDataSource implements DataSource {
       }
       return String(value);
     });
+  }
+
+  /**
+   * 随机占位符 {rand:min,max,step}：在 [min, max] 区间内按 step 步长随机取一个值
+   * （如 {rand:0,200,10} → 0/10/20/…/200），用于推荐等场景的随机翻页；参数非法时返回 0
+   */
+  private renderRandValue(spec: string): string {
+    const parts = spec.split(',');
+    if (parts.length !== 3) {
+      return '0';
+    }
+    const min = parseInt(parts[0], 10);
+    const max = parseInt(parts[1], 10);
+    const step = parseInt(parts[2], 10);
+    if (isNaN(min) || isNaN(max) || isNaN(step) || step <= 0 || max < min) {
+      return '0';
+    }
+    const stepCount = Math.floor((max - min) / step) + 1;
+    return String(min + Math.floor(Math.random() * stepCount) * step);
   }
 
   /**
@@ -1015,6 +1333,30 @@ export default class GenericDataSource implements DataSource {
       if (name === 'baseUrl') {
         return this.baseUrl;
       }
+      // 值变换占位符 {path#search#replace}：取 context 值做一次正则替换后再转义嵌入，
+      // 如 {link#^.*[?&]ep=(\d+).*$#$1} 从剧集链接中提取剧集编号
+      const hashIdx = name.indexOf('#');
+      if (hashIdx >= 0) {
+        const path = name.substring(0, hashIdx).trim();
+        const rest = name.substring(hashIdx + 1);
+        const hashIdx2 = rest.indexOf('#');
+        if (path !== '' && hashIdx2 >= 0) {
+          const search = rest.substring(0, hashIdx2);
+          const replace = rest.substring(hashIdx2 + 1);
+          const rawValue = this.getJsonPath(context, path);
+          if (rawValue === null || rawValue === undefined) {
+            return '';
+          }
+          const strValue = Array.isArray(rawValue)
+            ? rawValue.filter(item => item !== null && item !== undefined).map(item => String(item)).join('/')
+            : String(rawValue);
+          try {
+            return this.jsonEscapeValue(strValue.replace(new RegExp(search), replace));
+          } catch (error) {
+            return this.jsonEscapeValue(strValue);
+          }
+        }
+      }
       const value = this.getJsonPath(context, name);
       if (value === null || value === undefined) {
         return '';
@@ -1052,7 +1394,7 @@ export default class GenericDataSource implements DataSource {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       && parsed.code !== undefined && parsed.code !== 0 && parsed.code !== 200) {
-      throw new Error(parsed.msg || `接口返回错误码 ${parsed.code}`);
+      throw new Error(parsed.msg || parsed.message || `接口返回错误码 ${parsed.code}`);
     }
     return parsed;
   }
@@ -1306,6 +1648,21 @@ export default class GenericDataSource implements DataSource {
       // 插值上下文：详情字段 + 路线项字段（路线项优先）
       const context = Object.assign({}, detailData, route);
       const routeTitle = this.renderTemplate(titleTemplate, context);
+      // 关键词过滤：路线标题命中任一关键词即跳过整条路线（与 HTML 多路线行为一致）
+      if (config.routeExcludeKeywords && config.routeExcludeKeywords.length > 0) {
+        let excluded = false;
+        for (let k = 0; k < config.routeExcludeKeywords.length; k++) {
+          const keyword = config.routeExcludeKeywords[k];
+          if (keyword && routeTitle.includes(keyword)) {
+            excluded = true;
+            break;
+          }
+        }
+        if (excluded) {
+          console.log(`extractJsonEpisodes 路线"${routeTitle}"命中排除关键词，跳过`);
+          continue;
+        }
+      }
       try {
         let list: object | null = null;
         if (sectionsUrlTemplate) {
@@ -1353,10 +1710,13 @@ export default class GenericDataSource implements DataSource {
     }
     try {
       const url = this.renderTemplate(config.jsonUrlTemplate, detailData);
+      console.log(`extractJsonRecommends 推荐接口请求：${url}`);
       const recommendBody = config.body ? this.renderJsonBodyTemplate(config.body, detailData) : undefined;
       const resp = await this.requestJson(url, true, config.method, recommendBody);
-      return this.parseJsonVideoList(resp, config.listSelector,
+      const result = await this.parseJsonVideoList(resp, config.listSelector,
         config.itemSelectors as ExtendedSelectorConfig, config.urlNeedBaseUrl, config.enabledHttps);
+      console.log(`extractJsonRecommends 推荐提取完成：${result.length} 项`);
+      return result;
     } catch (e) {
       Logger.e('fail', `解析推荐(JSON)`, e);
       return [];

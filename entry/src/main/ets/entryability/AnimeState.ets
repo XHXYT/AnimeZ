@@ -33,6 +33,8 @@ export class _AnimeState {
   @Trace currentIndex: number = 0
   /** 是否处于二级页面（子页 onShown/onHidden 写入，MyPage 据此刷新历史） */
   @Trace onShow: boolean = false
+  /** pageStack 当前栈顶页面名（navBar/空串表示主页），侧边栏下载/历史入口高亮用 */
+  @Trace topPageName: string = ''
 
   /** 系统深色模式（mediaQuery 监听，用于图标/图片资源切换） */
   @Trace darkModeImage: boolean = false
@@ -49,6 +51,16 @@ export class _AnimeState {
 
   /** PC 全屏页面集合（在 windowMode 下推送至 fullScreenStack） */
   private static readonly FULLSCREEN_PAGES: Set<string> = new Set(['VideoDetailPage', 'LocalVideoPlayerPage'])
+
+  constructor() {
+    // 监听 pageStack 栈顶变化，维护 topPageName（'navBar' 表示回到主页）
+    this.pageStack.setInterception({
+      didShow: (from: NavDestinationContext | NavBar, to: NavDestinationContext | NavBar,
+        operation: NavigationOperation, isAnimated: boolean): void => {
+        this.topPageName = to === 'navBar' ? '' : to.pathInfo.name
+      }
+    })
+  }
 
   /** 智能推栈：全屏页面走 fullScreenStack，其余走 pageStack */
   pushPage(name: string, param: Object, isSingle: boolean = false): void {
@@ -72,6 +84,7 @@ export class _AnimeState {
   clearAllStacks(): void {
     this.fullScreenStack.clear()
     this.pageStack.clear()
+    this.topPageName = ''
   }
 
   /** WebView JS 解析通道：是否显示隐藏 WebView */
@@ -86,6 +99,8 @@ export class _AnimeState {
   @Trace webviewManual: boolean = false
   /** WebView JS 解析通道：手动模式触发原因（展示给用户的当前状态说明） */
   @Trace webviewManualReason: string = ''
+  /** WebView JS 解析通道：自定义 User-Agent（空=系统默认；由源级 userAgent 配置在发起解析时写入） */
+  @Trace webviewUserAgent: string = ''
 
   /** 当前播放媒体标题（投播元数据展示用） */
   @Trace playingTitle: string = ''

@@ -2,6 +2,7 @@
 import Logger from '../utils/Logger';
 import { StringProcessor } from './StringProcessor';
 import { ProcessConfig } from './DataSourceConfig';
+import { getQuickJsFns } from './QuickJsRegistry';
 
 export class ScriptProcessor {
   /**
@@ -34,9 +35,24 @@ export class ScriptProcessor {
   }
 
   /**
-   * 执行安全脚本
+   * 执行安全脚本：优先 QuickJS 引擎（完整 ES 标准库：JSON/RegExp/encodeURIComponent 等，
+   * 每次独立上下文，无宿主 API 泄漏），未注册时回退旧版 new Function 沙箱
    */
   private static async executeScript<T>(input: any, config: ProcessConfig): Promise<T> {
+    const quickjs = getQuickJsFns();
+    if (quickjs !== null) {
+      try {
+        const inputJson = JSON.stringify(input === undefined ? null : input);
+        const contextJson = JSON.stringify(config.context || {});
+        const out = quickjs.evalScript(config.script || '', inputJson, contextJson);
+        // 脚本异常/返回空时返回原值（与引擎级失败语义一致）
+        return (out === null || out === undefined ? input : out) as T;
+      } catch (error) {
+        Logger.e('tips', `ScriptProcessor QuickJS执行失败: ${error.message}`);
+        return input as T;
+      }
+    }
+
     try {
       // 创建受限的执行环境
       const sandbox = this.createSandbox(input, config.context || {});

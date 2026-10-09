@@ -1,4 +1,5 @@
 import VideoInfo from "../../entity/VideoInfo";
+import { CoverImage } from "../CoverImage";
 import { BaseDataSource } from "../../viewmodel/BaseDataSource";
 import { ConfigurationConstant } from "@kit.AbilityKit";
 import { VideoNavigateInfo } from "../../entity/VideoNavigateInfo";
@@ -41,12 +42,11 @@ export struct BannerView {
   @Builder BannerItem(item: VideoInfo) {
     Stack({ alignContent: Alignment.BottomStart }) {
       // 封面
-      Image(item.imgUrl)
+      CoverImage({ imgUrl: item.imgUrl })
         .layoutWeight(1)
         .borderRadius(16)
+        .clip(true)
         .aspectRatio(1.75)
-        .objectFit(ImageFit.Cover)
-        .alt($r('app.media.pic_load_failed')) // 占位图
         .shadow({ radius: 16, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
       // 遮罩
       Row()

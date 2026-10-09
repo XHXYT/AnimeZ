@@ -120,35 +120,33 @@ struct VideoSources {
 
   @Builder
   VideoSourcesContent() {
-    Column() {
-      // 列表内容
-      List({space: 12}) {
-        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
-          // 普通数据项
-          ListItem() {
-            SourceItem({
-              selectionManager: this.selectionManager,
-              viewModel: this.viewModel,
-              selectMode: this.selectMode,
-              item: item
-            })
-          }
-          .onClick(() => {
-            if (this.selectMode) {
-              this.viewModel.toggleItemSelection(item)
-            } else {
-              // 点击跳转到详情页
-              this.goToSourceDetail(false, item)
-            }
+    // 列表内容
+    List({space: 12}) {
+      ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
+        // 普通数据项
+        ListItem() {
+          SourceItem({
+            selectionManager: this.selectionManager,
+            viewModel: this.viewModel,
+            selectMode: this.selectMode,
+            item: item
           })
+        }
+        .onClick(() => {
+          if (this.selectMode) {
+            this.viewModel.toggleItemSelection(item)
+          } else {
+            // 点击跳转到详情页
+            this.goToSourceDetail(false, item)
+          }
         })
-      }
-      .layoutWeight(1)
-      .margin({ left: 16, right: 16})
-      // 编辑工具栏
-      if (this.selectMode) {
-        this.EditToolbar()
-      }
+      })
+    }
+    .layoutWeight(1)
+    .padding({ left: 16, right: 16})
+    // 编辑工具栏
+    if (this.selectMode) {
+      this.EditToolbar()
     }
   }
 

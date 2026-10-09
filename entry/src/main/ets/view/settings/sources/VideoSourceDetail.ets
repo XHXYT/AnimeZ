@@ -1,4 +1,4 @@
-﻿import { DataSourceConfig, SelectorConfig, CategoryCardConfig } from "../../../api/DataSourceConfig"
+﻿import { DataSourceConfig, SelectorConfig, CategoryCardConfig, VideoUrlStepConfig } from "../../../api/DataSourceConfig"
 import { EditField, EditToggleField, VideoSourceDetailViewModel } from "../../../viewmodel/VideoSourceDetailViewModel"
 import TitleBar from "../../../components/TitleBar"
 import { CollapsibleSection } from "../../../components/common/CollapsibleSection"
@@ -258,7 +258,23 @@ struct VideoSourceDetail {
   FieldList(fields: EditField[]) {
     ForEach(fields, (item: EditField, index: number) => {
       if (item.visible === undefined || item.visible()) {
-        if (item.select !== undefined) {
+        if (item.toggleOnly !== undefined && item.toggleOnly && item.toggle !== undefined) {
+          // 仅开关行：标题 + 勾选框，无输入框
+          Row() {
+            Text(item.title)
+              .fontSize(16)
+              .fontColor($r('app.color.color_text_major'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Checkbox, isOn: item.toggle.isOn() })
+              .onChange((isOn: boolean) => {
+                if (item.toggle !== undefined) {
+                  item.toggle.onChange(isOn)
+                }
+              })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+        } else if (item.select !== undefined) {
           Row() {
             Text(item.title)
               .fontSize(16)
@@ -276,8 +292,29 @@ struct VideoSourceDetail {
           }
           .width('100%')
         } else {
-          this.InputFieldWithTitle(item.title, item.getValue(), item.setValue, item.placeholder,
-            item.inputType ? item.inputType : 'text', false, item.toggle, '后处理')
+          Column({ space: 8 }) {
+            this.InputFieldWithTitle(item.title, item.getValue(), item.setValue, item.placeholder,
+              item.inputType ? item.inputType : 'text', false, item.toggle, '后处理')
+            if (item.snippets !== undefined && item.snippets.length > 0) {
+              Flex({ wrap: FlexWrap.Wrap, alignContent: FlexAlign.Center }) {
+                ForEach(item.snippets, (s: string) => {
+                  Button(s)
+                    .fontSize(12)
+                    .fontColor($r('app.color.color_text_major'))
+                    .backgroundColor($r('app.color.background_color'))
+                    .height(30)
+                    .padding({ left: 12, right: 12 })
+                    .margin({ right: 8, bottom: 4 })
+                    .onClick(() => {
+                      this.vm.applySnippet(item, s)
+                    })
+                }, (s: string) => s)
+              }
+              .width('100%')
+            }
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
         }
       }
     }, (item: EditField, index: number) => `${this.vm.sourceType}_${index}_${item.title}`)
@@ -355,28 +392,26 @@ struct VideoSourceDetail {
     Scroll() {
       Column({ space: 16 }) {
         this.FieldList(this.vm.basicFields())
-        // JSON 模式：自定义请求头 + 登录配置
-        if (this.vm.isJson()) {
-          SourceEditSection({ title: '自定义请求头' }) {
-            this.FieldList(this.vm.requestHeaderFields())
-          }
-          SourceEditSection({ title: '登录配置(API)' }) {
-            Column({ space: 16 }) {
-              Row() {
-                Text('启用账号登录')
-                  .fontSize(16)
-                  .fontColor($r('app.color.color_text_major'))
-                  .width('30%')
-                Blank()
-                Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.login !== undefined })
-                  .onChange((isOn: boolean) => {
-                    this.vm.setLoginEnabled(isOn)
-                  })
-              }
-              .width('100%')
-              if (this.vm.editingConfig.login !== undefined) {
-                this.FieldList(this.vm.loginFields())
-              }
+        // 自定义请求头 + 登录配置：引擎对所有源的 HTTP 请求统一附加，两种模式均可编辑
+        SourceEditSection({ title: '自定义请求头' }) {
+          this.FieldList(this.vm.requestHeaderFields())
+        }
+        SourceEditSection({ title: '登录配置(API)' }) {
+          Column({ space: 16 }) {
+            Row() {
+              Text('启用账号登录')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+                .width('30%')
+              Blank()
+              Toggle({ type: ToggleType.Switch, isOn: this.vm.editingConfig.login !== undefined })
+                .onChange((isOn: boolean) => {
+                  this.vm.setLoginEnabled(isOn)
+                })
+            }
+            .width('100%')
+            if (this.vm.editingConfig.login !== undefined) {
+              this.FieldList(this.vm.loginFields())
             }
           }
         }
@@ -780,52 +815,150 @@ struct VideoSourceDetail {
   VideoConfigTab() {
     Scroll() {
       Column({ space: 16 }) {
-        // 解析模式（第一行，决定下方显示哪些输入框）
-        if (this.vm.isJson()) {
-          // JSON 模式：JSON接口 / 链接透传（透传时可配合内嵌视频解析JS）
-          Row() {
-            Text('解析模式')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-              .width('30%')
-            Blank()
-            Select([
-              { value: 'JSON接口' },
-              { value: '链接透传' }
-            ])
-              .selected(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? 1 : 0)
-              .value(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? '链接透传' : 'JSON接口')
-              .font({ size: 16 })
-              .onSelect((index: number, value: string) => {
-                this.vm.setVideoPattern(index === 1 ? 'link' : 'json')
-              })
+        // 单步提取：一次请求剧集页按选择器/正则/JSON路径取链接（配置了多步提取时本节不参与解析）
+        SourceEditSection({ title: '单步提取' }) {
+          Column({ space: 12 }) {
+            // 解析模式（第一行，决定下方显示哪些输入框）
+            if (this.vm.isJson()) {
+              // JSON 模式：JSON接口 / 链接透传（透传时可配合内嵌视频解析JS）
+              Row() {
+                Text('解析模式')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+                  .width('30%')
+                Blank()
+                Select([
+                  { value: 'JSON接口' },
+                  { value: '链接透传' }
+                ])
+                  .selected(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? 1 : 0)
+                  .value(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? '链接透传' : 'JSON接口')
+                  .font({ size: 16 })
+                  .onSelect((index: number, value: string) => {
+                    this.vm.setVideoPattern(index === 1 ? 'link' : 'json')
+                  })
+              }
+              .width('100%')
+            } else {
+              // HTML 模式：解析模式（选择器 / 正则表达式 / 链接透传）
+              Row() {
+                Text('解析模式')
+                  .fontSize(16)
+                  .fontColor($r('app.color.color_text_major'))
+                  .width('30%')
+                Blank()
+                Select([
+                  { value: '选择器' },
+                  { value: '正则表达式' },
+                  { value: '链接透传' }
+                ])
+                  .selected(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? 2
+                    : (this.vm.editingConfig.parserConfig.videoUrl.pattern === 'regex' ? 1 : 0))
+                  .value(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'link' ? '链接透传'
+                    : (this.vm.editingConfig.parserConfig.videoUrl.pattern === 'regex' ? '正则表达式' : '选择器'))
+                  .font({ size: 16 })
+                  .onSelect((index: number) => {
+                    this.vm.setVideoPattern(index === 2 ? 'link' : (index === 1 ? 'regex' : ''))
+                  })
+              }
+              .width('100%')
+            }
+            this.FieldList(this.vm.videoFields())
           }
           .width('100%')
-        } else {
-          // HTML 模式：解析模式（选择器 / 正则表达式）
-          Row() {
-            Text('解析模式')
-              .fontSize(16)
-              .fontColor($r('app.color.color_text_major'))
-              .width('30%')
-            Blank()
-            Select([
-              { value: '选择器' },
-              { value: '正则表达式' }
-            ])
-              .selected(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'regex' ? 1 : 0)
-              .value(this.vm.editingConfig.parserConfig.videoUrl.pattern === 'regex' ? '正则表达式' : '选择器')
-              .font({ size: 16 })
-              .onSelect((index: number) => {
-                this.vm.setVideoPattern(index === 1 ? 'regex' : '')
-              })
-          }
-          .width('100%')
+          .alignItems(HorizontalAlign.Start)
         }
-        this.FieldList(this.vm.videoFields())
+        // 多步提取：纯 HTTP 逐页请求+提取，配置后优先于单步提取生效（HTML/JSON 通用）
+        SourceEditSection({ title: '多步提取(可选)' }) {
+          Column({ space: 12 }) {
+            Text('依次请求上一步结果页面并提取下一步地址，最后一步输出即播放地址；配置后优先于单步提取生效（两种模式通用）')
+              .fontSize(12)
+              .fontColor($r('app.color.color_text_minor'))
+            ForEach(this.vm.videoSteps, (step: VideoUrlStepConfig, index: number) => {
+              this.VideoStepItem(index)
+            }, (step: VideoUrlStepConfig, index: number) => this.vm.stepKeys[index] || index.toString())
+            Button('添加步骤')
+              .width('100%')
+              .fontSize(15)
+              .backgroundColor($r('app.color.start_window_background'))
+              .fontColor($r('app.color.color_text_major'))
+              .onClick(() => {
+                this.vm.addVideoStep()
+              })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+        // 本地代理：TS 剥壳，仅显式配置的源生效
+        SourceEditSection({ title: '本地代理(可选)' }) {
+          Column({ space: 12 }) {
+            Row() {
+              Text('启用TS剥壳代理')
+                .fontSize(16)
+                .fontColor($r('app.color.color_text_major'))
+                .layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.vm.isProxyEnabled() })
+                .onChange((isOn: boolean) => {
+                  this.vm.setProxyEnabled(isOn)
+                })
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+            if (this.vm.isProxyEnabled()) {
+              this.FieldList(this.vm.proxyFields())
+            }
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
       }
       .tabContentStyles()
     }
+  }
+
+  // 单个提取步骤卡片
+  @Builder
+  VideoStepItem(index: number) {
+    Column({ space: 10 }) {
+      Row() {
+        Text(`步骤${index + 1}`)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.color_text_major'))
+        Blank()
+        if (this.vm.canMoveStep(index, -1)) {
+          Text('上移')
+            .fontSize(15)
+            .fontColor($r('app.color.color_text_normal'))
+            .margin({ right: 12 })
+            .onClick(() => {
+              this.vm.moveVideoStep(index, -1)
+            })
+        }
+        if (this.vm.canMoveStep(index, 1)) {
+          Text('下移')
+            .fontSize(15)
+            .fontColor($r('app.color.color_text_normal'))
+            .margin({ right: 12 })
+            .onClick(() => {
+              this.vm.moveVideoStep(index, 1)
+            })
+        }
+        Text('删除')
+          .fontSize(15)
+          .fontColor(Color.Red)
+          .onClick(() => {
+            this.vm.deleteVideoStep(index)
+          })
+      }
+      .width('100%')
+      this.FieldList(this.vm.stepFields(index))
+    }
+    .padding(12)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.start_window_background'))
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   // 带标题的输入框（可选：标题行右侧内联勾选框，如「后处理」）

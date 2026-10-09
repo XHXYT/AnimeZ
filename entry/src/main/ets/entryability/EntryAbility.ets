@@ -15,6 +15,9 @@ import { appContinueModel, IAppContinue } from '../viewmodel/AppContinueModel';
 import SQLite from '../db/SQLite';
 import { initConcurrentTasks } from '../api/ConcurrentTasks';
 import { initWebVideoResolver } from '../utils/WebVideoResolver';
+import { initQuickJsRuntime } from '../api/QuickJsRuntime';
+import TsStripProxyServer from '../utils/m3u8/TsStripProxyServer';
+import { CacheStrategy, ImageKnife } from '@ohos/imageknifepro';
 import { WINDOW_HIDDEN_EVENT } from '../utils/EventBus';
 
 
@@ -78,6 +81,14 @@ export default class EntryAbility extends UIAbility {
         initConcurrentTasks()
         // 注册 WebView 视频链接解析器（.ets 定义 -> WebResolveRegistry 注入，供 .ts 下载层调用）
         initWebVideoResolver()
+        // 注册 QuickJS 引擎（.ets 定义 -> QuickJsRegistry 注入，供 .ts 脚本后处理调用）
+        initQuickJsRuntime()
+        // 预热 TS 剥壳本地代理（固定端口，历史记录中的本地地址跨重启仍有效；失败仅记日志）
+        TsStripProxyServer.preheat()
+        // 初始化 ImageKnifePro 图片加载库：磁盘缓存（封面二次进页秒出）+ 并发控制
+        ImageKnife.getInstance().initFileCache(this.context, 256, 256 * 1024 * 1024)
+        ImageKnife.getInstance().setCacheLimit(CacheStrategy.MEMORY, 256, 64 * 1024 * 1024)
+        ImageKnife.getInstance().setMaxRequests(9)
         // 关闭应用接续 -> 在特定的页面才打开
         this.context.setMissionContinueState(AbilityConstant.ContinueState.INACTIVE, (result) => {
             console.log(`setMissionContinueState: ${JSON.stringify(result)}`)

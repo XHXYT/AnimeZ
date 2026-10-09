@@ -44,27 +44,30 @@ export struct HomePage {
           AnimeState.pageStack.pushPathByName("SearchPage", '', true)
         })
 
-        Image($r("app.media.ic_download_manager"))
-          .width(20)
-          .height(20)
-          .fillColor(AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977')
-          .objectFit(ImageFit.Contain)
-          .offset({
-            y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
-          })
-          .onClick(() => {
-            AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
-          })
+        // 窗口模式下隐藏下载/历史入口（已移至左侧边栏）
+        if (!AnimeState.windowMode) {
+          Image($r("app.media.ic_download_manager"))
+            .width(20)
+            .height(20)
+            .fillColor(AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977')
+            .objectFit(ImageFit.Contain)
+            .offset({
+              y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
+            })
+            .onClick(() => {
+              AnimeState.pageStack.pushPathByName("DownloadManagerPage", '', true)
+            })
 
-        SymbolGlyph($r('sys.symbol.clock'))
-          .fontSize(20)
-          .fontColor([AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977'])
-          .offset({
-            y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
-          })
-          .onClick(() => {
-            AnimeState.pageStack.pushPathByName("VideoHistoryPage", '', true)
-          })
+          SymbolGlyph($r('sys.symbol.clock'))
+            .fontSize(20)
+            .fontColor([AnimeState.windowMode ? $r('app.color.color_text_major') : '#817977'])
+            .offset({
+              y: AnimeState.windowMode && AnimeState.titleButtonCenter > 0 ? AnimeState.titleButtonCenter - 28 : 0
+            })
+            .onClick(() => {
+              AnimeState.pageStack.pushPathByName("VideoHistoryPage", '', true)
+            })
+        }
       }
       .height(56)
       .width('100%')

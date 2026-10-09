@@ -53,6 +53,7 @@ export struct MpvVideoPlayer {
         Logger.i('MpvVideoPlayer', 'DataSource set.');
       } catch (error) {
         Logger.e('fail', `MpvVideoPlayer.setDataSource`, error);
+        this.playerManager?.setErrorMessage('播放器打开媒体失败');
         this.playerManager?.setStatus(PlayerStatus.ERROR);
       }
     },
@@ -188,6 +189,7 @@ export struct MpvVideoPlayer {
         return;
       }
       Logger.e('fail', `mpv error: ${msg}`);
+      this.playerManager?.setErrorMessage(`播放器错误（${msg}）`);
       this.playerManager?.setStatus(PlayerStatus.ERROR);
     });
 

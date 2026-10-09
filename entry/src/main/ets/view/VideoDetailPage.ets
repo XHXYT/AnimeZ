@@ -1,4 +1,5 @@
 import { MultiVideoPlayer } from '../player/MultiVideoPlayer';
+import { CoverImage } from '../components/CoverImage';
 import IPlayerManager, { VideoFit } from '../player/model/IPlayerManager';
 import CustomPanel, { PanelController } from '../components/CustomPanel';
 import { SettingsGroupList, SettingsListCardMode } from '../components/SettingsGroupList';
@@ -294,6 +295,27 @@ struct VideoDetailPage {
                     this.panelController.show();
                   })
                 }
+                // 当前源标志（左）与换源入口（右）同一行，位于简介入口下方
+                Row() {
+                  Text(dataSourceManager.getSourceTitle(this.viewModel.sourceKey) ?? this.viewModel.sourceKey)
+                    .fontSize(10)
+                    .fontColor($r('sys.color.font_on_primary'))
+                    .maxLines(1)
+                    .constraintSize({ maxWidth: '60%' })
+                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                    .borderRadius(4)
+                    .backgroundColor('#99000000')
+                  Blank()
+                  Text('换源')
+                    .fontColor($r('app.color.primary_color'))
+                    .fontSize(14)
+                    .padding({ left: 8, top: 4, bottom: 4, right: 8 })
+                    .onClick(() => {
+                      this.showSourceSheet = true
+                    })
+                }
+                .width('100%')
+                .margin({ top: 6 })
               }
               .margin({ top: 8 })
               .alignItems(HorizontalAlign.Start)
@@ -303,12 +325,12 @@ struct VideoDetailPage {
             .margin({ right: 16 })
             .justifyContent(FlexAlign.SpaceBetween)
 
-            Image(this.viewModel.videoDetailInfo.coverUrl)
-              .alt($r('app.media.pic_load_failed'))
-              .objectFit(ImageFit.Cover)
+            CoverImage({ imgUrl: this.viewModel.videoDetailInfo.coverUrl })
               .aspectRatio(0.7)
               .height('100%')
-              .borderRadius(8)
+          .borderRadius(8)
+          .clip(true)
+              .clip(true)
               .shadow({
                 radius: 12,
                 color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#333333' : '#aaaaaa',
@@ -398,9 +420,7 @@ struct VideoDetailPage {
   @Builder VideoDetail() {
     Column() {
       Row() {
-        Image(this.viewModel.videoDetailInfo.coverUrl)
-          .alt($r('app.media.pic_load_failed'))
-          .objectFit(ImageFit.Cover)
+        CoverImage({ imgUrl: this.viewModel.videoDetailInfo.coverUrl })
           .height('100%')
           .aspectRatio(0.7)
           .borderRadius(8)
@@ -440,8 +460,8 @@ struct VideoDetailPage {
       .height(160)
       .padding(16)
 
-      // 简介标题行常驻（右侧带换源入口），简介文本按有无条件渲染
-      this.IntroHeader()
+      // 简介标题行常驻，简介文本按有无条件渲染
+      Header('简介', undefined, false, false)
       if (this.viewModel.videoDetailInfo.desc) {
         Text(this.viewModel.videoDetailInfo.desc)
           .fontColor($r('app.color.color_text_normal'))
@@ -473,34 +493,6 @@ struct VideoDetailPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-  }
-
-  /**
-   * 简介标题行（同 Header 样式，右侧带"换源"入口打开内嵌搜索模态）
-   */
-  @Builder IntroHeader() {
-    Row() {
-      Row()
-        .height(14)
-        .width(6)
-        .margin({ right: 2 })
-        .borderRadius(4)
-        .backgroundColor($r('app.color.primary_color'))
-      Text('简介')
-        .fontColor($r('app.color.color_text_major'))
-        .fontSize(16)
-        .fontWeight(500)
-      Blank()
-      Text('换源')
-        .fontColor($r('app.color.primary_color'))
-        .fontSize(14)
-        .padding({ left: 8, top: 4, bottom: 4, right: 8 })
-        .onClick(() => {
-          this.showSourceSheet = true
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, top: 16, right: 16, bottom: 4 })
   }
 
   /** 播出年月（详情扩展字段 year/month，任一存在即显示） */

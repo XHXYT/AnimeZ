@@ -196,6 +196,7 @@ export struct RedVideoPlayer {
 
     onError: (reason: string) => {
       Logger.e('tips', `Listener: onError: ${reason}`);
+      this.playerManager?.setErrorMessage(`播放器错误（${reason}）`);
       this.playerManager?.setStatus(PlayerStatus.ERROR);
     },
 

@@ -9,7 +9,7 @@ import Logger from '../utils/Logger';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import { appContinueModel } from './AppContinueModel';
 import { APP_RESUME_PROGRESS_EVENT, WINDOW_HIDDEN_EVENT } from '../utils/EventBus';
-import { AnimeState } from '../entryability/AnimeState';
+import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { appSettings } from '../entryability/Settings';
 import { PiPManager } from '../player/PiPManager';
 import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
@@ -53,14 +53,34 @@ export default class PlayerManagerImpl implements IPlayerManager {
     }, waitPiPMs)
   }
 
-  /** 播放中保持屏幕常亮（与主流视频应用一致），暂停/停止/结束时恢复系统默认息屏策略 */
-  private syncKeepScreenOn(status: number): void {
-    const keep: boolean = status == PlayerStatus.PLAY
-    window.getLastWindow(getContext(this)).then((win: window.Window) => {
-      return win.setWindowKeepScreenOn(keep)
+  /**
+   * 屏幕常亮控制（与主流视频应用一致）：
+   * 进播放页开常亮、暂停关、恢复播放再开、离页关。
+   * 优先用 EntryAbility 持有的主窗口：进程内可能存在其他窗口（输入法扩展等），
+   * getLastWindow 存在选错窗口导致常亮设置失效的风险
+   */
+  setKeepScreenOn(keep: boolean): void {
+    const win = _AnimeState.window
+    if (win) {
+      win.setWindowKeepScreenOn(keep).catch((e: BusinessError) => {
+        Logger.e('fail', `setWindowKeepScreenOn(${keep}) code=${e.code}`, e)
+      })
+      return
+    }
+    window.getLastWindow(getContext(this)).then((lastWin: window.Window) => {
+      return lastWin.setWindowKeepScreenOn(keep)
     }).catch((e: BusinessError) => {
       Logger.e('fail', `setWindowKeepScreenOn(${keep}) code=${e.code}`, e)
     })
+  }
+
+  /** 状态联动：仅播放/暂停切换常亮，其余状态（加载/缓冲/换集/结束）保持现状 */
+  private syncKeepScreenOn(status: number): void {
+    if (status == PlayerStatus.PLAY) {
+      this.setKeepScreenOn(true)
+    } else if (status == PlayerStatus.PAUSE) {
+      this.setKeepScreenOn(false)
+    }
   }
 
   private url: string = ''
@@ -216,29 +236,43 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private isInitializing = false
   /** 加载阶段瞬时失败的自动重试次数（每次加载请求最多自动重试 1 次） */
   private loadRetryCount: number = 0
+  /** 加载看门狗：单阶段无进展超时（毫秒）。死链等场景后端可能永远不上报 ERROR，由看门狗兜底上抛 */
+  private static readonly LOAD_WATCHDOG_MS: number = 15000
+  private loadWatchdogId: number = -1
 
   async setPlayerUrl(url: string, startPos: number = -1) {
     Logger.e('tips', 'setPlayerUrl status=' + this.status + ' url=' + url + ' startPos=' + startPos)
     this.url = url;
-    // 新一次加载请求：重置自动重试配额
+    // 新一次加载请求：重置自动重试配额、清除上次的失败原因
     this.loadRetryCount = 0
+    this.setErrorMessage('')
     if (this.player) {
+      // 看门狗从取可播地址起全程守护（getPlayableUrl/setDataSource 卡死时 await 不返回，靠它兜底）
+      this.armLoadWatchdog()
       if (this.isPlaying()) {
         await this.player.stop()
       }
+      // 上一轮加载可能未完成（死链等场景后端不回调）：强制 reset 取消旧加载，
+      // 避免 ijk 等后端对未 reset 的连续 setDataSource 行为未定义
+      const staleLoading = this.isInitializing
       this.isInitializing = true
       // 历史续播：起始位置大于0时从此处播放，否则从头播放
       this.currentTime = startPos > 0 ? startPos : 0
       this.pendingSeekPos = startPos > 0 ? startPos : -1
-      if (this.status != PlayerStatus.IDLE) {
-        await this.player.reset()
+      if (this.status != PlayerStatus.IDLE || staleLoading) {
+        await this.player.reset().catch((e: BusinessError) => {
+          Logger.e('fail', 'reset during reload failed', e)
+        })
         // 通知式置位（部分后端 reset 不上报事件），保证控制层加载圈在换集 reset→prepare 期间不中断
         this.setStatus(PlayerStatus.IDLE)
       }
       // 状态已置 IDLE，加载圈由播放器状态接管：在此收口解析态，
       // 覆盖解析结束→播放器接管之间（历史保存/记录查询/stop+reset）全程，避免加载圈空窗
       this.notifyParseState(false)
-      await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(url))
+      const playableUrl = await M3u8AdFilter.getPlayableUrl(url)
+      // 可播地址就绪：进入 setDataSource/prepare 阶段，看门狗重新计时
+      this.armLoadWatchdog()
+      await this.player.setDataSource(playableUrl)
     }
   }
 
@@ -251,6 +285,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
       this.playAfterInit = true
       if (this.player && !this.isInitializing) {
         this.isInitializing = true
+        this.armLoadWatchdog()
         await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(this.url))
       }
       return
@@ -268,11 +303,13 @@ export default class PlayerManagerImpl implements IPlayerManager {
         //        // TODO验证是否有问题
         //        await this.player.prepare()
         this.isInitializing = true
-        // 手动重试同样重置自动重试配额
+        // 手动重试同样重置自动重试配额、清除失败原因
         this.loadRetryCount = 0
+        this.setErrorMessage('')
         this.currentTime = 0
         await this.player.reset()
         this.setStatus(PlayerStatus.IDLE)
+        this.armLoadWatchdog()
         await this.player.setDataSource(await M3u8AdFilter.getPlayableUrl(this.url))
       } else {
         // 优先使用未消费的续播位置（currentTime 可能已被加载期间的 position=0 事件覆盖）
@@ -301,6 +338,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
     // 停止播放即取消待自动起播标记：防止加载中途 stop 后，
     // 异步到达的 PREPARED 仍触发自动播放（有声无画）
     this.playAfterInit = false
+    // 用户主动停止：解除加载看门狗，不得再兜底报错
+    this.disarmLoadWatchdog()
     // 换集/退出时静默重置 seek 等待，超时兜底不得再发事件
     this.resetSeekWaiting()
     if (this.player) {
@@ -401,6 +440,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
     Logger.e('tips', 'setStatus status=' + status + ' playAfterInit=' + this.playAfterInit)
     this.status = status;
     this.syncKeepScreenOn(status)
+    if (status == PlayerStatus.ERROR) {
+      // 已上抛失败：解除看门狗（静默重试路径由 scheduleLoadRetry 自行重新布防）
+      this.disarmLoadWatchdog()
+    }
     for (let listener of this.listeners) {
       listener.onStatusChanged(status)
     }
@@ -408,8 +451,12 @@ export default class PlayerManagerImpl implements IPlayerManager {
       this.isInitializing = false
       if (this.playAfterInit) {
         this.player.prepare()
+        // 数据源就绪进入 prepare 阶段：看门狗重新计时
+        this.armLoadWatchdog()
       }
     } else if (this.status == PlayerStatus.PREPARED) {
+      // 加载完成：解除看门狗
+      this.disarmLoadWatchdog()
       if (this.playAfterInit) {
         this.playAfterInit = false
         this.start()
@@ -421,6 +468,32 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   /**
+   * （重新）布防加载看门狗：加载全程（取可播地址 → setDataSource → prepare）分阶段计时，
+   * 每阶段 LOAD_WATCHDOG_MS 内无进展即判失败；阶段推进/加载期缓冲回调都会重新布防，
+   * 慢网络有进展就续命，死链则被及时切断。超时不是瞬时错误，跳过静默重试直接上抛
+   */
+  private armLoadWatchdog(): void {
+    this.disarmLoadWatchdog()
+    this.loadWatchdogId = setTimeout(() => {
+      this.loadWatchdogId = -1
+      // 仅加载期兜底（已请求起播、未到达 PREPARED、非已报错状态）
+      if (this.playAfterInit && this.url != '' && this.status != PlayerStatus.ERROR && !this.isPrepared()) {
+        Logger.w('tips', 'load watchdog timeout, treat as load failure: ' + this.url)
+        this.setErrorMessage('加载超时，当前线路可能不可用')
+        this.loadRetryCount = 1
+        this.setStatus(PlayerStatus.ERROR)
+      }
+    }, PlayerManagerImpl.LOAD_WATCHDOG_MS)
+  }
+
+  private disarmLoadWatchdog(): void {
+    if (this.loadWatchdogId !== -1) {
+      clearTimeout(this.loadWatchdogId)
+      this.loadWatchdogId = -1
+    }
+  }
+
+  /**
    * 加载阶段瞬时失败的自动重试（由 setStatus 的 ERROR 拦截触发）：
    * 延迟片刻后静默重走 reset→setDataSource，控制层全程维持加载圈；
    * 再次失败或重试途中用户退出/停止则正常上抛 ERROR
@@ -428,6 +501,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
   private scheduleLoadRetry(): void {
     this.loadRetryCount++
     Logger.w('tips', 'load error before prepared, auto retry: ' + this.url)
+    // 静默重试期间由重试流程自行布防看门狗：先解除旧的，
+    // 避免在 1 秒重试延迟内看门狗兜底触发、与静默重试抢跑
+    this.disarmLoadWatchdog()
+    this.setErrorMessage('')
     // 静默置 IDLE（不通知监听者）：加载圈由状态驱动继续显示
     this.status = PlayerStatus.IDLE
     this.isInitializing = true
@@ -435,13 +512,16 @@ export default class PlayerManagerImpl implements IPlayerManager {
       if (this.url == '' || !this.playAfterInit) {
         return
       }
+      this.armLoadWatchdog()
       this.player.reset().then(() => {
         return M3u8AdFilter.getPlayableUrl(this.url)
       }).then((playableUrl: string) => {
+        this.armLoadWatchdog()
         return this.player.setDataSource(playableUrl)
       }).catch((e: BusinessError) => {
         Logger.e('fail', 'auto retry load failed', e)
         this.isInitializing = false
+        this.setErrorMessage('加载失败，请重试')
         this.setStatus(PlayerStatus.ERROR)
       })
     }, 1000)
@@ -456,6 +536,20 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   isParsing(): boolean {
     return this.parsing
+  }
+
+  /** 播放失败原因（空串表示无）：展示在播放区中部错误提示 */
+  private errorMessage: string = ''
+
+  setErrorMessage(message: string): void {
+    this.errorMessage = message
+    for (let listener of this.listeners) {
+      listener.onErrorChanged?.(message)
+    }
+  }
+
+  getErrorMessage(): string {
+    return this.errorMessage
   }
 
   getStatus() {
@@ -542,7 +636,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
       PlayerManagerImpl.activeInstances.splice(idx, 1)
     }
     // 恢复系统默认息屏策略（stop 不一定触发状态事件）
-    this.syncKeepScreenOn(PlayerStatus.IDLE)
+    this.setKeepScreenOn(false)
+    // 页面销毁：解除加载看门狗
+    this.disarmLoadWatchdog()
     // 先关闭自动续播开关：视频加载完成前退出页面时，
     // 异步到达的 PREPARED 不应再自动起播（否则画面已销毁仍有声音）
     this.playAfterInit = false
@@ -626,6 +722,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
   }
 
   notifyBuffering(type: media.BufferingInfoType, value: number) {
+    // 加载期缓冲回调是进展信号：看门狗重新计时
+    if (!this.isPrepared() && this.loadWatchdogId !== -1) {
+      this.armLoadWatchdog()
+    }
     this.listeners.forEach((l) => {
       l.onBuffering(type, value)
     })

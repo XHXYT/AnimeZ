@@ -1,11 +1,11 @@
 // WebParseOverlay.ets
 // 全局 WebView 解析悬浮层（挂载于 Index 根部，位于 Navigation 与所有页面之上）：
-// - 自动模式：1x1 隐藏 WebView，无感解析，不吞点击；
+// - 自动模式：隐藏 WebView，无感解析，不吞点击；
 // - 手动模式：底部半模态卡片（遮罩 + 拖拽条 + 状态头 + 网页），等待用户点击站点
 //   播放按钮后捕获播放地址；点击遮罩取消本次解析。
 // 由 AnimeState.showWebView 条件渲染控制挂载/卸载，空闲时不渲染任何节点、零开销；
 // 每次 src 变化都经 false→true 卸载重挂获取全新会话（新凭证）。
-// 解析流程驱动方为 utils/WebVideoResolver.ets。
+// 解析流程驱动方为 utils/WebVideoResolver.ets
 import { webview } from '@kit.ArkWeb';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AnimeState } from '../entryability/AnimeState';
@@ -135,6 +135,11 @@ export struct WebParseOverlay {
       .onControllerAttached(() => {
         // controller 绑定后注册网络层嗅探（纯旁路，不拦截任何请求）
         M3U8Sniffer.attach(this.webviewController)
+        // 源级自定义 UA：官方推荐在 onControllerAttached 中设置（此时页面尚未加载，不会触发二次加载）
+        if (AnimeState.webviewUserAgent !== '') {
+          this.webviewController.setCustomUserAgent(AnimeState.webviewUserAgent)
+          Logger.e('tips', `WebParseOverlay 应用自定义UA: ${AnimeState.webviewUserAgent}`)
+        }
       })
       .javaScriptAccess(true)
       .javaScriptProxy({

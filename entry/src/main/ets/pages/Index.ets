@@ -61,6 +61,9 @@ struct Index {
               this.PcTabItem(0, '首页', $r('app.media.ic_homepage'), $r('app.media.ic_homepage_selected'))
               this.PcTabItem(1, '周表', $r('app.media.ic_schedule'), $r('app.media.ic_schedule_selected'))
               this.PcTabItem(2, '我的', $r('app.media.ic_me'), $r('app.media.ic_me_selected'))
+              this.PcTabItem(3, '收藏', $r('app.media.ic_collection_entry'), $r('app.media.ic_collection_entry_selected'), 'VideoCollectionPage')
+              this.PcTabItem(4, '下载', $r('app.media.ic_download_entry'), $r('app.media.ic_download_entry_selected'), 'DownloadManagerPage')
+              this.PcTabItem(5, '历史', $r('app.media.ic_history_entry'), $r('app.media.ic_history_entry_selected'), 'VideoHistoryPage')
             }
             .padding({ left: 16, right: 16 })
             .width(220)
@@ -68,7 +71,6 @@ struct Index {
             .backgroundColor($r('app.color.background_color'))
 
             // 右侧 Navigation（栈空时显示当前 Tab 主页，栈非空时显示 NavDestination 子页）
-            // 三个主页同时存在避免切 Tab 重建（Visibility 切换而非 if 销毁/创建）
             Navigation(AnimeState.pageStack) {
               Stack() {
                 HomePage()
@@ -101,7 +103,7 @@ struct Index {
           }
         })
       } else {
-        // 移动端：原有 Tabs + Navigation 布局
+        // 移动端：Tabs + Navigation 布局
         Navigation(AnimeState.pageStack) {
           Tabs({
             barPosition: TabBarPosition(AnimeState.widthBp, AnimeState.heightBp),
@@ -164,26 +166,40 @@ struct Index {
       .padding({ left: 4, top: AnimeState.topRectHeight + 24, bottom: 16 })
   }
 
-  @Builder PcTabItem(index: number, title: string, icon: Resource, iconSelected: Resource) {
+  /** 侧边栏项是否高亮：普通 Tab 看 currentIndex（无子页时），页面项看 topPageName */
+  private pcItemActive(index: number, pageName: string): boolean {
+    if (pageName !== '') {
+      return AnimeState.topPageName === pageName
+    }
+    return AnimeState.currentIndex === index && AnimeState.topPageName === ''
+  }
+
+  @Builder PcTabItem(index: number, title: string, icon: Resource, iconSelected: Resource, pageName: string = '') {
     Row({ space: 12 }) {
-      Image(AnimeState.currentIndex === index ? iconSelected : icon)
+      Image(this.pcItemActive(index, pageName) ? iconSelected : icon)
         .width(22)
         .height(22)
         .objectFit(ImageFit.Contain)
       Text(title)
-        .fontColor(AnimeState.currentIndex === index ? '#007DFF' : $r('app.color.color_text_major'))
+        .fontColor(this.pcItemActive(index, pageName) ? '#007DFF' : $r('app.color.color_text_major'))
         .fontSize(15)
-        .fontWeight(AnimeState.currentIndex === index ? 600 : 400)
+        .fontWeight(this.pcItemActive(index, pageName) ? 600 : 400)
     }
     .padding({ left: 20, top: 16, bottom: 16, right: 20 })
     .margin({ bottom: 4 })
     .width('100%')
     .borderRadius(10)
-    .backgroundColor(AnimeState.currentIndex === index ? $r('app.color.background_color_accent') : Color.Transparent)
+    .backgroundColor(this.pcItemActive(index, pageName) ? $r('app.color.background_color_accent') : Color.Transparent)
     .onClick(() => {
-      AnimeState.currentIndex = index
+      if (pageName === '') {
+        AnimeState.currentIndex = index
+      }
       AnimeState.clearAllStacks()
-      if (deviceInfo.deviceType === 'phone') {
+      if (pageName !== '') {
+        AnimeState.pageStack.pushPathByName(pageName, '', true)
+        AnimeState.topPageName = pageName
+      }
+      if (deviceInfo.deviceType === 'phone' && pageName === '') {
         AnimeState.tabsController.changeIndex(index)
       }
     })

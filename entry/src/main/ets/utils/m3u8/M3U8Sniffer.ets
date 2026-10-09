@@ -7,6 +7,8 @@ import { AnimeState } from '../../entryability/AnimeState';
 const SNIFFER_TAG = 'M3U8Sniffer';
 /** 切片流总时长低于该阈值（秒）视为疑似广告片 */
 const AD_DURATION_THRESHOLD = 60;
+/** mp4 直链最小字节数（低于视为疑似广告/贴片，转候补） */
+const MP4_MIN_BYTES = 10 * 1024 * 1024;
 /** 疑似广告候选的静默等待时长（毫秒）：期间出现更优候选则改用之 */
 const FALLBACK_QUIET_MS = 5000;
 /** 验证请求超时（毫秒） */
@@ -19,6 +21,8 @@ const VALIDATE_TIMEOUT_MS = 6000;
  * 桥通道并行工作，谁先拿到可用地址谁写入 webJsVideoLink。
  *
  * 多个 m3u8 的区分策略：
+ * 0. 载体页提取：候选 URL 路径部分不含 .m3u8/.mp4（如播放器页 index.html?url=<直链>）时，
+ *    先从 URL 原文/解码后提取内嵌直链，对直链做后续验证，避免把 HTML 页当播放地址交付；
  * 1. 同 URL 去重；
  * 2. 内容验证（m3u8 为小文本文件，App 侧补一发 GET）：
  *    - 非 #EXTM3U 开头视为假阳性，丢弃；
@@ -26,6 +30,8 @@ const VALIDATE_TIMEOUT_MS = 6000;
  *    - 普通切片流按 #EXTINF 累计时长：≥阈值交付；过短疑似贴片广告，静默期待更优候选，
  *      超时后兜底交付；
  *    - 验证请求自身失败（CDN 校验请求头等）时信任页面请求，直接交付。
+ * 3. mp4 直链（部分站点 cloudplay 解析结果为直链而非 HLS）：
+ *    HEAD 验证 Content-Length，≥阈值交付正片；过小疑似广告转候补；无长度/请求失败直接交付。
  */
 export class M3U8Sniffer {
   private static armed: boolean = false;
@@ -75,19 +81,95 @@ export class M3U8Sniffer {
       return;
     }
     const url: string = request.getRequestUrl();
-    if (url === '' || url.toLowerCase().indexOf('.m3u8') < 0 ||
+    // 链路跟踪（调试）：打印 armed 期间的全部请求，观察播放链路完整加载序列
+    const low: string = url.toLowerCase();
+    Logger.d(SNIFFER_TAG, `[链路] ${request.isMainFrame() ? '主' : '子'}frame: ${url}`);
+    if (url === '' || (low.indexOf('.m3u8') < 0 && low.indexOf('.mp4') < 0) ||
       (url.indexOf('https://') !== 0 && url.indexOf('http://') !== 0)) {
       return;
     }
-    if (M3U8Sniffer.candidates.indexOf(url) >= 0) {
+    const direct: string = M3U8Sniffer.extractDirect(url);
+    if (M3U8Sniffer.candidates.indexOf(direct) >= 0) {
       return;
     }
-    M3U8Sniffer.candidates.push(url);
-    Logger.d(SNIFFER_TAG, `捕获 m3u8 候选: ${url}`);
-    M3U8Sniffer.validate(url);
+    M3U8Sniffer.candidates.push(direct);
+    if (direct !== url) {
+      Logger.d(SNIFFER_TAG, `捕获载体页: ${url}`);
+      Logger.d(SNIFFER_TAG, `提取内嵌直链: ${direct}`);
+    } else {
+      Logger.d(SNIFFER_TAG, `捕获 m3u8 候选: ${direct}`);
+    }
+    M3U8Sniffer.validate(direct);
+  }
+
+  /**
+   * 从捕获 URL 中解析真正的媒体直链：
+   * - URL 路径部分（? / # 之前）本身含 .m3u8/.mp4（含带 token 查询）→ 视为直链，原样返回；
+   * - 否则为载体页（播放器页 ?url=<媒体直链> 形态）→ 仅在查询段内提取内嵌直链
+   *   （原文匹配 + 逐参数解码匹配；不可跨过 ?/# 从头部起匹配，否则整条 URL 会被当成内嵌链）；
+   * - 提取不到仍返回原 URL（保留"信任页面请求"的旧语义）。
+   */
+  private static extractDirect(url: string): string {
+    const qIdx: number = url.indexOf('?');
+    const hIdx: number = url.indexOf('#');
+    let cut: number = -1;
+    if (qIdx >= 0 && hIdx >= 0) {
+      cut = Math.min(qIdx, hIdx);
+    } else if (qIdx >= 0) {
+      cut = qIdx;
+    } else {
+      cut = hIdx;
+    }
+    if (cut < 0) {
+      return url;
+    }
+    const lowPath: string = url.substring(0, cut).toLowerCase();
+    if (lowPath.indexOf('.m3u8') >= 0 || lowPath.indexOf('.mp4') >= 0) {
+      return url;
+    }
+    const tail: string = url.substring(cut + 1);
+    const fromRaw: string = M3U8Sniffer.matchEmbedded(tail);
+    if (fromRaw !== '') {
+      return fromRaw;
+    }
+    const params: string[] = tail.split('&');
+    for (let i = 0; i < params.length; i++) {
+      let decoded: string = '';
+      try {
+        decoded = decodeURIComponent(params[i]);
+      } catch (error) {
+        decoded = '';
+      }
+      if (decoded === '' || decoded === params[i]) {
+        continue;
+      }
+      const fromDecoded: string = M3U8Sniffer.matchEmbedded(decoded);
+      if (fromDecoded !== '') {
+        return fromDecoded;
+      }
+    }
+    return url;
+  }
+
+  /** 在查询段文本中匹配 http(s) 媒体直链（m3u8 优先，mp4 兜底），尾部查询段不含 & 以免吞并相邻参数 */
+  private static matchEmbedded(text: string): string {
+    const m3u8Match = text.match(/https?:\/\/[^\s"'&<>]+\.m3u8(?:\?[^\s"'&<>]*)?/);
+    if (m3u8Match !== null) {
+      return m3u8Match[0];
+    }
+    const mp4Match = text.match(/https?:\/\/[^\s"'&<>]+\.mp4(?:\?[^\s"'&<>]*)?/);
+    if (mp4Match !== null) {
+      return mp4Match[0];
+    }
+    return '';
   }
 
   private static validate(url: string): void {
+    // mp4 直链：走 HEAD 验证（GET 会拉整个文件）
+    if (url.toLowerCase().indexOf('.mp4') >= 0 && url.toLowerCase().indexOf('.m3u8') < 0) {
+      M3U8Sniffer.validateMp4(url);
+      return;
+    }
     const httpReq = http.createHttp();
     httpReq.request(url, {
       method: http.RequestMethod.GET,
@@ -118,6 +200,48 @@ export class M3U8Sniffer {
     }).catch((error: BusinessError) => {
       httpReq.destroy();
       Logger.d(SNIFFER_TAG, `验证请求失败(${error.message})，按页面请求交付`);
+      M3U8Sniffer.deliver(url);
+    });
+  }
+
+  /** mp4 直链验证：HEAD 看 Content-Length，够大交付正片，过小疑似广告转候补，拿不到信息直接交付 */
+  private static validateMp4(url: string): void {
+    const httpReq = http.createHttp();
+    httpReq.request(url, {
+      method: http.RequestMethod.HEAD,
+      connectTimeout: VALIDATE_TIMEOUT_MS,
+      readTimeout: VALIDATE_TIMEOUT_MS
+    }).then((resp: http.HttpResponse) => {
+      httpReq.destroy();
+      if (resp.responseCode < 200 || resp.responseCode >= 300) {
+        Logger.d(SNIFFER_TAG, `mp4 HEAD 状态异常(code=${resp.responseCode})，按页面请求交付`);
+        M3U8Sniffer.deliver(url);
+        return;
+      }
+      let length: number = 0;
+      try {
+        const raw = JSON.parse(JSON.stringify(resp.header)) as Record<string, string>;
+        const lenRaw: string = raw['content-length'] ?? '';
+        const parsedLen = Number(lenRaw);
+        if (!Number.isNaN(parsedLen)) {
+          length = parsedLen;
+        }
+      } catch (error) {
+        length = 0;
+      }
+      if (length >= MP4_MIN_BYTES) {
+        Logger.d(SNIFFER_TAG, `mp4 直链大小 ${(length / 1024 / 1024).toFixed(1)}MB，交付`);
+        M3U8Sniffer.deliver(url);
+      } else if (length > 0) {
+        Logger.d(SNIFFER_TAG, `mp4 直链仅 ${(length / 1024 / 1024).toFixed(1)}MB，疑似广告，转入候补`);
+        M3U8Sniffer.holdAsFallback(url);
+      } else {
+        Logger.d(SNIFFER_TAG, 'mp4 直链无 Content-Length，按页面请求交付');
+        M3U8Sniffer.deliver(url);
+      }
+    }).catch((error: BusinessError) => {
+      httpReq.destroy();
+      Logger.d(SNIFFER_TAG, `mp4 HEAD 失败(${error.message})，按页面请求交付`);
       M3U8Sniffer.deliver(url);
     });
   }

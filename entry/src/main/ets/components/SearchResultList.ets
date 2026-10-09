@@ -1,4 +1,5 @@
 import VideoInfo from '../entity/VideoInfo';
+import { CoverImage } from './CoverImage';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { AnimeState } from '../entryability/AnimeState';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
@@ -53,20 +54,11 @@ struct SearchResultItem {
     Stack({ alignContent: Alignment.BottomEnd }) {
       Row({ space: 12 }) {
         // 封面
-        if (this.item.imgUrl) {
-          Image(this.item.imgUrl)
-            .alt($r('app.media.pic_load_failed'))
-            .objectFit(ImageFit.Cover)
-            .width(84)
-            .height(112)
+        CoverImage({ imgUrl: this.item.imgUrl })
+          .width(84)
+          .height(112)
             .borderRadius(8)
-        } else {
-          Image($r('app.media.pic_load_failed'))
-            .objectFit(ImageFit.Cover)
-            .width(84)
-            .height(112)
-            .borderRadius(8)
-        }
+            .clip(true)
 
         // 右侧信息区
         Column({ space: 5 }) {

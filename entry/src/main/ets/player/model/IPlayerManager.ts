@@ -45,6 +45,9 @@ export interface PlayerListener {
   /** 链接解析阶段状态（可选）：解析开始/结束时通知 UI 显示加载反馈 */
   onParseStateChanged?: (parsing: boolean) => void
 
+  /** 播放失败原因变化（可选）：展示在播放区中部错误提示 */
+  onErrorChanged?: (message: string) => void
+
 }
 
 export default interface IPlayerManager {
@@ -83,6 +86,9 @@ export default interface IPlayerManager {
   getSpeed: () => number
 
   isPlaying: () => boolean
+
+  /** 屏幕常亮控制：进播放页开、暂停关、恢复播放再开、离页关 */
+  setKeepScreenOn: (keep: boolean) => void
 
   setVideoFit: (videoFit: VideoFit) => void
 
@@ -123,6 +129,12 @@ export default interface IPlayerManager {
 
   /** 当前是否处于链接解析阶段（供晚挂载的组件补同步解析态） */
   isParsing: () => boolean
+
+  /** 设置播放失败原因并广播（空串表示清除；应在触发 ERROR 前设置） */
+  setErrorMessage: (message: string) => void
+
+  /** 当前播放失败原因（空串表示无） */
+  getErrorMessage: () => string
 
   /** 底层播放器 seek 完成回调（AVPlayer seekDone / IJK onSeekComplete），用于关闭 seek 加载圈 */
   notifySeekDone: () => void

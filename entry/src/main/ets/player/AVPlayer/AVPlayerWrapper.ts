@@ -248,6 +248,7 @@ export class AVPlayerWrapper {
     })
     avPlayer.on('error', (error) => {
       Logger.e('fail', 'AVPlayer onError err = ', error)
+      manager.setErrorMessage(`播放器错误（${error.code}）`)
       manager.setStatus(PlayerStatus.ERROR)
       this.avPlayer.reset();
     })

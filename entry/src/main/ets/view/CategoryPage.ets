@@ -1,4 +1,5 @@
 import VideoInfo, { TypeInfo } from "../entity/VideoInfo"
+import { CoverImage } from "../components/CoverImage"
 import { VideoCategoryNavigateInfo } from "../entity/VideoNavigateInfo"
 import StateView from "../components/StateView"
 import TitleBar from "../components/TitleBar"
@@ -93,12 +94,10 @@ export struct CategoryPage {
     Row({space: 16}) {
       // 封面
       if (item.imgUrl) {
-        Image(item.imgUrl)
-          .borderRadius({ topLeft: 8, topRight: 8 })
-          .alt($r('app.media.pic_load_failed'))
-          .objectFit(ImageFit.Fill)
-          .aspectRatio(0.65)
+        CoverImage({ imgUrl: item.imgUrl, imageFit: ImageFit.Fill })
           .borderRadius(12)
+          .clip(true)
+          .aspectRatio(0.65)
           .layoutWeight(1)
           .width('100%')
       } else {

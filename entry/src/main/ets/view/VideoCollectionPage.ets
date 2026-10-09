@@ -1,4 +1,5 @@
 import Logger from '../utils/Logger';
+import { CoverImage } from '../components/CoverImage';
 import { OnSelectChangeObserver, SelectionManager } from '../utils/SelectionManager';
 import StateView, { ViewState } from '../components/StateView';
 import { ConfigurationConstant } from '@kit.AbilityKit';
@@ -271,13 +272,12 @@ struct CollectionItem {
         .margin({ left: this.selectionIconMargin })
         .visibility(this.selectionMode ? Visibility.Visible : Visibility.None)
         .fillColor(this.isSelected ? $r('app.color.primary_color') : $r('app.color.color_text_minor'))
-      Image(this.item.coverUrl)
-        .alt($r('app.media.pic_load_failed'))
-        .objectFit(ImageFit.Cover)
+      CoverImage({ imgUrl: this.item.coverUrl })
         .height('100%')
         .margin({left: 16})
         .aspectRatio(1.5)
         .borderRadius(8)
+        .clip(true)
         .shadow({ radius: 12, color: AnimeState.currentColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ? '#000000' : '#aaaaaa', offsetX: 6, offsetY: 6 })
       Column() {
         Text(this.item.title)
