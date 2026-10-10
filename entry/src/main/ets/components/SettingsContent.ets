@@ -10,6 +10,7 @@ import { _AnimeState, AnimeState } from '../entryability/AnimeState'
 import { PiPManager } from '../player/PiPManager'
 import { DownloadDirHelper, DownloadLocationType } from '../utils/DownloadDirHelper'
 import { ToastUtil } from '../utils/ToastUtils'
+import { BackgroundPlayManager } from '../utils/BackgroundPlayManager'
 
 /** "更多"组条目 id（窗口模式下整组并入"我的"页底部更多卡片） */
 const MORE_GROUP_IDS: string[] = ['app_info', 'author_info', 'third_party_services']
@@ -274,6 +275,8 @@ export struct SettingsContent {
         value: appSettings.auto_play_on_no_wifi,
         onChange: (value) => {
           appSettings.auto_play_on_no_wifi = value as boolean
+          // 手动切换主开关时恢复弹窗提醒（清除「不再提醒」的取消记忆）
+          appSettings.metered_prompt_disabled = false
         }
       }),
       new CustomItemInfo({
@@ -284,6 +287,17 @@ export struct SettingsContent {
         value: appSettings.auto_pip_on_exit,
         onChange: (value) => {
           appSettings.auto_pip_on_exit = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'background_play',
+        title: '后台继续播放',
+        subtitle: '应用切后台后继续播放声音，通知栏显示播放任务',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.background_play,
+        onChange: (value) => {
+          appSettings.background_play = value as boolean
+          BackgroundPlayManager.refresh()
         }
       }),
       new CustomItemInfo({

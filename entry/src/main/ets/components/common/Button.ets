@@ -21,7 +21,7 @@ export struct ButtonBuilder {
 
   build() {
     Button({ type: this.config.type || ButtonType.Circle }) {
-      ButtonContent(this.config)
+      ButtonContent({ config: this.config })
     }
     .width(this.config.width || 36).height(this.config.height || 36)
     .backgroundColor(this.config.backgroundColor ?? Color.Transparent)
@@ -87,40 +87,45 @@ export struct ButtonBuilder {
 }
 
 // 构建按钮内容（图标 + 文本）
-@Builder
-function ButtonContent(config: ButtonConfig) {
-  // 如果有图标
-  if (config.imageSrc || config.symbolSrc) {
-    Row({space: 8}) {
-      if (config.imageSrc || config.symbolSrc) {
-        // 优先使用 Image 图标
-        if (config.imageSrc) {
-          Image(config.imageSrc)
-            .width(config.iconSize || 24)
-            .height(config.iconSize || 24)
-            .fillColor(config.fontColor || Color.Transparent)
+// 用自定义组件而非全局 @Builder：全局 @Builder 参数按值传递，config 变化不会触发内部 UI 刷新
+@ComponentV2
+struct ButtonContent {
+  @Require @Param config: ButtonConfig
+
+  build() {
+    // 如果有图标
+    if (this.config.imageSrc || this.config.symbolSrc) {
+      Row({space: 8}) {
+        if (this.config.imageSrc || this.config.symbolSrc) {
+          // 优先使用 Image 图标
+          if (this.config.imageSrc) {
+            Image(this.config.imageSrc)
+              .width(this.config.iconSize || 24)
+              .height(this.config.iconSize || 24)
+              .fillColor(this.config.fontColor || Color.Transparent)
+          }
+          // 否则使用 Symbol 图标
+          else if (this.config.symbolSrc) {
+            SymbolGlyph($r('sys.symbol.' + this.config.symbolSrc))
+              .fontSize(this.config.iconSize || 24)
+              .fontWeight(this.config.fontWeight ?? FontWeight.Medium)
+              .fontColor([this.config.fontColor || Color.Transparent])
+          }
         }
-        // 否则使用 Symbol 图标
-        else if (config.symbolSrc) {
-          SymbolGlyph($r('sys.symbol.' + config.symbolSrc))
-            .fontSize(config.iconSize || 24)
-            .fontWeight(config.fontWeight ?? FontWeight.Medium)
-            .fontColor([config.fontColor || Color.Transparent])
+        // 如果同时有文本
+        if (this.config.text) {
+          Text(this.config.text)
+            .fontColor(this.config.fontColor || Color.Transparent)
         }
       }
-      // 如果同时有文本
-      if (config.text) {
-        Text(config.text)
-          .fontColor(config.fontColor || Color.Transparent)
-      }
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Center)
     }
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.Center)
-  }
-  // 如果没有图标，只有文本
-  else if (config.text) {
-    Text(config.text)
-      .fontColor(config.fontColor || undefined)
+    // 如果没有图标，只有文本
+    else if (this.config.text) {
+      Text(this.config.text)
+        .fontColor(this.config.fontColor || undefined)
+    }
   }
 }
 

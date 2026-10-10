@@ -52,8 +52,12 @@ struct VideoSourceDetail {
           buttons: [
             {
               text: '保存',
-              width: 48,
-              fontColor: this.vm.hasChanges ? $r('app.color.primary_color_accent') : $r('app.color.color_text_minor'),
+              type: ButtonType.Capsule,
+              width: this.vm.hasChanges ? 56 : 48,
+              height: 32,
+              // 有未保存更改时填充主题色胶囊，无更改时弱化为灰字
+              fontColor: this.vm.hasChanges ? Color.White : $r('app.color.color_text_minor'),
+              backgroundColor: this.vm.hasChanges ? $r('app.color.primary_color') : Color.Transparent,
               enabled: !this.vm.isLoading,
               action: () => {
                 if (this.vm.hasChanges && !this.vm.isLoading) {

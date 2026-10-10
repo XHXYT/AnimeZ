@@ -41,6 +41,13 @@ export interface CastListener {
  */
 export class CastManager {
 
+  /** 最近创建的实例（后台播放管理器接管应用唯一 AVSession 时定位用；同一时刻仅一个播放页实例） */
+  private static current: CastManager | null = null
+
+  constructor() {
+    CastManager.current = this
+  }
+
   private session: avSession.AVSession | null = null
   private castController: avSession.AVCastController | null = null
   private listener: CastListener | null = null
@@ -72,6 +79,12 @@ export class CastManager {
   private lastSyncedPos: number = -1
   /** 最近一次同步到播控中心的时间戳 */
   private lastSyncedTime: number = 0
+  /** 上一集命令是否已注册（未注册的命令播控中心按钮置灰） */
+  private previousRegistered: boolean = false
+  /** 下一集命令是否已注册（未注册的命令播控中心按钮置灰） */
+  private nextRegistered: boolean = false
+  /** 最近一次尝试补写元数据时长的时间戳（节流用） */
+  private lastMetadataDurationTryTime: number = 0
 
   setListener(listener: CastListener): void {
     this.listener = listener
@@ -89,6 +102,10 @@ export class CastManager {
   updateEpisodes(episodeList: EpisodeInfo[], episodeIndex: number): void {
     this.episodeList = episodeList
     this.episodeIndex = episodeIndex
+    const session = this.session
+    if (session != null) {
+      this.syncEpisodeCommands(session)
+    }
   }
 
   /**
@@ -167,6 +184,7 @@ export class CastManager {
     }
     // 激活须在元数据与控制命令注册完成之后执行，否则播控中心可能不展示卡片
     await this.activateSession()
+    this.syncEpisodeCommands(session)
   }
 
   /** 激活会话（仅首次生效）；须在 setAVMetadata/setAVQueueItems/控制命令注册完成后调用 */
@@ -188,18 +206,54 @@ export class CastManager {
   }
 
   /** 本端播放进度变化时刷新远端起播位置，并节流同步播控中心进度（seek 后自动纠正） */
-  updateProgress(position: number, speed: number): void {
+  updateProgress(position: number, speed: number, duration: number): void {
     this.pendingStartPos = position
+    // 时长到达即记录（播控卡片总时长展示）；首次到达或明显变化时触发一次立即同步，
+    // 避免 totalTime 微小抖动导致高频刷状态
+    let durationArrived: boolean = false
+    if (duration > 0 && duration != this.mediaDuration) {
+      durationArrived = this.mediaDuration <= 0 || Math.abs(duration - this.mediaDuration) > 1000
+      this.mediaDuration = duration
+    }
     if (this.session == null || this.castController != null) {
       return
+    }
+    // 系统卡片总时长取自元数据：prepare 阶段时长未知时元数据以 0 写入（卡片因此无总时长、
+    // 进度条不渲染），一旦拿到有效时长立即补写元数据（3 秒节流防高频重试）
+    if (duration > 0 && this.lastMetadataDuration <= 0 && this.lastMetadataAssetId != ''
+      && Date.now() - this.lastMetadataDurationTryTime > 3000) {
+      this.lastMetadataDurationTryTime = Date.now()
+      this.refreshMetadataDuration()
     }
     const now = Date.now()
     // 进度跳变超过 5 秒（seek/切集）或距上次同步超过 30 秒时刷新播控中心进度
     const posJumped = this.lastSyncedPos < 0 || Math.abs(position - this.lastSyncedPos) > 5000
     const timeElapsed = now - this.lastSyncedTime > 30000
-    if (posJumped || timeElapsed) {
+    if (durationArrived || posJumped || timeElapsed) {
       this.setPlaybackState(avSession.PlaybackState.PLAYBACK_STATE_PLAY, position, speed)
     }
+  }
+
+  /** 时长首次到达时补写会话元数据时长（播控卡片总时长展示） */
+  private async refreshMetadataDuration(): Promise<void> {
+    const session = this.session
+    if (session == null || this.episodeIndex < 0 || this.episodeIndex >= this.episodeList.length) {
+      return
+    }
+    const episode = this.episodeList[this.episodeIndex]
+    const metadata: avSession.AVMetadata = {
+      assetId: this.lastMetadataAssetId,
+      title: this.buildDisplayTitle(episode, false),
+      subtitle: this.buildEpisodeTitle(episode),
+      mediaImage: this.mediaCoverUrl,
+      duration: this.mediaDuration,
+      filter: avSession.ProtocolType.TYPE_CAST_PLUS_STREAM | avSession.ProtocolType.TYPE_DLNA
+    }
+    await session.setAVMetadata(metadata).then((): void => {
+      this.lastMetadataDuration = this.mediaDuration
+    }).catch((err: BusinessError) => {
+      Logger.e('fail', `setAVMetadata duration code=${err.code} msg=${err.message}`)
+    })
   }
 
   /** 同步本端播放状态到系统播控中心 */
@@ -252,6 +306,10 @@ export class CastManager {
     }
     this.episodeIndex = episodeIndex
     this.lastCastPos = startPos
+    const syncSession = this.session
+    if (syncSession != null) {
+      this.syncEpisodeCommands(syncSession)
+    }
     const description: avSession.AVMediaDescription = {
       assetId: this.buildAssetId(episodeIndex, episode.link),
       title: this.buildDisplayTitle(episode, true),
@@ -319,6 +377,9 @@ export class CastManager {
 
   /** 页面销毁时调用：结束投播并销毁 AVSession */
   async destroy(): Promise<void> {
+    if (CastManager.current == this) {
+      CastManager.current = null
+    }
     await this.stopCast()
     const session = this.session
     if (session != null) {
@@ -335,6 +396,48 @@ export class CastManager {
       this.sessionActive = false
     }
     this.deviceName = ''
+  }
+
+  /**
+   * 释放本端 AVSession（后台播放管理器需独占应用唯一会话时调用）
+   * 投播进行中不释放（远端播放依赖该会话），返回是否已释放
+   */
+  async releaseSession(): Promise<boolean> {
+    if (this.castController != null) {
+      return false
+    }
+    const session = this.session
+    this.session = null
+    this.sessionActive = false
+    this.lastMetadataAssetId = ''
+    this.lastMetadataDuration = 0
+    this.lastQueueKey = ''
+    this.lastSyncedPos = -1
+    this.extrasSet = false
+    this.previousRegistered = false
+    this.nextRegistered = false
+    if (session == null) {
+      return true
+    }
+    session.off('play')
+    session.off('pause')
+    session.off('seek')
+    session.off('playNext')
+    session.off('playPrevious')
+    session.off('outputDeviceChange')
+    await session.destroy().catch((err: BusinessError) => {
+      Logger.e('fail', `releaseSession destroy code=${err.code} msg=${err.message}`)
+    })
+    return true
+  }
+
+  /** 释放最近活跃实例的 AVSession（后台播放管理器接管应用唯一会话用） */
+  static async releaseActiveSession(): Promise<boolean> {
+    const instance = CastManager.current
+    if (instance == null) {
+      return false
+    }
+    return instance.releaseSession()
   }
 
   /** 注册播控中心控制命令回调（播控中心按钮 → 应用内播放控制） */
@@ -357,18 +460,40 @@ export class CastManager {
         listener.onControlSeek(time)
       }
     })
-    session.on('playNext', () => {
-      const listener = this.listener
-      if (listener != null) {
-        listener.onControlNext()
-      }
-    })
-    session.on('playPrevious', () => {
-      const listener = this.listener
-      if (listener != null) {
-        listener.onControlPrevious()
-      }
-    })
+    // 上一集/下一集按队列位置动态注册（第一集置灰上一集、最后一集置灰下一集）
+    this.previousRegistered = false
+    this.nextRegistered = false
+    this.syncEpisodeCommands(session)
+  }
+
+  /** 按当前剧集位置动态注册/注销上一集与下一集命令（未注册的命令播控中心按钮置灰） */
+  private syncEpisodeCommands(session: avSession.AVSession): void {
+    const hasPrevious = this.episodeIndex > 0
+    const hasNext = this.episodeIndex < this.episodeList.length - 1
+    if (hasPrevious && !this.previousRegistered) {
+      session.on('playPrevious', () => {
+        const listener = this.listener
+        if (listener != null) {
+          listener.onControlPrevious()
+        }
+      })
+      this.previousRegistered = true
+    } else if (!hasPrevious && this.previousRegistered) {
+      session.off('playPrevious')
+      this.previousRegistered = false
+    }
+    if (hasNext && !this.nextRegistered) {
+      session.on('playNext', () => {
+        const listener = this.listener
+        if (listener != null) {
+          listener.onControlNext()
+        }
+      })
+      this.nextRegistered = true
+    } else if (!hasNext && this.nextRegistered) {
+      session.off('playNext')
+      this.nextRegistered = false
+    }
   }
 
   private buildAssetId(episodeIndex: number, link: string): string {
@@ -403,8 +528,9 @@ export class CastManager {
     if (context == null) {
       return null
     }
+    let session: avSession.AVSession | null = null
     try {
-      const session = await avSession.createAVSession(context, 'AnimeZVideoCast', 'video')
+      session = await avSession.createAVSession(context, 'AnimeZVideoCast', 'video')
       const wantAgentInfo: wantAgent.WantAgentInfo = {
         wants: [{
           bundleName: context.abilityInfo.bundleName,
@@ -414,8 +540,12 @@ export class CastManager {
         requestCode: 0,
         wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
       }
-      const agent = wantAgent.getWantAgent(wantAgentInfo)
-      await session.setLaunchAbility(agent)
+      // 注意：无 callback 的 getWantAgent 返回 Promise<WantAgent>，必须 await
+      const agent = await wantAgent.getWantAgent(wantAgentInfo)
+      // 非致命：仅影响通知栏点击拉起应用，失败不阻断会话创建
+      await session.setLaunchAbility(agent).catch((launchErr: BusinessError) => {
+        Logger.e('fail', `setLaunchAbility code=${launchErr.code} msg=${launchErr.message}`)
+      })
       this.registerControlCommands(session)
       session.on('outputDeviceChange', (state: avSession.ConnectionState, device: avSession.OutputDeviceInfo) => {
         this.onOutputDeviceChange(state, device)
@@ -425,6 +555,13 @@ export class CastManager {
     } catch (err) {
       const e = err as BusinessError
       Logger.e('fail', `createAVSession code=${e.code} msg=${e.message}`)
+      // 防孤儿：会话已创建但后续步骤失败时立即销毁，否则应用唯一会话名额被占用，
+      // 之后任何 createAVSession 都会报 6600101 session is existed
+      if (session != null) {
+        await session.destroy().catch((destroyErr: BusinessError) => {
+          Logger.e('fail', `orphan session destroy code=${destroyErr.code} msg=${destroyErr.message}`)
+        })
+      }
       return null
     }
   }

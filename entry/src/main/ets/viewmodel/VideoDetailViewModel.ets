@@ -22,6 +22,8 @@ import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 import { WebVideoResolver } from '../utils/WebVideoResolver';
 import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
+import { isUnmeteredNetwork } from '../utils/NetworkUtils';
+import { BackgroundPlayManager } from '../utils/BackgroundPlayManager';
 
 
 /** 续播定位结果：校正后的剧集索引 + 是否保留播放进度 */
@@ -94,6 +96,8 @@ export class VideoDetailViewModel {
   private pipRequestHandler: (() => void) | null = null;
   /** onPageShow 时的路由栈深度（onPageHide 对比判断是 push 导航还是退后台） */
   private stackSizeOnShown: number = 0;
+  /** 本次会话已在流量网络确认过播放：后续自动播放不再弹窗 */
+  private meteredPlayConfirmed: boolean = false;
 
   constructor(playerManager: IPlayerManager, context: Context) {
     this.videoCollectionInfoDB = new VideoCollectionTable(context)
@@ -363,7 +367,8 @@ export class VideoDetailViewModel {
     this.playerManager.notifyParseState(true);
     try {
       // 获取视频详情
-      console.log(`VideoDetailViewModel.playVideo 等待获取视频详情的链接，url：${this.url}`)
+      console.log(`VideoDetailViewModel.playVideo 等待获取视频详情的链接
+，url：${this.url}`)
       const info = await dataSourceManager.getVideoDetailInfo(this.url, this.appSettings.episodes_order, this.sourceKey)
       this.videoDetailInfo = info;
       // 同步当前播放媒体信息到全局状态，供投播元数据展示
@@ -384,8 +389,16 @@ export class VideoDetailViewModel {
       if (canResume && target.keepPosition) {
         this.resumePosition = resumeMs;
       }
-      // 尝试播放视频
-      this.playVideo(target.listIndex, target.episodeIndex);
+      // 尝试播放视频：非WiFi且未开「非Wifi下自动播放」时挂起并弹窗确认
+      if (this.appSettings.auto_play_on_no_wifi || this.meteredPlayConfirmed || isUnmeteredNetwork()) {
+        this.playVideo(target.listIndex, target.episodeIndex);
+      } else {
+        // 挂起为暂停态：控制层常亮显示播放键，点播放键经待播接管续载
+        this.holdMeteredPlay(target.listIndex, target.episodeIndex);
+        if (!this.appSettings.metered_prompt_disabled) {
+          this.confirmMeteredPlay(target.listIndex, target.episodeIndex);
+        }
+      }
     } catch (err) {
       this.playerManager.notifyParseState(false);
       this.errorMessage = err.message;
@@ -441,12 +454,46 @@ export class VideoDetailViewModel {
     return target;
   }
 
+  /** 流量挂起：置暂停态（控制层常亮、播放键可续）并注册无地址待播接管 */
+  private holdMeteredPlay(listIndex: number, episodeIndex: number): void {
+    this.playerManager.notifyParseState(false);
+    this.playerManager.setPendingStartHandler((): void => {
+      this.playerManager.setPendingStartHandler(null);
+      this.playVideo(listIndex, episodeIndex);
+    });
+    this.playerManager.setStatus(PlayerStatus.PAUSE);
+  }
+
+  /** 流量确认弹窗发起器（由宿主页面注册：以应用同款 CustomContentDialog 样式承接确认流程） */
+  public meteredDialogInvoker: ((onResult: (cont: boolean, neverRemind: boolean) => void) => void) | null = null
+
+  /** 流量网络播放确认：确认后按目标剧集继续播放；勾选「不再提醒」记住选择 */
+  private confirmMeteredPlay(listIndex: number, episodeIndex: number): void {
+    if (!this.meteredDialogInvoker) {
+      return;
+    }
+    this.meteredDialogInvoker((cont: boolean, neverRemind: boolean): void => {
+      if (neverRemind) {
+        if (cont) {
+          this.appSettings.auto_play_on_no_wifi = true;
+        } else {
+          this.appSettings.metered_prompt_disabled = true;
+        }
+      }
+      if (cont) {
+        this.playVideo(listIndex, episodeIndex);
+      }
+    });
+  }
+
   // 播放视频
   public async playVideo(episodeListIndex: number, episodeIndex: number) {
     if (this.destroyed) {
       return
     }
     Logger.e('tips', `playVideo episodeListIndex = ${episodeListIndex} episodeIndex=${episodeIndex}`);
+    this.meteredPlayConfirmed = true;
+    this.playerManager.setPendingStartHandler(null);
     // 源级广告拦截开关：优先于全局设置，null=该源未配置、跟随全局
     M3u8AdFilter.setSourceAdFilter(dataSourceManager.getSourceAdFilter(this.sourceKey));
     // 新播放接管：关闭仍在活跃的小窗，防止双音频
@@ -730,15 +777,29 @@ export class VideoDetailViewModel {
     HISTORY_CHANGED_EVENT.emit();
 
     if (this.playerManager.isPlaying()) {
-      // 页面内导航离开（push 新页）按设置自动进小窗；退后台由 setAutoStartEnabled 系统自动拉起
-      if (this.appSettings.auto_pip_on_exit
+      // 后台播放保持仅限"纯退后台"（页面栈未变化）：导航离开/返回（栈已变化）时
+      // 页面即将销毁，必须走暂停/停止分支，否则播控卡片与长时任务在页面销毁后仍驻留
+      const keepForBackground: boolean = this.appSettings.background_play
+        && BackgroundPlayManager.isBackgroundPlaying()
+        && AnimeState.pageStack.size() == this.stackSizeOnShown
+      if (!keepForBackground
+        && this.appSettings.auto_pip_on_exit
         && PiPManager.isPlayerSupported(this.appSettings.default_player)
         && !PiPManager.isActive
         && AnimeState.pageStack.size() > this.stackSizeOnShown) {
         await this.enterPiPMode(false)
       }
-      this.playerManager.stop();
-      this.pausedOnHide = true;
+      if (keepForBackground) {
+        this.pausedOnHide = false
+      } else if (AnimeState.pageStack.size() == this.stackSizeOnShown) {
+        // 退后台（页面栈未变化）：暂停而非停止，保持播放器就绪，回前台可直接续播；
+        // 停止会导致 mpv 卸载媒体且状态仍停留在 PAUSE，start() 无法恢复
+        await this.playerManager.pause()
+        this.pausedOnHide = true
+      } else {
+        this.playerManager.stop();
+        this.pausedOnHide = true;
+      }
     } else {
       this.pausedOnHide = false;
     }
@@ -780,6 +841,7 @@ export class VideoDetailViewModel {
     WebVideoResolver.cancelActive();
     this.restoreOrientation();
     PLAYER_SWITCH_EVENT.off()
+    this.playerManager.setPendingStartHandler(null);
     this.playerManager.destroy();
     // 清理 PiP 委托与快照（页面重新显示时由 onPageShow 重新注册）
     if (this.pipRequestHandler && PiPManager.requestHandler === this.pipRequestHandler) {

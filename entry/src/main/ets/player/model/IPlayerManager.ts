@@ -75,6 +75,9 @@ export default interface IPlayerManager {
 
   pause: () => Promise<void>
 
+  /** 无 URL 时的待播接管（流量确认场景）：start() 无地址时消费该回调（如加载待播剧集），传 null 清除 */
+  setPendingStartHandler: (handler: (() => void) | null) => void
+
   stop: () => Promise<void>
 
   seekTo: (value: number) => Promise<void>

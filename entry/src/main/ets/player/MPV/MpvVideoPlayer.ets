@@ -20,6 +20,8 @@ export struct MpvVideoPlayer {
   private destroyed: boolean = false;
   /** mpv 在 file-loaded 前会静默丢弃 seek：媒体就绪前暂存 seek 目标（毫秒），就绪后补发 */
   private pendingSeekMs: number = -1;
+  /** 是否已 open 过媒体：表面挂载等场景 mpv 会上报无媒体的 playing=true，需忽略 */
+  private hasMedia: boolean = false;
   /** 媒体是否已加载完成（duration 已知），seek 可安全执行 */
   private mediaReady: boolean = false;
   @Local videoAspRatio: number = DEFAULT_ASPECT;
@@ -43,6 +45,7 @@ export struct MpvVideoPlayer {
         // open 是异步加载，file-loaded 前的 seek 会被 mpv 丢弃，直接从头播放
         this.mediaReady = false;
         this.pendingSeekMs = -1;
+        this.hasMedia = true;
         const startPosMs = this.playerManager?.getPendingSeekPos() ?? -1;
         if (startPosMs > 0) {
           this.mpvPlayer.open(new Media(url, { start: startPosMs / 1000 }), false);
@@ -80,6 +83,7 @@ export struct MpvVideoPlayer {
       }
       this.mediaReady = false;
       this.pendingSeekMs = -1;
+      this.hasMedia = false;
       try {
         this.mpvPlayer.stop();
         Logger.i('MpvVideoPlayer', 'Player stopped.');
@@ -106,6 +110,7 @@ export struct MpvVideoPlayer {
       }
       this.mediaReady = false;
       this.pendingSeekMs = -1;
+      this.hasMedia = false;
       try {
         this.mpvPlayer.stop();
       } catch (error) {
@@ -167,7 +172,11 @@ export struct MpvVideoPlayer {
         return;
       }
       if (playing) {
-        this.playerManager?.setStatus(PlayerStatus.PLAY);
+        // 表面挂载等场景 mpv 会上报无媒体的 playing=true（空闲态 pause=false）：
+        // 未 open 过媒体时忽略，防止挂起/暂停样式被误切为播放
+        if (this.hasMedia) {
+          this.playerManager?.setStatus(PlayerStatus.PLAY);
+        }
       } else if (this.playerManager?.getStatus() === PlayerStatus.PLAY && !this.mpvPlayer.state.eof) {
         this.playerManager?.setStatus(PlayerStatus.PAUSE);
       }

@@ -13,6 +13,7 @@ import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { appSettings } from '../entryability/Settings';
 import { PiPManager } from '../player/PiPManager';
 import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
+import { BackgroundPlayManager } from '../utils/BackgroundPlayManager';
 
 // 窗口隐藏事件（EntryAbility 由主窗口 windowEvent 转发）：暂停前台播放
 WINDOW_HIDDEN_EVENT.on((data: emitter.EventData) => {
@@ -28,6 +29,24 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   constructor() {
     PlayerManagerImpl.activeInstances.push(this)
+    // 后台继续播放：注册播控中心命令回调（会话由 BackgroundPlayManager 随长时任务创建）
+    BackgroundPlayManager.attach({
+      play: () => {
+        this.start()
+      },
+      pause: () => {
+        this.pause()
+      },
+      seek: (positionMs: number) => {
+        this.seekTo(positionMs)
+      },
+      next: () => {
+        this.selectEpisode(this.episodeIndex + 1)
+      },
+      previous: () => {
+        this.selectEpisode(this.episodeIndex - 1)
+      }
+    })
   }
 
   /**
@@ -43,6 +62,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
     const waitPiPMs: number = PiPManager.isAutoStartEnabled ? 1500 : 0
     setTimeout(() => {
       if (PiPManager.isActive) {
+        return
+      }
+      // 后台继续播放：长时任务持有时（开关开启且播放中）退后台不暂停，由 AVSession+长时任务保活续播
+      if (BackgroundPlayManager.isBackgroundPlaying()) {
         return
       }
       PlayerManagerImpl.activeInstances.forEach((instance: PlayerManagerImpl) => {
@@ -103,6 +126,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   private playAfterInit: boolean = false
 
+  /** 流量确认等场景下的待播接管：无 URL 时 start() 触发（由 ViewModel 注册加载待播剧集） */
+  private pendingStartHandler: (() => void) | null = null
+
   /**
    * 待跳转的续播位置（毫秒）。续播位置不能只存 currentTime：
    * 播放器加载期间会推送 position=0 事件（notifyTime/notifyCurrentTime）覆盖 currentTime，
@@ -148,8 +174,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
     // 避免与随后的 setPlayerUrl 竞态重复设置数据源
     const resumeLoad: boolean = this.url != '' && this.status == PlayerStatus.IDLE && !this.isInitializing
     // 后端切换：新实例是全新状态，旧后端残留的 PLAY 等状态作废，通知式置 IDLE——
-    // 控制层立即进入加载态，且 setPlayerUrl 不再凭残留状态对新实例误调 stop/reset
-    if (!resumeLoad && this.status != PlayerStatus.IDLE) {
+    // 控制层立即进入加载态，且 setPlayerUrl 不再凭残留状态对新实例误调 stop/reset；
+    // 流量确认挂起态（pendingStartHandler 在册）除外：保留 PAUSE 暂停样式供播放键续播
+    if (!resumeLoad && this.status != PlayerStatus.IDLE && !this.pendingStartHandler) {
       this.setStatus(PlayerStatus.IDLE)
     }
     if (resumeLoad) {
@@ -199,6 +226,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     this.listeners.forEach((l) => {
       l.onEpisodeChanged(this.episodeList, this.episodeIndex)
     })
+    BackgroundPlayManager.updateQueue(this.episodeList, this.episodeIndex)
     const episode = this.episodeList[this.episodeIndex]
     if (episode.videoUrl) {
       await this.playEpisode(episode, startPos)
@@ -218,6 +246,7 @@ export default class PlayerManagerImpl implements IPlayerManager {
     this.listeners.forEach((l) => {
       l.onEpisodeChanged(this.episodeList, this.episodeIndex)
     })
+    BackgroundPlayManager.updateQueue(this.episodeList, this.episodeIndex)
   }
 
   //  async playEpisodeAt(episodeIndex: number): Promise<void> {
@@ -279,6 +308,11 @@ export default class PlayerManagerImpl implements IPlayerManager {
   async start(): Promise<void> {
     Logger.e('tips', 'start isPlaying=' + this.isPlaying() + ' status=' + this.status + ' url=' + this.url)
     if (!this.url || this.isPlaying()) {
+      if (!this.url && this.pendingStartHandler) {
+        const handler: (() => void) = this.pendingStartHandler
+        this.pendingStartHandler = null
+        handler()
+      }
       return
     }
     if (this.status == PlayerStatus.IDLE) {
@@ -332,6 +366,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
         await this.player.pause()
       }
     }
+  }
+
+  setPendingStartHandler(handler: (() => void) | null): void {
+    this.pendingStartHandler = handler
   }
 
   async stop() {
@@ -447,6 +485,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
     for (let listener of this.listeners) {
       listener.onStatusChanged(status)
     }
+    // 后台继续播放：开关开启且播放中申请音频长时任务，其余状态释放
+    BackgroundPlayManager.update(status)
     if (this.status == PlayerStatus.INITIALIZED) {
       this.isInitializing = false
       if (this.playAfterInit) {
@@ -563,6 +603,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
   notifyTime(duration: number, currentTime: number) {
     this.currentTime = currentTime
     this.totalTime = duration
+    // 后台继续播放：节流同步播控中心进度与元数据
+    BackgroundPlayManager.updateProgress(currentTime, duration, this.videoSpeed)
     // seek 位置已到达目标点：关闭 seek 加载圈
     if (this.seekWaiting && this.seekTargetMs >= 0 && Math.abs(currentTime - this.seekTargetMs) < 2000) {
       this.clearSeekWaiting()
@@ -587,6 +629,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
 
   notifyCurrentTime(currentTime: number) {
     this.currentTime = currentTime
+    // 后台继续播放：seek 后进度跳变，立即触发播控中心同步
+    BackgroundPlayManager.updateProgress(currentTime, this.totalTime, this.videoSpeed)
     // 有进度才保存进度
     if (currentTime > 0) {
       appContinueModel.setCurrentVideoDuration(currentTime)
@@ -652,6 +696,10 @@ export default class PlayerManagerImpl implements IPlayerManager {
     await this.stop()
     // 彻底释放底层播放器：加载中 stop 可能是空操作，只有 release 能取消加载
     await this.player.release()
+    // 播放器后端 stop/release 不发状态回调（mpv 仅补 PAUSE 事件），
+    // 状态驱动的延迟销毁感知不到页面销毁：立即释放后台长时任务与播控会话，
+    // 否则播控卡片在页面销毁后仍驻留（PLAY 态下系统还会按时间外推进度）
+    BackgroundPlayManager.release()
     this.listeners.length = 0
   }
 

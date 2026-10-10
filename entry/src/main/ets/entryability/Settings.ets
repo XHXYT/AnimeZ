@@ -26,6 +26,10 @@ export class AppConfigs {
    */
   @Trace auto_play_on_no_wifi: boolean = true
   /**
+   * 流量播放弹窗勾选「不再提醒」并取消后置 true：不再弹窗、不自动播放，手动点播放不受影响
+   */
+  @Trace metered_prompt_disabled: boolean = false
+  /**
    * 启动app时，在WiFi下自动下载未完成任务，默认关闭
    */
   @Trace auto_resume_download_on_wifi: boolean = false
@@ -174,6 +178,10 @@ export class AppConfigs {
    */
   @Trace schedule_source_key: string = ''
   /**
+   * 后台继续播放：开启后应用切后台时申请音频长时任务，播放不中断
+   */
+  @Trace background_play: boolean = false
+  /**
    * m3u8 广告拦截：播放前剔除播放列表中注入的广告分片（如 adjump 贴片广告）
    */
   @Trace m3u8_ad_filter: boolean = false
@@ -211,6 +219,7 @@ export class AppConfigs {
     this.auto_play_next_episode = (json["auto_play_next_episode"] as boolean) ?? this.auto_play_next_episode
     this.key_homepage_source = (json["key_homepage_source"] as boolean) ?? this.key_homepage_source
     this.auto_play_on_no_wifi = (json["auto_play_on_no_wifi"] as boolean) ?? this.auto_play_on_no_wifi
+    this.metered_prompt_disabled = (json["metered_prompt_disabled"] as boolean) ?? this.metered_prompt_disabled
     this.auto_resume_download_on_wifi =
       (json["auto_resume_download_on_wifi"] as boolean) ?? this.auto_resume_download_on_wifi
     this.need_blur = (json["need_blur"] as boolean) ?? this.need_blur
@@ -254,6 +263,7 @@ export class AppConfigs {
     this.download_location = (json["download_location"] as string) ?? this.download_location
     this.download_separate_route = (json["download_separate_route"] as boolean) ?? this.download_separate_route
     this.schedule_source_key = (json["schedule_source_key"] as string) ?? this.schedule_source_key
+    this.background_play = (json["background_play"] as boolean) ?? this.background_play
     this.m3u8_ad_filter = (json["m3u8_ad_filter"] as boolean) ?? this.m3u8_ad_filter
   }
 
@@ -298,7 +308,7 @@ export class AppConfigs {
   /**
    * 任一设置项变化时自动保存
    */
-  @Monitor('auto_play_next_episode', 'key_homepage_source', 'auto_play_on_no_wifi',
+  @Monitor('auto_play_next_episode', 'key_homepage_source', 'auto_play_on_no_wifi', 'metered_prompt_disabled',
     'auto_resume_download_on_wifi', 'need_blur', 'max_downloading_count', 'default_player',
     'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
@@ -309,7 +319,7 @@ export class AppConfigs {
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
     'search_result_style', 'download_location', 'download_separate_route', 'schedule_source_key',
-    'm3u8_ad_filter')
+    'background_play', 'm3u8_ad_filter')
   public async save(): Promise<void> {
     if (this.isLoading) {
       return
@@ -319,6 +329,7 @@ export class AppConfigs {
         "auto_play_next_episode": this.auto_play_next_episode,
         "key_homepage_source": this.key_homepage_source,
         "auto_play_on_no_wifi": this.auto_play_on_no_wifi,
+        "metered_prompt_disabled": this.metered_prompt_disabled,
         "auto_resume_download_on_wifi": this.auto_resume_download_on_wifi,
         "need_blur": this.need_blur,
         "max_downloading_count": this.max_downloading_count,
@@ -356,6 +367,7 @@ export class AppConfigs {
         "download_location": this.download_location,
         "download_separate_route": this.download_separate_route,
         "schedule_source_key": this.schedule_source_key,
+        "background_play": this.background_play,
         "m3u8_ad_filter": this.m3u8_ad_filter
       }
       await preferenceUtil.put(SETTINGS_KEY, JSON.stringify(data))
@@ -372,6 +384,7 @@ export class AppConfigs {
     this.auto_play_next_episode = true
     this.key_homepage_source = true
     this.auto_play_on_no_wifi = true
+    this.metered_prompt_disabled = false
     this.auto_resume_download_on_wifi = false
     this.need_blur = false
     this.max_downloading_count = 3
@@ -409,6 +422,7 @@ export class AppConfigs {
     this.download_location = 'sandbox'
     this.download_separate_route = false
     this.schedule_source_key = ''
+    this.background_play = false
     this.m3u8_ad_filter = true
     this.isLoading = false
     await this.save()

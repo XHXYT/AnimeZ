@@ -11,6 +11,15 @@
         }
       },
       {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "always"
+        }
+      },
+      {
         "name": "ohos.permission.DISTRIBUTED_DATASYNC",
         "usedScene": {
           "abilities": [
@@ -65,7 +74,10 @@
             ]
           }
         ],
-        "continuable": true // 此 UIAbility 可被迁移
+        "continuable": true, // 此 UIAbility 可被迁移
+        "backgroundModes": [
+          "audioPlayback"
+        ]
       }
     ]
   }

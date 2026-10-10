@@ -17,6 +17,8 @@ export interface TitleBarButton {
   width?: Length
   /** 按钮高度，默认 36vp */
   height?: Length
+  /** 按钮形状，默认 Circle */
+  type?: ButtonType
   /** 图标/文字颜色，默认主文字色 */
   fontColor?: ResourceColor
   /** 背景色，默认透明 */
@@ -87,6 +89,7 @@ export default struct TitleBar {
       fontWeight: AnimeState.windowMode ? FontWeight.Normal : undefined,
       width: button.width,
       height: button.height,
+      type: button.type,
       backgroundColor: button.backgroundColor,
       fontColor: button.fontColor ?? $r('app.color.color_text_major'),
       enabled: button.enabled,

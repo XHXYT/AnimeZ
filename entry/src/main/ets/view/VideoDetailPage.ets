@@ -7,7 +7,8 @@ import { CustomItemInfo, ItemActionType, MenuOption, makeSeekSecondsOptions } fr
 import { PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { PiPManager } from '../player/PiPManager';
-import { window } from '@kit.ArkUI';
+import { window, CustomContentDialog } from '@kit.ArkUI';
+import { ButtonOptions } from '@ohos.arkui.advanced.Dialog';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import { ConfigurationConstant } from '@kit.AbilityKit';
@@ -33,6 +34,7 @@ import { permissionManage } from '../utils/PermissionManage';
 import { SearchPage } from './SearchPage';
 import VideoInfo from '../entity/VideoInfo';
 import { dataSourceManager } from '../api/DataSourceManager';
+import { BackgroundPlayManager } from '../utils/BackgroundPlayManager';
 
 // 系统路由
 @Builder
@@ -54,6 +56,10 @@ struct VideoDetailPage {
   private panelController: PanelController = new PanelController()
   // 换源半模态开关（内嵌搜索页，选中原地切换数据源）
   @Local showSourceSheet: boolean = false
+  // 流量播放确认弹窗（应用同款 CustomContentDialog 样式，含「不再提醒」勾选）
+  private meteredDialog: CustomDialogController | undefined = undefined
+  @Local meteredNeverRemind: boolean = false
+  private meteredResultCallback: ((cont: boolean, neverRemind: boolean) => void) | null = null
 
   aboutToAppear() {
     // 设备互联权限（投播用）仅播放场景需要：从冷启动移到详情页进入时申请（已授权则直接跳过）
@@ -63,11 +69,86 @@ struct VideoDetailPage {
       this.viewModel.panelContentType = 2
       this.panelController.show()
     })
+    // 流量播放确认弹窗：VM 挂起为暂停态后经发起器唤起，结果回调驱动续播/记忆选择
+    const meteredButtons: ButtonOptions[] = [
+      {
+        value: '取消',
+        buttonStyle: ButtonStyleMode.TEXTUAL,
+        fontColor: $r('app.color.primary_color'),
+        action: () => {
+          this.finishMeteredDialog(false)
+        }
+      },
+      {
+        value: '继续播放',
+        buttonStyle: ButtonStyleMode.EMPHASIZED,
+        action: () => {
+          this.finishMeteredDialog(true)
+        }
+      }
+    ]
+    this.meteredDialog = new CustomDialogController({
+      builder: CustomContentDialog({
+        primaryTitle: '流量播放提醒',
+        contentBuilder: (): void => {
+          this.MeteredDialogContentBuilder()
+        },
+        buttons: meteredButtons,
+        themeColorMode: appSettings.color_mode
+      }),
+      autoCancel: false,
+      alignment: DialogAlignment.Center,
+      cornerRadius: 32
+    })
+    this.viewModel.meteredDialogInvoker =
+      (onResult: (cont: boolean, neverRemind: boolean) => void): void => {
+        this.meteredNeverRemind = false
+        this.meteredResultCallback = onResult
+        this.meteredDialog?.open()
+      }
   }
 
   aboutToDisappear() {
     PLAYER_SETTINGS_EVENT.off()
+    this.viewModel.meteredDialogInvoker = null
     this.viewModel.onDestroy();
+  }
+
+  /** 弹窗内容：说明文字（完整多行展示）+ 右下角「不再提醒」勾选 */
+  @Builder
+  MeteredDialogContentBuilder() {
+    Column({ space: 12 }) {
+      Text('当前处于非WiFi网络，自动播放已暂停。继续播放可能消耗移动数据流量，可在 设置-播放 打开「非Wifi下自动播放」。')
+        .fontSize(14)
+        .fontColor($r('app.color.color_text_minor'))
+        .lineHeight(21)
+        .width('100%')
+      Row({ space: 8 }) {
+        Checkbox()
+          .select(this.meteredNeverRemind)
+          .selectedColor($r('app.color.primary_color'))
+          .width(18)
+          .height(18)
+          .onChange((value: boolean) => {
+            this.meteredNeverRemind = value
+          })
+        Text('不再提醒')
+          .fontSize(14)
+          .fontColor($r('app.color.color_text_minor'))
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .padding({ top: 4, bottom: 4 })
+    }
+    .width('100%')
+  }
+
+  /** 流量弹窗按钮收口：关闭弹窗并回调结果（cont=是否继续播放） */
+  private finishMeteredDialog(cont: boolean): void {
+    this.meteredDialog?.close()
+    const callback: ((cont: boolean, neverRemind: boolean) => void) | null = this.meteredResultCallback
+    this.meteredResultCallback = null
+    callback?.(cont, this.meteredNeverRemind)
   }
 
   @Monitor('animeState.isPhoneLandscape')
@@ -612,6 +693,8 @@ struct VideoDetailPage {
         value: appSettings.auto_play_on_no_wifi,
         onChange: (value) => {
           appSettings.auto_play_on_no_wifi = value as boolean
+          // 手动切换主开关时恢复弹窗提醒（清除「不再提醒」的取消记忆）
+          appSettings.metered_prompt_disabled = false
         }
       }),
       new CustomItemInfo({
@@ -622,6 +705,17 @@ struct VideoDetailPage {
         value: appSettings.auto_pip_on_exit,
         onChange: (value) => {
           appSettings.auto_pip_on_exit = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_background_play',
+        title: '后台继续播放',
+        subtitle: '应用切后台后继续播放声音，通知栏显示播放任务',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.background_play,
+        onChange: (value) => {
+          appSettings.background_play = value as boolean
+          BackgroundPlayManager.refresh()
         }
       })
     ].filter((item: CustomItemInfo) => {

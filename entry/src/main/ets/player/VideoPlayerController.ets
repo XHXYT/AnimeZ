@@ -25,6 +25,7 @@ import { DanmakuLoadResult, DanmakuLoadStatus, DandanplayApi } from '../danmaku/
 import { DandanplayAnime, DandanplayEpisode } from '../danmaku/DandanplayModels';
 import { MenuOption, makeSeekSecondsOptions } from '../entity/CusItemInfo';
 import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findActionByKeyCode } from '../utils/PlayerShortcuts';
+import { BackgroundPlayManager } from '../utils/BackgroundPlayManager';
 
 interface KeyValue {
   name: string,
@@ -306,7 +307,7 @@ export struct VideoPlayerController {
         return
       }
       // 持续刷新远端起播位置，发起投播时远端从当前进度开播；并节流同步播控中心进度
-      this.castManager.updateProgress(currentTime, this.currentSpeedValue())
+      this.castManager.updateProgress(currentTime, this.currentSpeedValue(), totalTime)
       this.setProgress(totalTime, currentTime)
       // 弹幕进度漂移校正（内部节流）
       this.danmakuCtrl.onProgress(currentTime)
@@ -2014,6 +2015,28 @@ export struct VideoPlayerController {
           }
           .width('100%')
         }
+
+        Row() {
+          Column() {
+            Text('后台继续播放')
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Text('应用切后台后继续播放声音，通知栏显示播放任务')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 2 })
+          }
+          .alignItems(HorizontalAlign.Start)
+
+          Blank()
+
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.background_play })
+            .onChange((isOn: boolean) => {
+              appSettings.background_play = isOn
+              BackgroundPlayManager.refresh()
+            })
+        }
+        .width('100%')
 
       }
       .padding(this.isFullScreen ? 16 : 8)
