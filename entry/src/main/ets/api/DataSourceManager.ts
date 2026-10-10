@@ -356,6 +356,45 @@ class DataSourceManager {
   }
 
   /**
+   * 流式搜索：每个数据源完成后立即通过 onBatch 推送该源新结果（已按 URL 去重），
+   * 全部完成后返回合并总列表。单源失败不影响其它源。
+   */
+  async searchStream(keyword: string, page: number, sourceKeys: string[] | undefined,
+    onBatch: (batch: VideoInfo[]) => void): Promise<VideoInfo[]> {
+    if (!keyword.trim()) {
+      return [];
+    }
+    const keySet = sourceKeys && sourceKeys.length > 0 ? new Set<string>(sourceKeys) : null;
+    const sources = this.getPrioritizedDataSources()
+      .filter(ds => ds.isEnabled() && (keySet === null || keySet.has(ds.getKey())));
+    if (sources.length === 0) {
+      Logger.w('tips', `DataSourceManager.searchStream No available source`);
+      return [];
+    }
+    const urlSet = new Set<string>();
+    const mergedResults: VideoInfo[] = [];
+    await Promise.all(sources.map(async (source) => {
+      try {
+        const results = await source.search(keyword, page);
+        const fresh: VideoInfo[] = [];
+        results.forEach(video => {
+          if (!urlSet.has(video.url)) {
+            urlSet.add(video.url);
+            mergedResults.push(video);
+            fresh.push(video);
+          }
+        });
+        if (fresh.length > 0) {
+          onBatch(fresh);
+        }
+      } catch (error) {
+        Logger.e('tips', `DataSourceManager.searchStream Failed to search ${source.getKey()}: ${error.message}`);
+      }
+    }));
+    return mergedResults;
+  }
+
+  /**
    * 获取主页数据
    */
   async getHomepageData(): Promise<HomepageData> {

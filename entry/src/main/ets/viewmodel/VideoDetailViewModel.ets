@@ -75,7 +75,8 @@ export class VideoDetailViewModel {
     title: '',
     coverUrl: '',
     sourceKey: '',
-    accessTime: 0
+    accessTime: 0,
+    groupTitle: ''
   }
 
   public videoCollectionInfoDB: VideoCollectionTable
@@ -347,7 +348,8 @@ export class VideoDetailViewModel {
       title: '',
       coverUrl: '',
       sourceKey: '',
-      accessTime: 0
+      accessTime: 0,
+      groupTitle: ''
     };
     this.resumePosition = -1;
     this.errorMessage = '';
@@ -634,7 +636,8 @@ export class VideoDetailViewModel {
         title: this.videoDetailInfo.title,
         coverUrl: this.videoDetailInfo.coverUrl,
         sourceKey: this.sourceKey,
-        accessTime: Date.now()
+        accessTime: Date.now(),
+        groupTitle: existing && existing.groupTitle ? existing.groupTitle : ''
       };
       // 保存到数据库，返回插入的记录ID
       const insertId = await this.videoCollectionInfoDB.save(theCollectionInfo);

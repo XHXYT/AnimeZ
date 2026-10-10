@@ -4,6 +4,8 @@ import VideoCollectionInfo from '../../entity/VideoCollectionInfo';
 import { Context } from '@kit.AbilityKit';
 import { Table } from '../decorator/Decorators';
 import AutoTable from '../AutoTable';
+import rdb from '@ohos.data.relationalStore';
+import { ValuesBucket } from '../AbsTable';
 import { ValueType } from '@kit.ArkData';
 
 /**
@@ -14,6 +16,18 @@ export class VideoCollectionTable extends AutoTable<VideoCollectionInfo> {
 
   constructor(context: Context) {
     super(context, 'video_manager', 'video_collection');
+  }
+
+  /**
+   * 建表 + 旧表补充 groupTitle 列（已存在则忽略）
+   */
+  protected async init(db: rdb.RdbStore): Promise<void> {
+    await db.executeSql(this.getCreateTableSql())
+    try {
+      await db.executeSql('ALTER TABLE video_collection ADD COLUMN groupTitle TEXT')
+    } catch (err) {
+      Logger.d(this, 'groupTitle column already exists')
+    }
   }
 
   protected getEntityClass(): new (...args: any[]) => VideoCollectionInfo {
@@ -52,8 +66,9 @@ export class VideoCollectionTable extends AutoTable<VideoCollectionInfo> {
     Logger.d(this, 'save existingItem=' + JSON.stringify(existingItem))
     let result;
     if (existingItem) {
-      // 设置id，然后更新
+      // 设置id，然后更新；保留已存在的手动分组名
       item.id = existingItem.id
+      item.groupTitle = item.groupTitle ?? (existingItem.groupTitle ?? '')
       result = await this.update(item)
     } else {
       // id设为null，让数据库自增
@@ -70,6 +85,16 @@ export class VideoCollectionTable extends AutoTable<VideoCollectionInfo> {
   async deleteById(id: number): Promise<number> {
     Logger.d(this, 'deleteById id = ' + id)
     return this.deleteItem(this.getPredicates().equalTo('id', id))
+  }
+
+  /**
+   * 批量更新分组名（多选合并）
+   */
+  async updateGroupTitle(ids: number[], groupTitle: string): Promise<number> {
+    Logger.d(this, 'updateGroupTitle ids=' + JSON.stringify(ids) + ' groupTitle=' + groupTitle)
+    const db = await this.futureDb
+    const bucket: ValuesBucket = { 'groupTitle': groupTitle }
+    return db.update(bucket, this.getPredicates().in('id', ids))
   }
 
   /**

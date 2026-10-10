@@ -18,6 +18,8 @@ export class CategoryViewModel {
   @Trace errorMessage: string = ''
   /** 搜索结果列表（SearchPage） */
   @Trace videoList: VideoInfo[] = []
+  /** 搜索代际：发起新搜索/返回记录页时自增，丢弃过期批次的流式推送 */
+  private searchGeneration: number = 0
 
   /** 目录页数据源（CategoryPage），引用由 VM 持有，通过 IDataSource 自身通知刷新 */
   readonly categoryDataSource: CategoryDataSource = new CategoryDataSource([])
@@ -44,33 +46,48 @@ export class CategoryViewModel {
 
   /**
    * 搜索（关键词校验与历史记录由调用方处理）
+   * 流式填充：不进全屏加载态，每个数据源完成后立即把该批结果推入 videoList
    * @param keyword 关键词
    * @param precise true=精准（标题与关键词完全一致），false=模糊（标题包含关键词，忽略大小写）
    * @param blockWords 结果屏蔽词列表，标题命中即过滤
-   * @param sourceKeys 限定参与搜索的数据源 key 列表，为空时按默认策略
+   * @param sourceKeys 限定参与搜索的数据源 key 列表，为空时搜索全部已启用源
    */
   public async search(keyword: string, precise: boolean = false, blockWords: string[] = [],
     sourceKeys?: string[]) {
-    this.state = ViewState.LOADING
+    const generation = ++this.searchGeneration
+    this.errorMessage = ''
+    this.videoList = []
+    this.state = ViewState.CONTENT
     try {
-      let videoList = await dataSourceManager.search(keyword, 1, sourceKeys)
-      videoList = this.filterResults(videoList, keyword, precise, blockWords)
-      this.videoList = videoList
+      await dataSourceManager.searchStream(keyword, 1, sourceKeys, (batch: VideoInfo[]): void => {
+        if (generation !== this.searchGeneration) {
+          return
+        }
+        const filtered = this.filterResults(batch, keyword, precise, blockWords)
+        if (filtered.length > 0) {
+          this.videoList = this.videoList.concat(filtered)
+        }
+      })
+      if (generation !== this.searchGeneration) {
+        return
+      }
       if (this.videoList.length == 0) {
         this.state = ViewState.EMPTY
-      } else {
-        this.state = ViewState.CONTENT
       }
     } catch (e) {
+      if (generation !== this.searchGeneration) {
+        return
+      }
       this.errorMessage = JSON.stringify(e)
       this.state = ViewState.ERROR
     }
   }
 
   /**
-   * 返回搜索记录页（SearchPage 返回拦截时复位状态）
+   * 返回搜索记录页（SearchPage 返回拦截时复位状态），并中断进行中的流式搜索
    */
   public backToHistory(): void {
+    this.searchGeneration++
     this.videoList = []
     this.errorMessage = ''
     this.state = ViewState.CUSTOM

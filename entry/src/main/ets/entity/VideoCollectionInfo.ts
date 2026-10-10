@@ -28,6 +28,10 @@ export default class VideoCollectionInfo {
   @Column({ name: 'accessTime', type: 'INTEGER', notNull: true })
   accessTime: number = 0
 
+  // 手动合并的分组名称（空表示按自身标题分组）
+  @Column({ name: 'groupTitle', type: 'TEXT' })
+  groupTitle: string = ''
+
   constructor(link: string, title: string = '', coverUrl: string = '', sourceKey: string = '', accessTime: number = Date.now()) {
     this.link = link;
     this.title = title;

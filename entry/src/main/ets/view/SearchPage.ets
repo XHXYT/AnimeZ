@@ -123,6 +123,10 @@ export struct SearchPage {
 
   aboutToDisappear(): void {
     CaptchaBridge.unregister()
+    // 页面销毁时若仍有验证码挑战未完成，reject 掉避免对应搜索 Promise 永久悬挂
+    if (this.dialogMode === 'captcha') {
+      this.cancelCaptcha()
+    }
   }
 
   /**
@@ -153,6 +157,8 @@ export struct SearchPage {
    */
   private handleCaptchaChallenge(challenge: CaptchaChallenge): Promise<string> {
     return new Promise<string>((resolve: (code: string) => void, reject: (error: Error) => void) => {
+      // 弹窗可能正以其它模式（如屏蔽词）打开，先关闭确保内容切换为验证码
+      this.commonDialog?.close()
       this.captchaChallengeResolve = resolve
       this.captchaChallengeReject = reject
       this.captchaRefresh = challenge.refresh

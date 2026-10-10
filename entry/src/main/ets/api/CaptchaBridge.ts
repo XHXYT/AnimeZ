@@ -17,6 +17,8 @@ export type CaptchaHandler = (challenge: CaptchaChallenge) => Promise<string>;
  */
 export class CaptchaBridge {
   private static handler: CaptchaHandler | null = null;
+  /** 串行队列尾部：并发多源同时需要验证码时排队逐个弹窗，避免弹窗互相覆盖导致回调丢失 */
+  private static queueTail: Promise<void> = Promise.resolve();
 
   static register(handler: CaptchaHandler): void {
     CaptchaBridge.handler = handler;
@@ -31,13 +33,20 @@ export class CaptchaBridge {
   }
 
   /**
-   * 请求用户输入验证码
+   * 请求用户输入验证码（串行：同一时刻只展示一个验证码弹窗，后续挑战排队等待前一个完成）
    * 未注册处理器（当前页面不支持）或用户取消时抛错
    */
   static async prompt(challenge: CaptchaChallenge): Promise<string> {
     if (!CaptchaBridge.handler) {
       throw new Error('当前页面不支持验证码输入');
     }
-    return await CaptchaBridge.handler(challenge);
+    const run: Promise<string> = CaptchaBridge.queueTail.then(async (): Promise<string> => {
+      if (!CaptchaBridge.handler) {
+        throw new Error('当前页面不支持验证码输入');
+      }
+      return await CaptchaBridge.handler(challenge);
+    });
+    CaptchaBridge.queueTail = run.then((): void => {}, (): void => {});
+    return await run;
   }
 }
