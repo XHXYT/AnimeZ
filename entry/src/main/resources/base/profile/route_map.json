@@ -2,7 +2,7 @@
   "routerMap": [
     {
       "name": "HomePage",
-      "pageSourceFile": "src/main/ets/pages/HomePage.ets",
+      "pageSourceFile": "src/main/ets/pages/Homepage.ets",
       "buildFunction": "HomePageBuilder"
     },
     {
@@ -64,6 +64,11 @@
       "name": "DanmakuSettingsPage",
       "pageSourceFile": "src/main/ets/view/settings/DanmakuSettingsPage.ets",
       "buildFunction": "DanmakuSettingsPageBuilder"
+    },
+    {
+      "name": "PiPSizeSettingsPage",
+      "pageSourceFile": "src/main/ets/view/settings/PiPSizeSettingsPage.ets",
+      "buildFunction": "PiPSizeSettingsPageBuilder"
     },
     {
       "name": "VideoCollectionPage",

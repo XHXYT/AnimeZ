@@ -23,6 +23,10 @@ export interface PlaybackCommandHandler {
   next: () => void
   /** 上一集（无上一集时回调内自行忽略） */
   previous: () => void
+  /** 快进（相对偏移毫秒） */
+  fastForward: (deltaMs: number) => void
+  /** 快退（相对偏移毫秒） */
+  rewind: (deltaMs: number) => void
 }
 
 /**
@@ -321,6 +325,24 @@ class _BackgroundPlayManager {
         this.handler.seek(time)
       }
     })
+    // 快进/快退：系统实测下发秒（与 fastForwardSkipIntervals:15 一致），文档标注毫秒不可信；
+    // 兼容两种取值：<1000 视为秒换算毫秒，未下发按 15 秒默认步长
+    session.on('fastForward', (time?: number) => {
+      const raw = time ?? 15
+      const delta = raw >= 1000 ? raw : raw * 1000
+      Logger.i('BackgroundPlay', `播控中心：快进 ${delta}ms`)
+      if (this.handler != null) {
+        this.handler.fastForward(delta)
+      }
+    })
+    session.on('rewind', (time?: number) => {
+      const raw = time ?? 15
+      const delta = raw >= 1000 ? raw : raw * 1000
+      Logger.i('BackgroundPlay', `播控中心：快退 ${delta}ms`)
+      if (this.handler != null) {
+        this.handler.rewind(delta)
+      }
+    })
     await this.refreshMetadata()
     if (!this.sessionActive) {
       await session.activate()
@@ -418,6 +440,8 @@ class _BackgroundPlayManager {
       session.off('play')
       session.off('pause')
       session.off('seek')
+      session.off('fastForward')
+      session.off('rewind')
       session.off('playNext')
       session.off('playPrevious')
       await session.destroy()

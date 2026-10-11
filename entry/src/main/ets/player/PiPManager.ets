@@ -4,6 +4,10 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import Logger from '../utils/Logger';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
+import { appSettings } from '../entryability/Settings';
+import EpisodeInfo from '../entity/EpisodeInfo';
+import { dataSourceManager } from '../api/DataSourceManager';
+import { WebVideoResolver } from '../utils/WebVideoResolver';
 
 /** 支持小窗播放的播放器后端（小窗画面由独立 AVPlayer 渲染，其余后端隐藏入口且不自动触发） */
 const PIP_SUPPORTED_PLAYERS: string[] = ['av', 'ijk'];
@@ -28,6 +32,8 @@ export interface PiPNavigationInfo {
   title: string;
   coverUrl: string;
   sourceKey: string;
+  /** 当前剧集列表（小窗面板切集用；页面销毁后小窗仍可独立切集） */
+  episodeList?: EpisodeInfo[];
 }
 
 /**
@@ -40,6 +46,7 @@ class PiPSurfaceController extends XComponentController {
 
   onSurfaceDestroyed(surfaceId: string): void {
     Logger.i('PiPManager', `onSurfaceDestroyed surfaceId=${surfaceId}`)
+    PiPManager.onSurfaceDestroyed(surfaceId)
   }
 }
 
@@ -68,6 +75,20 @@ export class _PiPManager {
   mainPlayerPauser: (() => void) | null = null
   /** PiP 播放错误提示回调 */
   onPipError: ((message: string) => void) | null = null
+  /** 小窗内切集回调（详情页 VM 注册：同步剧集状态、保存历史） */
+  onEpisodeSwitched: ((listIndex: number, episodeIndex: number) => void) | null = null
+  /** 点小窗恢复按钮原地收回播放（详情页 VM 注册；为 null 时走恢复导航 push 新页） */
+  onPipRestore: ((position: number) => void) | null = null
+  /** 主播放器要求起播但小窗仍活跃：详情页原地收回（收回流程内部自行续播） */
+  requestTakeover: (() => void) | null = null
+  /** 小窗被关闭（面板 X / 播放错误）：通知详情页清占位并对齐进度 */
+  onPipStopped: ((position: number) => void) | null = null
+
+  /** startPiP 手动启动标记（STARTED 时区分手动/系统自动拉起） */
+  private pendingManualStart: boolean = false
+
+  /** 小窗切集进行中（防面板连点重复解析） */
+  private isSwitchingEpisode: boolean = false
 
   /** PiP 控制器 */
   private controller: PiPWindow.PiPController | null = null
@@ -132,6 +153,13 @@ export class _PiPManager {
     })
   }
 
+  /** surface 销毁（小窗关闭）：清缓存，下次启动等待新 surface，避免绑定过期 surface */
+  onSurfaceDestroyed(surfaceId: string): void {
+    if (this.surfaceId === surfaceId) {
+      this.surfaceId = ''
+    }
+  }
+
   /** 等待 surface 就绪（typeNode 节点创建后 surface 异步创建） */
   private async waitForSurface(timeoutMs: number = 5000): Promise<string> {
     if (this.surfaceId) {
@@ -186,6 +214,36 @@ export class _PiPManager {
   /** 后台自动拉起开关当前是否开启 */
   isAutoStartEnabled: boolean = false
 
+  /** 默认尺寸配置已变更：待小窗停止后丢弃缓存控制器，下次按新配置重建 */
+  private pendingRecreate: boolean = false
+
+  /**
+   * 默认尺寸配置变更后调用：丢弃缓存的 PiP 控制器，
+   * 下次 ensureController 按新 defaultWindowSizeType 重建；
+   * 小窗活跃中不销毁（会中断播放），标记待停止时重建
+   */
+  invalidateController(): void {
+    if (this.isActive) {
+      this.pendingRecreate = true
+      return
+    }
+    this.controller = null
+  }
+
+  /** 记录小窗实际窗口尺寸（验证默认档位实际生效情况） */
+  logWindowSize(): void {
+    const controller = this.controller
+    if (!controller) {
+      return
+    }
+    controller.getPiPWindowInfo().then((info: PiPWindow.PiPWindowInfo) => {
+      Logger.i('PiPManager',
+        `PiP window size=${info.size.width}x${info.size.height} scale=${info.size.scale} defaultType=${appSettings.pip_default_size}`)
+    }).catch((err: BusinessError) => {
+      Logger.e('tips', `getPiPWindowInfo failed code=${err.code} msg=${err.message}`)
+    })
+  }
+
   /** 确保 typeNode 节点与 PiP 控制器就绪（幂等） */
   private async ensureController(): Promise<boolean> {
     if (this.controller) {
@@ -216,8 +274,12 @@ export class _PiPManager {
         context: context,
         componentController: this.surfaceController,
         templateType: PiPWindow.PiPTemplateType.VIDEO_PLAY,
+        // 面板显示上一个/下一个剧集按钮（默认仅播放/暂停）
+        controlGroups: [PiPWindow.VideoPlayControlGroup.VIDEO_PREVIOUS_NEXT],
         contentWidth: 1920,
         contentHeight: 1080,
+        // 小窗默认尺寸档位（1~4 透传系统，真机验证实际生效档位）
+        defaultWindowSizeType: appSettings.pip_default_size,
       }
       const controller = await PiPWindow.create(config, this.contentNode)
       controller.on('stateChange', (state: PiPWindow.PiPState, reason: string): void => {
@@ -257,12 +319,15 @@ export class _PiPManager {
       if (!await this.ensureController()) {
         throw new Error('PiP controller unavailable')
       }
-      await this.setupPiPPlayer(info)
       const controller = this.controller
       if (!controller) {
         throw new Error('PiP controller null')
       }
+      // 播放器必须等窗口 STARTED 后创建（surface 在 ABOUT_TO_START→STARTED 间才创建，
+      // 提前创建会绑定过期/不存在的 surface 导致画面不渲染）
+      this.pendingManualStart = true
       await controller.startPiP()
+      this.logWindowSize()
       // 已在小窗中，防止退后台时系统重复拉起
       this.setAutoStartEnabledSafe(false)
       // 手动启动场景：点击小窗恢复时 push 回详情页
@@ -279,8 +344,13 @@ export class _PiPManager {
     }
   }
 
-  /** 创建 PiP 独立 AVPlayer 并起播（url → surfaceId → prepare → seek/play/倍速） */
-  private async setupPiPPlayer(info: PiPNavigationInfo): Promise<void> {
+  /**
+   * 创建 PiP 独立 AVPlayer 并起播（url → surfaceId → prepare → seek/play/倍速）
+   * 注意：url 设置后异步进入 initialized，surfaceId/prepare 必须等 stateChange(initialized)
+   * 再执行，立即调用会抛 5400102（unsupport prepare operation）
+   * @param useMainPosition true=起播瞬间取主播放器实时进度（系统自动拉起接管，消除接管时差）
+   */
+  private async setupPiPPlayer(info: PiPNavigationInfo, useMainPosition: boolean): Promise<void> {
     const surfaceId = await this.waitForSurface()
     const player = await media.createAVPlayer()
     this.pipPlayer = player
@@ -292,10 +362,34 @@ export class _PiPManager {
       this.stopPiP()
     })
     player.on('stateChange', (state: string) => {
+      if (state === 'initialized') {
+        // initialized 状态才允许设置 surfaceId 并 prepare（官方 typeNode 画中画示例同款时序）
+        try {
+          player.surfaceId = surfaceId
+        } catch (err) {
+          Logger.e('tips', 'PiP player set surfaceId error: ' + JSON.stringify(err))
+          this.stopPiP()
+          return
+        }
+        player.prepare().catch((err: BusinessError) => {
+          Logger.e('tips', `PiP player prepare error code=${err.code} message=${err.message}`)
+          this.stopPiP()
+        })
+        return
+      }
       if (state === 'prepared') {
         try {
-          if (info.position > 0) {
-            player.seek(info.position)
+          // 自动接管场景：起播瞬间读主播放器实时进度（prepare 期间主播放器仍在走）
+          let pos = info.position
+          if (useMainPosition && this.mainPositionProvider) {
+            const live = this.mainPositionProvider()
+            if (live > 0) {
+              pos = live
+            }
+          }
+          if (pos > 0) {
+            // SEEK_CLOSEST 精确续播：默认 SEEK_PREV_SYNC 会落到上一个关键帧，观感进度回退
+            player.seek(pos, media.SeekMode.SEEK_CLOSEST)
           }
           player.play()
         } catch (err) {
@@ -305,11 +399,13 @@ export class _PiPManager {
         if (player.width > 0 && player.height > 0) {
           this.updateContentSize(player.width, player.height)
         }
+        // 小窗起播后再暂停主播放器：声音画面无断层交接（此前 STARTED 即暂停会有 1~2s 空窗）
+        if (this.mainPlayerPauser) {
+          this.mainPlayerPauser()
+        }
       }
     })
     player.url = info.url
-    player.surfaceId = surfaceId
-    await player.prepare()
   }
 
   /** 应用播放倍速（AVPlayer 仅支持标准档位，超出的回退 2.0） */
@@ -338,24 +434,41 @@ export class _PiPManager {
       case PiPWindow.PiPState.STARTED:
         this.isActive = true
         this.handlePiPStarted()
+        this.logWindowSize()
         break
       case PiPWindow.PiPState.ABOUT_TO_RESTORE:
         // 刷新实时进度供恢复导航/收回播放使用
         if (this.navigationInfo && this.pipPlayer) {
           this.navigationInfo.position = this.pipPlayer.currentTime
         }
-        if (this.onRestoreCallback) {
+        if (this.onPipRestore) {
+          // 详情页仍在栈内：原地收回播放（不 push 新页）
+          this.onPipRestore(this.navigationInfo ? this.navigationInfo.position : 0)
+        } else if (this.onRestoreCallback) {
           this.onRestoreCallback()
         }
         break
       case PiPWindow.PiPState.STOPPED:
         this.isActive = false
+        this.pendingManualStart = false
+        this.notifyPipStopped()
         this.cleanupPlayer()
+        // 默认尺寸配置已变更：丢弃控制器，下次启动按新档位重建
+        if (this.pendingRecreate) {
+          this.pendingRecreate = false
+          this.controller = null
+        }
         break
       case PiPWindow.PiPState.ERROR:
         Logger.e('tips', `PiP error reason=${reason}`)
         this.isActive = false
+        this.pendingManualStart = false
+        this.notifyPipStopped()
         this.cleanupPlayer()
+        if (this.pendingRecreate) {
+          this.pendingRecreate = false
+          this.controller = null
+        }
         break
       default:
         break
@@ -363,53 +476,65 @@ export class _PiPManager {
   }
 
   /**
-   * STARTED：区分手动启动（播放器已就绪）与退后台系统自动拉起（需接管播放现场）
+   * STARTED：surface 已创建，此时创建播放器才能绑到有效 surface。
+   * 手动启动（startPiP 标记）用进入小窗时的播放现场；
+   * 退后台系统自动拉起则从主播放现场快照接管。
    */
   private handlePiPStarted(): void {
     if (this.pipPlayer) {
-      // 手动启动：播放器已由 startPiP 流程就绪
       return
     }
-    // 后台系统自动拉起：页面未销毁，恢复导航由页面 onShown 收回处理
-    this.onRestoreCallback = null
-    const snapshot = this.playbackSnapshot
-    if (!snapshot || !snapshot.url) {
-      Logger.w('PiPManager', 'auto start without snapshot, stop PiP')
+    const manual: boolean = this.pendingManualStart
+    this.pendingManualStart = false
+    if (!manual) {
+      // 后台系统自动拉起：页面未销毁，恢复导航由页面 onShown 收回处理
+      this.onRestoreCallback = null
+      const snapshot = this.playbackSnapshot
+      if (!snapshot || !snapshot.url) {
+        Logger.w('PiPManager', 'auto start without snapshot, stop PiP')
+        this.stopPiP()
+        return
+      }
+      const pos = this.mainPositionProvider ? this.mainPositionProvider() : snapshot.position
+      this.navigationInfo = {
+        url: snapshot.url,
+        detailUrl: snapshot.detailUrl,
+        videoId: snapshot.videoId,
+        position: pos > 0 ? pos : 0,
+        speed: snapshot.speed,
+        episodeListIndex: snapshot.episodeListIndex,
+        episodeIndex: snapshot.episodeIndex,
+        episodeName: snapshot.episodeName,
+        title: snapshot.title,
+        coverUrl: snapshot.coverUrl,
+        sourceKey: snapshot.sourceKey,
+        episodeList: snapshot.episodeList,
+      }
+    }
+    const info = this.navigationInfo
+    if (!info || !info.url) {
+      Logger.w('PiPManager', 'PiP start without playable url, stop PiP')
       this.stopPiP()
       return
     }
-    const pos = this.mainPositionProvider ? this.mainPositionProvider() : snapshot.position
-    const info: PiPNavigationInfo = {
-      url: snapshot.url,
-      detailUrl: snapshot.detailUrl,
-      videoId: snapshot.videoId,
-      position: pos > 0 ? pos : 0,
-      speed: snapshot.speed,
-      episodeListIndex: snapshot.episodeListIndex,
-      episodeIndex: snapshot.episodeIndex,
-      episodeName: snapshot.episodeName,
-      title: snapshot.title,
-      coverUrl: snapshot.coverUrl,
-      sourceKey: snapshot.sourceKey,
-    }
-    this.navigationInfo = info
-    this.setupPiPPlayer(info).catch((err: BusinessError) => {
-      Logger.e('tips', 'auto start setup player failed: ' + JSON.stringify(err))
+    this.setupPiPPlayer(info, !manual).catch((err: BusinessError) => {
+      Logger.e('tips', 'PiP setup player failed: ' + JSON.stringify(err))
+      // 小窗未接管成功：兜底暂停主播放器，避免后台失控
+      if (this.mainPlayerPauser) {
+        this.mainPlayerPauser()
+      }
       this.stopPiP()
     })
-    // 暂停主播放器，防止双音频
-    if (this.mainPlayerPauser) {
-      this.mainPlayerPauser()
-    }
+    this.syncEpisodeControlState()
   }
 
-  /** PiP 控制面板事件（播放/暂停；关闭按钮由系统直接 STOPPED） */
+  /** PiP 控制面板事件（播放/暂停、上一个/下一个；关闭按钮由系统直接 STOPPED） */
   private handleControlEvent(event: PiPWindow.ControlEventParam): void {
-    const player = this.pipPlayer
-    if (!player) {
-      return
-    }
     if (event.controlType === PiPWindow.PiPControlType.VIDEO_PLAY_PAUSE) {
+      const player = this.pipPlayer
+      if (!player) {
+        return
+      }
       try {
         if (event.status === PiPWindow.PiPControlStatus.PAUSE) {
           player.pause()
@@ -419,6 +544,103 @@ export class _PiPManager {
       } catch (err) {
         Logger.e('tips', 'PiP control event error: ' + JSON.stringify(err))
       }
+      return
+    }
+    if (event.controlType === PiPWindow.PiPControlType.VIDEO_PREVIOUS) {
+      this.trySwitchEpisode(false)
+      return
+    }
+    if (event.controlType === PiPWindow.PiPControlType.VIDEO_NEXT) {
+      this.trySwitchEpisode(true)
+    }
+  }
+
+  /** 面板上一个/下一个：小窗内原地切集（窗口不关，播放器重建换源） */
+  private async trySwitchEpisode(next: boolean): Promise<void> {
+    const nav = this.navigationInfo
+    if (!nav || !nav.episodeList || this.isSwitchingEpisode) {
+      return
+    }
+    const target = nav.episodeIndex + (next ? 1 : -1)
+    if (target < 0 || target >= nav.episodeList.length) {
+      return
+    }
+    const episode = nav.episodeList[target]
+    this.isSwitchingEpisode = true
+    try {
+      let url = episode.videoUrl
+      if (!url) {
+        // 未播放过的集：走与详情页一致的解析链，结果缓存回剧集对象供恢复复用
+        url = await dataSourceManager.parseVideoUrl(episode.link, nav.sourceKey)
+        url = await WebVideoResolver.resolve(url)
+        episode.videoUrl = url
+      }
+      nav.url = url
+      nav.episodeIndex = target
+      nav.episodeName = episode.title
+      nav.position = 0
+      if (this.onEpisodeSwitched) {
+        this.onEpisodeSwitched(nav.episodeListIndex, target)
+      }
+      this.switchPiPEpisode()
+    } catch (err) {
+      // 解析失败：小窗继续播当前集
+      Logger.e('tips', 'PiP switch episode failed: ' + JSON.stringify(err))
+    } finally {
+      this.isSwitchingEpisode = false
+    }
+  }
+
+  /** 小窗切集：复用小窗 surface，仅重建小窗播放器 */
+  private switchPiPEpisode(): void {
+    const nav = this.navigationInfo
+    if (!nav || !nav.url) {
+      return
+    }
+    this.cleanupPlayer().then(() => {
+      this.setupPiPPlayer(nav, false).catch((err: BusinessError) => {
+        Logger.e('tips', 'PiP switch episode setup failed: ' + JSON.stringify(err))
+        this.stopPiP()
+      })
+    })
+    this.syncEpisodeControlState()
+  }
+
+  /** 同步面板上一个/下一个按钮可用态（边界置灰） */
+  private syncEpisodeControlState(): void {
+    const controller = this.controller
+    const nav = this.navigationInfo
+    if (!controller || !nav) {
+      return
+    }
+    const list = nav.episodeList
+    const hasPrevious: boolean = list !== undefined && nav.episodeIndex > 0
+    const hasNext: boolean = list !== undefined && nav.episodeIndex < list.length - 1
+    try {
+      controller.setPiPControlEnabled(PiPWindow.PiPControlType.VIDEO_PREVIOUS, hasPrevious)
+      controller.setPiPControlEnabled(PiPWindow.PiPControlType.VIDEO_NEXT, hasNext)
+    } catch (err) {
+      Logger.e('tips', 'setPiPControlEnabled error: ' + JSON.stringify(err))
+    }
+  }
+
+  /** 暂停小窗播放（收回播放前静音小窗，避免与主播放器双声/断层） */
+  pausePlayback(): void {
+    const player = this.pipPlayer
+    if (!player) {
+      return
+    }
+    try {
+      player.pause()
+    } catch (err) {
+      Logger.e('tips', 'PiP pause playback error: ' + JSON.stringify(err))
+    }
+  }
+
+  /** 播控卡片上一个/下一个命令：小窗活跃时由小窗原地切集（主播放器让位中） */
+  switchEpisode(next: boolean): void {
+    if (this.isActive) {
+      this.trySwitchEpisode(next)
     }
   }
 
@@ -436,6 +658,10 @@ export class _PiPManager {
       cover: nav.coverUrl,
       isPiPRestore: true,
       pipPosition: nav.position,
+      // 小窗内切过集时同步最后播放的集（页面已销毁场景历史里还是旧集）
+      pipEpisodeListIndex: nav.episodeListIndex,
+      pipEpisodeIndex: nav.episodeIndex,
+      pipEpisodeName: nav.episodeName,
     }
     AnimeState.pushPage('VideoDetailPage', params)
   }
@@ -458,7 +684,20 @@ export class _PiPManager {
         Logger.e('tips', 'stopPiP error: ' + JSON.stringify(err))
       }
     }
+    // 同步清活跃标记：收回后立刻 recover/start 时读不到陈旧的 isActive
+    // （STOPPED 事件可能晚于本方法返回）
+    this.isActive = false
+    this.pendingManualStart = false
     await this.cleanupPlayer()
+  }
+
+  /** 小窗关闭通知详情页（取实时进度；VM 未注册/已让位时忽略） */
+  private notifyPipStopped(): void {
+    if (!this.onPipStopped) {
+      return
+    }
+    const position = this.getPlaybackPosition()
+    this.onPipStopped(position)
   }
 
   /** 释放 PiP 独立播放器 */

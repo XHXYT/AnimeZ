@@ -78,9 +78,17 @@ export class AppConfigs {
    */
   @Trace video_source_import_overwrite: boolean = false
   /**
-   * 退出播放页自动小窗（画中画）
+   * 应用外自动小窗播放：退出应用（回桌面/切其他应用）时系统自动拉起画中画小窗
    */
-  @Trace auto_pip_on_exit: boolean = false
+  @Trace pip_auto_outside: boolean = false
+  /**
+   * 应用内自动小窗播放：返回或页面内导航离开播放页时自动进入画中画小窗
+   */
+  @Trace pip_auto_inside: boolean = false
+  /**
+   * 小窗默认尺寸档位：1较小 2适中 3较大 4超大（默认适中），透传系统 defaultWindowSizeType
+   */
+  @Trace pip_default_size: number = 2
   /**
    * 弹幕开关
    */
@@ -237,8 +245,11 @@ export class AppConfigs {
       (json["video_sources_group_filter_manager"] as string) ?? this.video_sources_group_filter_manager
     this.video_source_import_overwrite =
       (json["video_source_import_overwrite"] as boolean) ?? this.video_source_import_overwrite
-    this.auto_pip_on_exit =
-      (json["auto_pip_on_exit"] as boolean) ?? this.auto_pip_on_exit
+    // 旧版单开关 auto_pip_on_exit 拆分为应用内/应用外两个开关：无新键时沿用旧值迁移
+    const legacyPip: boolean | undefined = json["auto_pip_on_exit"] as boolean
+    this.pip_auto_inside = (json["pip_auto_inside"] as boolean) ?? legacyPip ?? this.pip_auto_inside
+    this.pip_auto_outside = (json["pip_auto_outside"] as boolean) ?? legacyPip ?? this.pip_auto_outside
+    this.pip_default_size = (json["pip_default_size"] as number) ?? this.pip_default_size
     this.danmaku_enabled = (json["danmaku_enabled"] as boolean) ?? this.danmaku_enabled
     this.danmaku_opacity = (json["danmaku_opacity"] as number) ?? this.danmaku_opacity
     this.danmaku_font_scale = (json["danmaku_font_scale"] as number) ?? this.danmaku_font_scale
@@ -295,8 +306,9 @@ export class AppConfigs {
           (legacy["video_sources_group_filter_manager"] as string) ?? this.video_sources_group_filter_manager
         this.video_source_import_overwrite =
           (legacy["video_source_import_overwrite"] as boolean) ?? this.video_source_import_overwrite
-        this.auto_pip_on_exit =
-          (legacy["auto_pip_on_exit"] as boolean) ?? this.auto_pip_on_exit
+    const legacyPip: boolean | undefined = legacy["auto_pip_on_exit"] as boolean
+    this.pip_auto_inside = (legacy["pip_auto_inside"] as boolean) ?? legacyPip ?? this.pip_auto_inside
+    this.pip_auto_outside = (legacy["pip_auto_outside"] as boolean) ?? legacyPip ?? this.pip_auto_outside
         Logger.i('Settings', '旧版配置迁移至 preferences 成功')
       }
       PersistentStorage.deleteProp("AppSettings")
@@ -312,7 +324,7 @@ export class AppConfigs {
     'auto_resume_download_on_wifi', 'need_blur', 'max_downloading_count', 'default_player',
     'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
-    'video_source_import_overwrite', 'auto_pip_on_exit',
+    'video_source_import_overwrite', 'pip_auto_outside', 'pip_auto_inside', 'pip_default_size',
     'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_bold', 'danmaku_speed', 'danmaku_area',
     'danmaku_block_scroll', 'danmaku_block_fixed', 'danmaku_block_color', 'danmaku_hide_duplicate',
     'danmaku_block_words',
@@ -342,7 +354,9 @@ export class AppConfigs {
         "video_sources_group_filter": this.video_sources_group_filter,
         "video_sources_group_filter_manager": this.video_sources_group_filter_manager,
         "video_source_import_overwrite": this.video_source_import_overwrite,
-        "auto_pip_on_exit": this.auto_pip_on_exit,
+        "pip_auto_outside": this.pip_auto_outside,
+        "pip_auto_inside": this.pip_auto_inside,
+        "pip_default_size": this.pip_default_size,
         "danmaku_enabled": this.danmaku_enabled,
         "danmaku_opacity": this.danmaku_opacity,
         "danmaku_font_scale": this.danmaku_font_scale,
@@ -397,7 +411,9 @@ export class AppConfigs {
     this.video_sources_group_filter = '不分组'
     this.video_sources_group_filter_manager = ''
     this.video_source_import_overwrite = false
-    this.auto_pip_on_exit = false
+    this.pip_auto_outside = false
+    this.pip_auto_inside = false
+    this.pip_default_size = 2
     this.danmaku_enabled = true
     this.danmaku_opacity = 1.0
     this.danmaku_font_scale = 1.0

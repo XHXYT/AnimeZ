@@ -32,6 +32,12 @@ export interface CastListener {
   /** 播控中心"上一集" */
   onControlPrevious: () => void
 
+  /** 播控中心"快进"（相对偏移毫秒） */
+  onControlFastForward: (deltaMs: number) => void
+
+  /** 播控中心"快退"（相对偏移毫秒） */
+  onControlRewind: (deltaMs: number) => void
+
 }
 
 /**
@@ -386,6 +392,8 @@ export class CastManager {
       session.off('play')
       session.off('pause')
       session.off('seek')
+      session.off('fastForward')
+      session.off('rewind')
       session.off('playNext')
       session.off('playPrevious')
       session.off('outputDeviceChange')
@@ -422,6 +430,8 @@ export class CastManager {
     session.off('play')
     session.off('pause')
     session.off('seek')
+    session.off('fastForward')
+    session.off('rewind')
     session.off('playNext')
     session.off('playPrevious')
     session.off('outputDeviceChange')
@@ -458,6 +468,22 @@ export class CastManager {
       const listener = this.listener
       if (listener != null) {
         listener.onControlSeek(time)
+      }
+    })
+    // 快进/快退：系统实测下发秒（与 fastForwardSkipIntervals:15 一致），文档标注毫秒不可信；
+    // 兼容两种取值：<1000 视为秒换算毫秒，未下发按 15 秒默认步长
+    session.on('fastForward', (time?: number) => {
+      const listener = this.listener
+      if (listener != null) {
+        const raw = time ?? 15
+        listener.onControlFastForward(raw >= 1000 ? raw : raw * 1000)
+      }
+    })
+    session.on('rewind', (time?: number) => {
+      const listener = this.listener
+      if (listener != null) {
+        const raw = time ?? 15
+        listener.onControlRewind(raw >= 1000 ? raw : raw * 1000)
       }
     })
     // 上一集/下一集按队列位置动态注册（第一集置灰上一集、最后一集置灰下一集）

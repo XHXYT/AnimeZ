@@ -5,7 +5,8 @@ import {
   CustomItemInfo,
   ItemActionType,
   MenuOption,
-  makeSeekSecondsOptions
+  makeSeekSecondsOptions,
+  pipSizeLabel
 } from '../../entity/CusItemInfo'
 import { appSettings } from '../../entryability/Settings'
 import { AnimeState } from '../../entryability/AnimeState'
@@ -14,6 +15,8 @@ import Logger from '../../utils/Logger'
 import { VideoFit } from '../../player/model/IPlayerManager'
 import { SHORTCUT_DEFS, ShortcutDef, PlayerShortcuts, findShortcutConflict } from '../../utils/PlayerShortcuts'
 import { KeyCode } from '@kit.InputKit'
+import { BackgroundPlayManager } from '../../utils/BackgroundPlayManager'
+import { PiPManager } from '../../player/PiPManager'
 
 // 系统路由
 @Builder
@@ -35,6 +38,88 @@ struct PlayerControlSettingsPage {
    */
   private get itemList(): CustomItemInfo[] {
     const items: CustomItemInfo[] = [
+      // 播放组
+      new CustomItemInfo({ id: 'group_play', title: '播放', type: ItemActionType.GROUP }),
+      new CustomItemInfo({
+        id: 'auto_play_next_episode',
+        title: '自动播放下一集',
+        subtitle: '视频结束后自动播放下一集',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_next_episode,
+        onChange: (value) => {
+          appSettings.auto_play_next_episode = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'auto_play_on_no_wifi',
+        title: '非Wifi下自动播放',
+        subtitle: '非Wifi环境下不再提醒，自动播放视频',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_play_on_no_wifi,
+        onChange: (value) => {
+          appSettings.auto_play_on_no_wifi = value as boolean
+          // 手动切换主开关时恢复弹窗提醒（清除「不再提醒」的取消记忆）
+          appSettings.metered_prompt_disabled = false
+        }
+      }),
+      new CustomItemInfo({
+        id: 'background_play',
+        title: '后台继续播放',
+        subtitle: '应用切后台后继续播放声音，通知栏显示播放任务',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.background_play,
+        onChange: (value) => {
+          appSettings.background_play = value as boolean
+          BackgroundPlayManager.refresh()
+        }
+      }),
+      new CustomItemInfo({
+        id: 'auto_sensor_rotate',
+        title: '启用自动旋屏',
+        subtitle: '跟随传感器自动切换半屏/全屏播放',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_sensor_rotate,
+        onChange: (value) => {
+          appSettings.auto_sensor_rotate = value as boolean
+        }
+      })
+    ]
+    // 小窗播放组：仅支持的播放器后端显示
+    if (PiPManager.isPlayerSupported(appSettings.default_player)) {
+      items.push(
+        new CustomItemInfo({ id: 'group_pip', title: '小窗播放', type: ItemActionType.GROUP }),
+        new CustomItemInfo({
+          id: 'pip_auto_outside',
+          title: '应用外自动小窗播放',
+          subtitle: '退出应用时自动以画中画小窗继续播放',
+          type: ItemActionType.TOGGLE,
+          value: appSettings.pip_auto_outside,
+          onChange: (value) => {
+            appSettings.pip_auto_outside = value as boolean
+          }
+        }),
+        new CustomItemInfo({
+          id: 'pip_auto_inside',
+          title: '应用内自动小窗播放',
+          subtitle: '返回或离开播放页时自动进入画中画小窗',
+          type: ItemActionType.TOGGLE,
+          value: appSettings.pip_auto_inside,
+          onChange: (value) => {
+            appSettings.pip_auto_inside = value as boolean
+          }
+        }),
+        new CustomItemInfo({
+          id: 'pip_default_size',
+          title: '小窗默认尺寸',
+          subtitle: `当前：${pipSizeLabel(appSettings.pip_default_size)}`,
+          type: ItemActionType.ROUTER,
+          onChange: () => {
+            AnimeState.pageStack.pushPathByName("PiPSizeSettingsPage", '')
+          }
+        })
+      )
+    }
+    items.push(
       // 手势组
       new CustomItemInfo({ id: 'group_gesture', title: '手势', type: ItemActionType.GROUP }),
       new CustomItemInfo({
@@ -79,7 +164,7 @@ struct PlayerControlSettingsPage {
 
       // 键盘快捷键组
       new CustomItemInfo({ id: 'group_shortcuts', title: '键盘快捷键', type: ItemActionType.GROUP })
-    ]
+    )
     for (const def of SHORTCUT_DEFS) {
       items.push(new CustomItemInfo({
         id: `shortcut_${def.action}`,

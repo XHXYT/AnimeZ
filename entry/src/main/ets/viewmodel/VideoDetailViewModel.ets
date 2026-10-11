@@ -94,6 +94,20 @@ export class VideoDetailViewModel {
   private pausedOnHide = false;
   /** 手动小窗按钮委托（注册到 PiPManager，onDestroy 按身份清理） */
   private pipRequestHandler: (() => void) | null = null;
+  /** 小窗内切集委托（注册到 PiPManager，onDestroy 按身份清理） */
+  private pipEpisodeSwitchHandler: ((listIndex: number, episodeIndex: number) => void) | null = null;
+  /** 点小窗恢复按钮原地收回委托（注册到 PiPManager，onDestroy 按身份清理） */
+  private pipRestoreHandler: ((position: number) => void) | null = null;
+  /** 主播放器要求起播但小窗活跃时原地收回委托（注册到 PiPManager，onDestroy 按身份清理） */
+  private pipTakeoverHandler: (() => void) | null = null;
+  /** 小窗被关闭通知委托（注册到 PiPManager，onDestroy 按身份清理） */
+  private pipStoppedHandler: ((position: number) => void) | null = null;
+  /** 留页小窗播放中：主播放器让位，控制层显示小窗播放中占位 */
+  @Trace public pipActive: boolean = false;
+  /** 收回小窗播放流程进行中（防恢复按钮/onPageShow/播控卡片并发触发重复收回） */
+  private pipTakeoverInProgress = false;
+  /** 小窗内切过集：主播放器内容已落后，回前台/重新显示时需按小窗进度重载当前集 */
+  private pipEpisodeChanged = false;
   /** onPageShow 时的路由栈深度（onPageHide 对比判断是 push 导航还是退后台） */
   private stackSizeOnShown: number = 0;
   /** 本次会话已在流量网络确认过播放：后续自动播放不再弹窗 */
@@ -115,7 +129,8 @@ export class VideoDetailViewModel {
   /** 注册 PiP 委托到管理器单例（onPageShow 时刷新，保证指向当前显示页） */
   private registerPiPDelegates(): void {
     this.pipRequestHandler = () => {
-      this.enterPiPMode(true)
+      // 手动小窗：留在详情页，主播放器让位显示小窗播放中占位
+      this.enterPiPMode(false, true)
     }
     PiPManager.requestHandler = this.pipRequestHandler
     PiPManager.mainPositionProvider = () => this.playerManager.getCurrentPosition()
@@ -126,12 +141,45 @@ export class VideoDetailViewModel {
     PiPManager.onPipError = (message: string) => {
       ToastUtil.showToast({ message: message })
     }
+    this.pipEpisodeSwitchHandler = (listIndex: number, episodeIndex: number) => {
+      this.onPiPEpisodeSwitched(listIndex, episodeIndex)
+    }
+    PiPManager.onEpisodeSwitched = this.pipEpisodeSwitchHandler
+    this.pipRestoreHandler = (position: number) => {
+      this.takeOverFromPiP(position)
+    }
+    PiPManager.onPipRestore = this.pipRestoreHandler
+    this.pipTakeoverHandler = () => {
+      this.takeOverFromPiP(PiPManager.getPlaybackPosition())
+    }
+    PiPManager.requestTakeover = this.pipTakeoverHandler
+    this.pipStoppedHandler = (position: number) => {
+      this.onPiPStopped(position)
+    }
+    PiPManager.onPipStopped = this.pipStoppedHandler
+  }
+
+  /** 小窗内切集回调：同步 VM 剧集状态并保存历史（主播放器内容已落后，恢复时重载） */
+  private onPiPEpisodeSwitched(listIndex: number, episodeIndex: number): void {
+    this.episodeListIndex = listIndex
+    this.episodeIndex = episodeIndex
+    const episodeList = this.videoDetailInfo.episodes[listIndex]
+    const episode = episodeList?.episodes[episodeIndex]
+    if (episode) {
+      this.historyInfo.episodeListIndex = listIndex
+      this.historyInfo.episodeIndex = episodeIndex
+      this.historyInfo.episodeName = episode.title
+      this.historyInfo.videoUrl = (episode.videoUrl as string) ?? ''
+      this.historyInfo.currentTime = 0
+      this.saveHistoryInfo(true)
+    }
+    this.pipEpisodeChanged = true
   }
 
   /** 播放状态与 PiP 后台自动拉起开关同步：仅"正在播放"允许自动拉起，其余状态一律关闭 */
   private syncPiPAutoStart(status: number): void {
     if (status === PlayerStatus.PLAY) {
-      if (this.appSettings.auto_pip_on_exit && PiPManager.isPlayerSupported(this.appSettings.default_player)) {
+      if (this.appSettings.pip_auto_outside && PiPManager.isPlayerSupported(this.appSettings.default_player)) {
         PiPManager.prepare()
       }
     } else {
@@ -314,8 +362,16 @@ export class VideoDetailViewModel {
 
     await this.checkVideoInfo();
     // 画中画恢复进入：以小窗实时进度覆盖历史进度续播
-    if (params.isPiPRestore && params.pipPosition && params.pipPosition > 0) {
-      this.historyInfo.currentTime = params.pipPosition;
+    if (params.isPiPRestore) {
+      if (params.pipPosition && params.pipPosition > 0) {
+        this.historyInfo.currentTime = params.pipPosition;
+      }
+      // 小窗内切过集（页面已销毁场景，历史里还是旧集）：恢复到小窗最后播放的集
+      if (params.pipEpisodeListIndex !== undefined && params.pipEpisodeIndex !== undefined) {
+        this.historyInfo.episodeListIndex = params.pipEpisodeListIndex;
+        this.historyInfo.episodeIndex = params.pipEpisodeIndex;
+        this.historyInfo.episodeName = params.pipEpisodeName ?? '';
+      }
     }
     this.getDetailInfo();
     this.checkCollectionInfo();
@@ -496,9 +552,12 @@ export class VideoDetailViewModel {
     this.playerManager.setPendingStartHandler(null);
     // 源级广告拦截开关：优先于全局设置，null=该源未配置、跟随全局
     M3u8AdFilter.setSourceAdFilter(dataSourceManager.getSourceAdFilter(this.sourceKey));
-    // 新播放接管：关闭仍在活跃的小窗，防止双音频
+    // 新播放接管：关闭仍在活跃的小窗，防止双音频；清占位与切集标记
+    this.pipActive = false
+    this.pipEpisodeChanged = false
     if (PiPManager.isActive) {
-      PiPManager.stopPiP()
+      PiPManager.pausePlayback()
+      await PiPManager.stopPiP()
     }
     this.episodeListIndex = episodeListIndex;
     this.episodeIndex = episodeIndex;
@@ -524,14 +583,14 @@ export class VideoDetailViewModel {
       // 避免解析结束→播放器接管之间（历史保存/记录查询期间）加载圈熄灭
       M3u8AdFilter.prewarm(episode.videoUrl as string);
       await this.saveHistoryInfo(true);
-      await this.checkVideoInfo();
-      if (this.destroyed) {
-        return
-      }
-      this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);
-      this.attemptReachedPlayer = true
-      this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos);
-    } else {
+        await this.checkVideoInfo();
+        if (this.destroyed) {
+          return
+        }
+        this.syncPiPSnapshot(episodeList.episodes, episodeListIndex, episodeIndex, episode, startPos);
+        this.attemptReachedPlayer = true
+        this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos);
+      } else {
       // 解析期间通知控制面板显示加载圈（与播放状态解耦，切集解析时也能看到反馈）
       this.playerManager.notifyParseState(true);
       try {
@@ -553,7 +612,7 @@ export class VideoDetailViewModel {
         if (this.destroyed) {
           return
         }
-        this.syncPiPSnapshot(episodeListIndex, episodeIndex, episode, startPos);
+        this.syncPiPSnapshot(episodeList.episodes, episodeListIndex, episodeIndex, episode, startPos);
         this.attemptReachedPlayer = true
         this.playerManager.playEpisodeList(episodeList.episodes, this.episodeIndex, startPos)
       } catch (err) {
@@ -574,7 +633,7 @@ export class VideoDetailViewModel {
   }
 
   /** 同步 PiP 播放现场快照（退后台系统自动拉起小窗时接管播放用） */
-  private syncPiPSnapshot(listIndex: number, epIndex: number, episode: EpisodeInfo, startPos: number): void {
+  private syncPiPSnapshot(episodes: EpisodeInfo[], listIndex: number, epIndex: number, episode: EpisodeInfo, startPos: number): void {
     PiPManager.playbackSnapshot = {
       url: (episode.videoUrl as string) ?? '',
       detailUrl: this.url,
@@ -587,6 +646,8 @@ export class VideoDetailViewModel {
       title: this.videoDetailInfo.title,
       coverUrl: this.videoDetailInfo.coverUrl,
       sourceKey: this.sourceKey,
+      // 剧集列表引用：小窗面板切集/页面销毁后独立切集用
+      episodeList: episodes,
     }
   }
 
@@ -735,10 +796,17 @@ export class VideoDetailViewModel {
     // 关闭"自动旋屏"时在视频页锁定竖屏，旋转手机不再改变窗口方向
     this.applyOrientationLock();
     // 后台自动小窗场景回到前台：收回播放权，以小窗进度续播
-    if (PiPManager.isActive) {
+    // （留页小窗 pipActive 保持小窗继续播，收回由占位点击/恢复按钮触发）
+    if (PiPManager.isActive && !this.pipActive) {
+      await this.takeOverFromPiP(PiPManager.getPlaybackPosition())
+      return
+    }
+    if (this.pipEpisodeChanged && !this.pipActive) {
+      // 小窗已关闭但曾在小窗内切集：主播放器仍停在旧集，静默重载当前集
+      this.pipEpisodeChanged = false
       const pos = PiPManager.getPlaybackPosition()
-      await PiPManager.stopPiP()
-      await this.recoverFromPiP(pos)
+      this.resumePosition = pos > 0 ? pos : -1
+      this.playVideo(this.episodeListIndex, this.episodeIndex)
       return
     }
     if (this.pausedOnHide) {
@@ -764,6 +832,65 @@ export class VideoDetailViewModel {
     this.pausedOnHide = false
   }
 
+  /**
+   * 原地收回小窗播放（恢复按钮/占位点击/回前台/播控卡片起播统一入口）
+   * 先清占位再关小窗，最后主播放器续播（顺序颠倒会触发 start() 收回递归）
+   */
+  public async takeOverFromPiP(position: number): Promise<void> {
+    if (this.pipTakeoverInProgress || this.destroyed) {
+      return
+    }
+    this.pipTakeoverInProgress = true
+    try {
+      this.pipActive = false
+      this.pausedOnHide = false
+      if (!PiPManager.isActive) {
+        // 小窗已不在（面板 X 已关）：无需续播，保持当前暂停态
+        return
+      }
+      // 先静音小窗，主播放器接管后再关窗，避免画面/声音断层
+      PiPManager.pausePlayback()
+      if (this.pipEpisodeChanged) {
+        // 小窗里切过集：主播放器内容已落后，按小窗进度重载当前集
+        this.pipEpisodeChanged = false
+        await PiPManager.stopPiP()
+        this.resumePosition = position > 0 ? position : -1
+        this.playVideo(this.episodeListIndex, this.episodeIndex)
+      } else {
+        await this.recoverFromPiP(position)
+        await PiPManager.stopPiP()
+      }
+    } finally {
+      this.pipTakeoverInProgress = false
+    }
+  }
+
+  /** 占位层点击：收回小窗播放 */
+  public takeBackFromPiP(): void {
+    this.takeOverFromPiP(PiPManager.getPlaybackPosition())
+  }
+
+  /**
+   * 小窗被关闭通知（面板 X / 播放错误）
+   * 留页小窗场景：清占位并对齐进度；收回流程主动关窗时 pipActive 已清，直接跳过
+   */
+  private onPiPStopped(position: number): void {
+    if (!this.pipActive) {
+      return
+    }
+    this.pipActive = false
+    if (this.pipEpisodeChanged) {
+      // 小窗里切过集：主播放器内容已落后，按小窗进度重载当前集
+      this.pipEpisodeChanged = false
+      this.resumePosition = position > 0 ? position : -1
+      this.playVideo(this.episodeListIndex, this.episodeIndex)
+    } else if (position > 0 && !this.playerManager.isPlaying()) {
+      // 未切集：主播放器对齐小窗进度，保持暂停（不自动起播，避免突兀）
+      this.playerManager.seekTo(position).catch(() => {
+      })
+    }
+  }
+
   // 处理页面隐藏
   public async onPageHide() {
     // 离开播放页恢复系统默认息屏策略
@@ -779,19 +906,30 @@ export class VideoDetailViewModel {
     if (this.playerManager.isPlaying()) {
       // 后台播放保持仅限"纯退后台"（页面栈未变化）：导航离开/返回（栈已变化）时
       // 页面即将销毁，必须走暂停/停止分支，否则播控卡片与长时任务在页面销毁后仍驻留
+      const stackUnchanged: boolean = AnimeState.pageStack.size() == this.stackSizeOnShown
       const keepForBackground: boolean = this.appSettings.background_play
         && BackgroundPlayManager.isBackgroundPlaying()
-        && AnimeState.pageStack.size() == this.stackSizeOnShown
+        && stackUnchanged
       if (!keepForBackground
-        && this.appSettings.auto_pip_on_exit
+        && this.appSettings.pip_auto_inside
         && PiPManager.isPlayerSupported(this.appSettings.default_player)
         && !PiPManager.isActive
         && AnimeState.pageStack.size() > this.stackSizeOnShown) {
         await this.enterPiPMode(false)
       }
-      if (keepForBackground) {
+      // 纯退后台且小窗自动拉起已就绪：不暂停主播放器，交给系统拉起小窗接管播放
+      // （此处暂停会触发 syncPiPAutoStart(PAUSE) 竞态关闭 setAutoStartEnabled，小窗无法接管；
+      //   小窗 STARTED 后由 mainPlayerPauser 暂停主播放器防止双音频）
+      const pipAutoTakeover: boolean = stackUnchanged
+        && this.appSettings.pip_auto_outside
+        && PiPManager.isPlayerSupported(this.appSettings.default_player)
+        && PiPManager.isAutoStartEnabled
+        && !PiPManager.isActive
+      if (pipAutoTakeover) {
         this.pausedOnHide = false
-      } else if (AnimeState.pageStack.size() == this.stackSizeOnShown) {
+      } else if (keepForBackground) {
+        this.pausedOnHide = false
+      } else if (stackUnchanged) {
         // 退后台（页面栈未变化）：暂停而非停止，保持播放器就绪，回前台可直接续播；
         // 停止会导致 mpv 卸载媒体且状态仍停留在 PAUSE，start() 无法恢复
         await this.playerManager.pause()
@@ -847,6 +985,18 @@ export class VideoDetailViewModel {
     if (this.pipRequestHandler && PiPManager.requestHandler === this.pipRequestHandler) {
       PiPManager.requestHandler = null
     }
+    if (this.pipEpisodeSwitchHandler && PiPManager.onEpisodeSwitched === this.pipEpisodeSwitchHandler) {
+      PiPManager.onEpisodeSwitched = null
+    }
+    if (this.pipRestoreHandler && PiPManager.onPipRestore === this.pipRestoreHandler) {
+      PiPManager.onPipRestore = null
+    }
+    if (this.pipTakeoverHandler && PiPManager.requestTakeover === this.pipTakeoverHandler) {
+      PiPManager.requestTakeover = null
+    }
+    if (this.pipStoppedHandler && PiPManager.onPipStopped === this.pipStoppedHandler) {
+      PiPManager.onPipStopped = null
+    }
     PiPManager.mainPositionProvider = null
     PiPManager.mainPlayerPauser = null
     PiPManager.onPipError = null
@@ -866,7 +1016,7 @@ export class VideoDetailViewModel {
     }
 
     // 退出播放页自动小窗（仅支持的播放器后端）
-    if (this.appSettings.auto_pip_on_exit
+    if (this.appSettings.pip_auto_inside
       && PiPManager.isPlayerSupported(this.appSettings.default_player)
       && this.playerManager.isPlaying()) {
       this.enterPiPMode(true)
@@ -878,12 +1028,13 @@ export class VideoDetailViewModel {
 
   /**
    * 进入画中画小窗
-   * @param pop true=返回键/手动按钮（成功后弹出当前页）；false=页面内导航离开（页面保留在栈内）
+   * @param pop true=返回键触发（成功后弹出当前页）；false=手动按钮/页面内导航离开（页面保留）
+   * @param stayOnPage true=手动按钮：留在详情页，主播放器让位显示"小窗播放中"占位
    */
-  private async enterPiPMode(pop: boolean): Promise<void> {
+  private async enterPiPMode(pop: boolean, stayOnPage: boolean = false): Promise<void> {
     // 小窗触发基本条件：视频正在播放
     if (!this.playerManager.isPlaying()) {
-      if (pop) {
+      if (pop || stayOnPage) {
         ToastUtil.showToast({ message: '播放视频后才能使用小窗' })
       }
       return
@@ -891,7 +1042,7 @@ export class VideoDetailViewModel {
     const episodeList = this.videoDetailInfo.episodes[this.episodeListIndex]
     const episode = episodeList?.episodes[this.episodeIndex]
     if (!episode || !episode.videoUrl) {
-      if (pop) {
+      if (pop || stayOnPage) {
         ToastUtil.showToast({ message: '暂无法获取小窗播放内容' })
       }
       return
@@ -909,6 +1060,8 @@ export class VideoDetailViewModel {
       title: this.videoDetailInfo.title,
       coverUrl: this.videoDetailInfo.coverUrl,
       sourceKey: this.sourceKey,
+      // 剧集列表引用：小窗面板切集用（页面弹出销毁后小窗仍可独立切集）
+      episodeList: episodeList.episodes,
     }
     const success = await PiPManager.startPiP(info)
     if (success) {
@@ -917,8 +1070,12 @@ export class VideoDetailViewModel {
       if (pop) {
         ToastUtil.showToast({ message: '已进入小窗播放' })
         AnimeState.popPage(true)
+      } else if (stayOnPage) {
+        // 留页小窗：主播放器让位，控制层显示"小窗播放中"占位
+        this.pipActive = true
+        ToastUtil.showToast({ message: '已进入小窗播放' })
       }
-    } else if (pop) {
+    } else if (pop || stayOnPage) {
       ToastUtil.showToast({ message: '小窗启动失败' })
     }
   }

@@ -279,6 +279,26 @@ struct VideoDetailPage {
     return VideoDetailGridColHeight(AnimeState.widthBp, AnimeState.heightBp) === '100%'
   }
 
+  /** 留页小窗播放占位：播放区中央紧凑提示卡片，点击收回播放（不铺满播放区/页面） */
+  @Builder
+  PipPlaceholder() {
+    Column({ space: 8 }) {
+      Text('小窗播放中')
+        .fontSize(16)
+        .fontColor(Color.White)
+        .fontWeight(FontWeight.Medium)
+      Text('点击此处收回播放')
+        .fontSize(12)
+        .fontColor('rgba(255,255,255,0.65)')
+    }
+    .padding({ left: 24, right: 24, top: 16, bottom: 16 })
+    .borderRadius(24)
+    .backgroundColor('rgba(0,0,0,0.65)')
+    .onClick(() => {
+      this.viewModel.takeBackFromPiP()
+    })
+  }
+
   @Builder Content() {
     GridRow({ columns: 12 }) {
       // 播放器区
@@ -292,6 +312,10 @@ struct VideoDetailPage {
             isFullScreen: this.viewModel.isFullScreen,
             fillHeight: this.isPlayerAreaFullHeight()
           })
+          // 留页小窗播放中：主播放器让位，控制层显示占位，点击收回播放
+          if (this.viewModel.pipActive) {
+            this.PipPlaceholder()
+          }
         }
         .width('100%')
         .backgroundColor(Color.Black)
@@ -700,11 +724,11 @@ struct VideoDetailPage {
       new CustomItemInfo({
         id: 'ps_auto_pip',
         title: '退出播放页自动小窗',
-        subtitle: '返回、导航、后台时自动进入画中画',
+        subtitle: '返回、导航时自动进入画中画',
         type: ItemActionType.TOGGLE,
-        value: appSettings.auto_pip_on_exit,
+        value: appSettings.pip_auto_inside,
         onChange: (value) => {
-          appSettings.auto_pip_on_exit = value as boolean
+          appSettings.pip_auto_inside = value as boolean
         }
       }),
       new CustomItemInfo({

@@ -435,6 +435,27 @@ export struct VideoPlayerController {
       if (this.episodeIndex > 0) {
         this.playerManager.selectEpisode(this.episodeIndex - 1)
       }
+    },
+    onControlFastForward: (deltaMs: number) => {
+      if (this.isCasting) {
+        const target = this.castLastPos + deltaMs
+        this.castLastPos = target
+        this.castManager.seek(target)
+        return
+      }
+      const target = this.playerManager.getCurrentPosition() + deltaMs
+      const duration = this.effectiveDuration()
+      this.playerManager.seekTo(duration > 0 ? Math.min(target, duration) : target)
+    },
+    onControlRewind: (deltaMs: number) => {
+      if (this.isCasting) {
+        const target = Math.max(this.castLastPos - deltaMs, 0)
+        this.castLastPos = target
+        this.castManager.seek(target)
+        return
+      }
+      const target = this.playerManager.getCurrentPosition() - deltaMs
+      this.playerManager.seekTo(Math.max(target, 0))
     }
   }
 
@@ -2008,9 +2029,9 @@ export struct VideoPlayerController {
 
             Blank()
 
-            Toggle({ type: ToggleType.Switch, isOn: appSettings.auto_pip_on_exit })
+            Toggle({ type: ToggleType.Switch, isOn: appSettings.pip_auto_inside })
               .onChange((isOn: boolean) => {
-                appSettings.auto_pip_on_exit = isOn
+                appSettings.pip_auto_inside = isOn
               })
           }
           .width('100%')

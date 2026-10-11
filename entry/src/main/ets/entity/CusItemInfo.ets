@@ -223,3 +223,17 @@ export function makeItemGroups(data: CustomItemInfo[]): ItemGroupData[] {
 export function makeSeekSecondsOptions(): MenuOption[] {
   return [5, 10, 15, 20, 30, 60].map((sec: number): MenuOption => new MenuOption(String(sec), `${sec} 秒`))
 }
+
+/** 小窗默认尺寸档位显示名（播放控制设置与小窗尺寸页共用）：1较小 2适中 3较大 4超大 */
+export function pipSizeLabel(level: number): string {
+  if (level <= 1) {
+    return '较小'
+  }
+  if (level === 2) {
+    return '适中'
+  }
+  if (level === 3) {
+    return '较大'
+  }
+  return '超大'
+}

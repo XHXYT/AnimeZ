@@ -32,19 +32,45 @@ export default class PlayerManagerImpl implements IPlayerManager {
     // 后台继续播放：注册播控中心命令回调（会话由 BackgroundPlayManager 随长时任务创建）
     BackgroundPlayManager.attach({
       play: () => {
+        // 小窗播放中（留页小窗主播放器让位）：起播命令转交原地收回，不并发双声
+        if (PiPManager.isActive && PiPManager.requestTakeover) {
+          PiPManager.requestTakeover()
+          return
+        }
         this.start()
       },
       pause: () => {
+        // 小窗播放中：暂停命令作用到小窗（主播放器已让位，直接 pause 是空操作）
+        if (PiPManager.isActive) {
+          PiPManager.pausePlayback()
+          return
+        }
         this.pause()
       },
       seek: (positionMs: number) => {
         this.seekTo(positionMs)
       },
       next: () => {
+        // 小窗播放中：切集命令由小窗原地执行，避免主播放器并发加载双声
+        if (PiPManager.isActive) {
+          PiPManager.switchEpisode(true)
+          return
+        }
         this.selectEpisode(this.episodeIndex + 1)
       },
       previous: () => {
+        if (PiPManager.isActive) {
+          PiPManager.switchEpisode(false)
+          return
+        }
         this.selectEpisode(this.episodeIndex - 1)
+      },
+      fastForward: (deltaMs: number) => {
+        const target = this.currentTime + deltaMs
+        this.seekTo(this.totalTime > 0 ? Math.min(target, this.totalTime) : target)
+      },
+      rewind: (deltaMs: number) => {
+        this.seekTo(Math.max(this.currentTime - deltaMs, 0))
       }
     })
   }

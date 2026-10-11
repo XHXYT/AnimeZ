@@ -7,10 +7,8 @@ import { dataSourceManager } from '../api/DataSourceManager'
 import Logger from '../utils/Logger'
 import { SOURCE_CHANGED_EVENT, SCHEDULE_SOURCE_CHANGED_EVENT } from '../utils/EventBus'
 import { _AnimeState, AnimeState } from '../entryability/AnimeState'
-import { PiPManager } from '../player/PiPManager'
 import { DownloadDirHelper, DownloadLocationType } from '../utils/DownloadDirHelper'
 import { ToastUtil } from '../utils/ToastUtils'
-import { BackgroundPlayManager } from '../utils/BackgroundPlayManager'
 
 /** "更多"组条目 id（窗口模式下整组并入"我的"页底部更多卡片） */
 const MORE_GROUP_IDS: string[] = ['app_info', 'author_info', 'third_party_services']
@@ -203,7 +201,7 @@ export struct SettingsContent {
       new CustomItemInfo({
         id: 'player_control',
         title: '播放控制',
-        subtitle: '快捷手势与键盘快捷键',
+        subtitle: '播放、小窗、手势与键盘快捷键',
         type: ItemActionType.ROUTER,
         onChange: () => {
           AnimeState.pageStack.pushPathByName("PlayerControlSettingsPage", '')
@@ -222,6 +220,8 @@ export struct SettingsContent {
         ],
         onChange: (value) => {
           appSettings.default_player = value as string
+          // 切换播放器后部分设置项依赖播放器能力，重建列表实时联动
+          this.listVersion++
         }
       }),
       new CustomItemInfo({
@@ -245,59 +245,6 @@ export struct SettingsContent {
         ],
         onChange: (value) => {
           appSettings.episodes_order = value as "asc" | "desc"
-        }
-      }),
-      new CustomItemInfo({
-        id: 'auto_sensor_rotate',
-        title: '启用自动旋屏',
-        subtitle: '跟随传感器自动切换半屏/全屏播放',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.auto_sensor_rotate,
-        onChange: (value) => {
-          appSettings.auto_sensor_rotate = value as boolean
-        }
-      }),
-      new CustomItemInfo({
-        id: 'auto_play_next_episode',
-        title: '自动播放下一集',
-        subtitle: '视频结束后自动播放下一集',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.auto_play_next_episode,
-        onChange: (value) => {
-          appSettings.auto_play_next_episode = value as boolean
-        }
-      }),
-      new CustomItemInfo({
-        id: 'auto_play_on_no_wifi',
-        title: '非Wifi下自动播放',
-        subtitle: '非Wifi环境下不再提醒，自动播放视频',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.auto_play_on_no_wifi,
-        onChange: (value) => {
-          appSettings.auto_play_on_no_wifi = value as boolean
-          // 手动切换主开关时恢复弹窗提醒（清除「不再提醒」的取消记忆）
-          appSettings.metered_prompt_disabled = false
-        }
-      }),
-      new CustomItemInfo({
-        id: 'auto_pip_on_exit',
-        title: '退出播放页自动小窗',
-        subtitle: '返回、导航、后台时自动进入画中画小窗',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.auto_pip_on_exit,
-        onChange: (value) => {
-          appSettings.auto_pip_on_exit = value as boolean
-        }
-      }),
-      new CustomItemInfo({
-        id: 'background_play',
-        title: '后台继续播放',
-        subtitle: '应用切后台后继续播放声音，通知栏显示播放任务',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.background_play,
-        onChange: (value) => {
-          appSettings.background_play = value as boolean
-          BackgroundPlayManager.refresh()
         }
       }),
       new CustomItemInfo({
@@ -327,10 +274,6 @@ export struct SettingsContent {
       new CustomItemInfo({ id: 'group_more', title: '更多', type: ItemActionType.GROUP })
     ].concat(buildMoreGroupItems())
       .filter((item: CustomItemInfo) => {
-        // 小窗播放仅支持部分播放器后端：选了不支持的后端时隐藏自动小窗开关
-        if (item.id === 'auto_pip_on_exit') {
-          return PiPManager.isPlayerSupported(appSettings.default_player)
-        }
         // 窗口模式下"更多"组并入"我的"页底部更多卡片，设置列表内不再显示
         if (AnimeState.windowMode && (item.id === 'group_more' || MORE_GROUP_IDS.includes(item.id))) {
           return false
