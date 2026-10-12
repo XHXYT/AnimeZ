@@ -134,7 +134,7 @@ struct ButtonContent {
  */
 export interface ButtonConfig {
   // 基础属性
-  text?: string; // 按钮文本
+  text?: ResourceStr; // 按钮文本
   action?: () => void; // 点击事件
 
   // 图标属性 (image 和 symbol 互斥，优先使用 image)

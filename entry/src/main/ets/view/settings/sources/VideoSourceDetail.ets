@@ -51,7 +51,7 @@ struct VideoSourceDetail {
           title: this.vm.editingConfig.name || '新建数据源',
           buttons: [
             {
-              text: '保存',
+              text: $r('app.string.save'),
               type: ButtonType.Capsule,
               width: this.vm.hasChanges ? 56 : 48,
               height: 32,

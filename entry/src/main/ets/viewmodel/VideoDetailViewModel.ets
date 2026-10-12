@@ -14,11 +14,10 @@ import SystemBarUtils from '../utils/SystemBarUtils';
 import Logger from '../utils/Logger';
 import { ViewState } from '../components/StateView';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
-import { window } from '@kit.ArkUI';
 import VideoCollectionInfo from '../entity/VideoCollectionInfo';
 import { PiPManager, PiPNavigationInfo } from '../player/PiPManager';
 import { VideoCollectionTable } from '../db/impl/VideoCollectionDao';
-import VideoHistoryInfo, { HistoryInfo } from '../entity/VideoHistoryInfo';
+import VideoHistoryInfo from '../entity/VideoHistoryInfo';
 import { VideoHistoryTable } from '../db/impl/VideoHistoryDao';
 import { WebVideoResolver } from '../utils/WebVideoResolver';
 import M3u8AdFilter from '../utils/m3u8/M3u8AdFilter';
@@ -70,7 +69,7 @@ export class VideoDetailViewModel {
   public url: string = ''; // 剧集链接
 
   // 历史和收藏信息
-  @Trace public historyInfo: VideoHistoryInfo = HistoryInfo;
+  @Trace public historyInfo: VideoHistoryInfo = new VideoHistoryInfo('');
   public collectionInfo: VideoCollectionInfo = {
     id: null,
     link: '',
@@ -672,27 +671,33 @@ export class VideoDetailViewModel {
   }
 
   // 保存历史记录
-  private async saveHistoryInfo(needSave: boolean = false) {
+  private async saveHistoryInfo(needSave: boolean = false): Promise<boolean> {
     console.log(`当前执行保存历史记录次数：${this.saveCount}`)
     if (this.saveCount > 210 || needSave) {
-      if (!this.historyInfo) return;
+      // 详情未加载完成（link 为空）时没有可保存的内容，跳过防止插入全空记录
+      if (!this.historyInfo || !this.historyInfo.link) {
+        return false
+      }
       this.historyInfo.id = this.videoID;
       this.historyInfo.accessTime = new Date().getTime();
       try {
         const insertId = await this.videoHistoryInfoDB.save(this.historyInfo)
         if (insertId <= 0) {
           console.error(`历史数据保存失败`)
-          return
+          return false
         }
         Logger.w('tips', `保存历史记录成功，ID: ${insertId}`);
         this.videoID = insertId;
       } catch (error) {
         Logger.e('fail', `saveHistoryInfo 保存历史记录`, error);
+        return false
       }
       this.saveCount = 0
+      return true
     } else {
       this.saveCount++
     }
+    return false
   }
 
   // 检查视频历史信息
@@ -898,15 +903,26 @@ export class VideoDetailViewModel {
     this.restoreOrientation();
     // 任何路径离开详情页（返回键/页面内返回/手势）都恢复默认系统栏样式
     SystemBarUtils.setWindowSystemBarTransparent(false);
-    await this.saveHistoryInfo(true);
-    ToastUtil.showToast({ message: '历史记录已保存' });
-    // 触发历史记录更新事件
-    HISTORY_CHANGED_EVENT.emit();
+    // 导航离开详情页（返回/进入子页，非纯退后台）：退出全屏并强制恢复系统栏显示。
+    // 自动全屏经异步回调隐藏状态栏，若离开时全屏标志与实际窗口状态不同步（竞态早退），
+    // 仅靠 exitFullScreen 的标志守卫不会恢复，这里直接对窗口兜底恢复
+    const stackUnchanged: boolean = AnimeState.pageStack.size() == this.stackSizeOnShown
+    if (!stackUnchanged) {
+      if (this.playerManager.isFullScreen()) {
+        this.playerManager.exitFullScreen()
+      }
+      _AnimeState.window?.setWindowSystemBarEnable(['status', 'navigation'])
+    }
+    const saved = await this.saveHistoryInfo(true);
+    if (saved) {
+      ToastUtil.showToast({ message: '历史记录已保存' });
+      // 触发历史记录更新事件
+      HISTORY_CHANGED_EVENT.emit();
+    }
 
     if (this.playerManager.isPlaying()) {
       // 后台播放保持仅限"纯退后台"（页面栈未变化）：导航离开/返回（栈已变化）时
       // 页面即将销毁，必须走暂停/停止分支，否则播控卡片与长时任务在页面销毁后仍驻留
-      const stackUnchanged: boolean = AnimeState.pageStack.size() == this.stackSizeOnShown
       const keepForBackground: boolean = this.appSettings.background_play
         && BackgroundPlayManager.isBackgroundPlaying()
         && stackUnchanged
@@ -944,32 +960,15 @@ export class VideoDetailViewModel {
   }
 
   /**
-   * 按设置应用窗口方向：
-   * 开启"自动旋屏"→ 跟随系统（受锁定限制的自动旋转）；
-   * 关闭"自动旋屏"→ 视频页锁定竖屏，旋转手机不改变布局
-   */
+    * 按设置应用窗口方向（全应用统一策略）：开启"自由旋转"（默认）→ 跟随系统旋转；关闭 → 锁定竖屏
+    */
   private applyOrientationLock(): void {
-    const windowClass = _AnimeState.window
-    if (!windowClass) {
-      return
-    }
-    const orientation: window.Orientation = this.appSettings.auto_sensor_rotate
-      ? window.Orientation.AUTO_ROTATION_RESTRICTED
-      : window.Orientation.PORTRAIT
-    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
-      Logger.e('fail', `applyOrientationLock 设置窗口方向 code=${err.code}`, err)
-    })
+    this.appSettings.applyOrientation()
   }
 
-  /** 恢复窗口方向为跟随系统旋转 */
+  /** 离开播放页恢复窗口方向（同全局策略：自由旋转开→跟随系统；关→保持竖屏锁定） */
   private restoreOrientation(): void {
-    const windowClass = _AnimeState.window
-    if (!windowClass) {
-      return
-    }
-    windowClass.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED).catch((err: BusinessError) => {
-      Logger.e('fail', `restoreOrientation 恢复窗口方向 code=${err.code}`, err)
-    })
+    this.appSettings.applyOrientation()
   }
 
   // 销毁资源
@@ -1085,13 +1084,13 @@ export class VideoDetailViewModel {
     return this.videoWidth > 0 && this.videoHeight > 0 && this.videoHeight > this.videoWidth;
   }
 
-  // 处理手机横屏变化
-  public onPhoneLandscape(isPhoneLandscape: boolean) {
-    // 仅在开启"自动旋屏"设置时响应传感器横竖屏切换
-    if (!this.appSettings.auto_sensor_rotate) {
+  // 处理窗口横竖屏变化（传感器旋转/窗口尺寸变化触发，手机/平板通用）
+  public onLandscape(isLandscape: boolean) {
+    // 仅在开启"自动全屏"设置时响应传感器横竖屏切换
+    if (!this.appSettings.auto_fullscreen) {
       return
     }
-    if (isPhoneLandscape) {
+    if (isLandscape) {
       // 传感器触发的全屏保持跟随传感器，转回竖屏时可自动退出
       this.playerManager.enterFullScreen(true);
     } else {

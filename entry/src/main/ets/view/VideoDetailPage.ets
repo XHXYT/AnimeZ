@@ -7,12 +7,11 @@ import { CustomItemInfo, ItemActionType, MenuOption, makeSeekSecondsOptions } fr
 import { PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { PiPManager } from '../player/PiPManager';
-import { window, CustomContentDialog } from '@kit.ArkUI';
+import { CustomContentDialog } from '@kit.ArkUI';
 import { ButtonOptions } from '@ohos.arkui.advanced.Dialog';
 import StateView from '../components/StateView';
 import { VideoList } from '../components/VideoList';
 import { ConfigurationConstant } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { VideoNavigateInfo } from '../entity/VideoNavigateInfo';
 import { ToastUtil } from '../utils/ToastUtils';
 import { appSettings } from '../entryability/Settings';
@@ -24,7 +23,6 @@ import { VideoDetailViewModel } from '../viewmodel/VideoDetailViewModel';
 import SystemBarUtils from '../utils/SystemBarUtils';
 import EpisodeList from '../entity/EpisodeList';
 import EpisodeInfo from '../entity/EpisodeInfo';
-import Logger from '../utils/Logger';
 import { Header } from '../components/common/Header';
 import { CollapsibleSection } from '../components/common/CollapsibleSection';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
@@ -45,7 +43,7 @@ export function VideoDetailPageBuilder(name: string, param: Object) {
 @ComponentV2
 struct VideoDetailPage {
 
-  /** @description 全局状态单例（@Monitor 监听 isPhoneLandscape 路径） */
+  /** @description 全局状态单例（@Monitor 监听 isLandscape 路径） */
   @Local animeState: _AnimeState = AnimeState
 
   private playerManager: IPlayerManager = new PlayerManagerImpl()
@@ -151,9 +149,9 @@ struct VideoDetailPage {
     callback?.(cont, this.meteredNeverRemind)
   }
 
-  @Monitor('animeState.isPhoneLandscape')
-  onPhoneLandscape() {
-    this.viewModel.onPhoneLandscape(AnimeState.isPhoneLandscape);
+  @Monitor('animeState.isLandscape')
+  onLandscape() {
+    this.viewModel.onLandscape(AnimeState.isLandscape);
   }
 
   build() {
@@ -183,8 +181,8 @@ struct VideoDetailPage {
     .onReady(async (ctx: NavDestinationContext) => {
       const params: VideoNavigateInfo = ctx?.pathInfo?.param as VideoNavigateInfo;
       await this.viewModel.initialize(params);
-      // 进入页面时若手机已处于横屏，直接全屏（受"自动旋屏"设置控制）
-      this.viewModel.onPhoneLandscape(AnimeState.isPhoneLandscape);
+      // 进入页面时若已处于横屏，直接全屏（受"自动全屏"设置控制）
+      this.viewModel.onLandscape(AnimeState.isLandscape);
     })
     .onShown(() => {
       this.viewModel.onPageShow();
@@ -689,14 +687,36 @@ struct VideoDetailPage {
         }
       }),
       new CustomItemInfo({
-        id: 'ps_auto_rotate',
+        id: 'ps_auto_fullscreen',
         title: '自动全屏',
-        subtitle: '手机横屏时自动进入全屏',
+        subtitle: '进入详情页时自动全屏',
         type: ItemActionType.TOGGLE,
-        value: appSettings.auto_sensor_rotate,
+        value: appSettings.auto_fullscreen,
         onChange: (value) => {
-          appSettings.auto_sensor_rotate = value as boolean
-          this.applyAutoRotateOrientation(value as boolean)
+          appSettings.auto_fullscreen = value as boolean
+          // 开启时若当前已横屏，立即进入全屏（与进入详情/播放中旋转触发同款逻辑）
+          if (appSettings.auto_fullscreen && AnimeState.isLandscape) {
+            this.viewModel.onLandscape(true)
+          }
+        }
+      }),
+      new CustomItemInfo({
+        id: 'ps_free_rotate',
+        title: '自由旋转',
+        subtitle: '应用跟随传感器自由旋转',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.free_rotate,
+        onChange: (value) => {
+          const isOn = value as boolean
+          // 关闭自由旋转：先捕获当前方向（横屏锁横屏、竖屏锁竖屏）再关
+          if (!isOn) {
+            appSettings.lockCurrentOrientation()
+          }
+          appSettings.free_rotate = isOn
+          // 全屏中不即时改方向（退出全屏时按全局策略恢复），其余立即生效
+          if (!this.viewModel.isFullScreen) {
+            appSettings.applyOrientation()
+          }
         }
       }),
       new CustomItemInfo({
@@ -762,26 +782,9 @@ struct VideoDetailPage {
     .height('100%')
   }
 
-  /** 自动全屏开关联动窗口方向（与播放器控制层面板逻辑一致） */
-  private applyAutoRotateOrientation(isOn: boolean): void {
-    if (this.viewModel.isFullScreen) {
-      return
-    }
-    const windowClass = _AnimeState.window
-    if (!windowClass) {
-      return
-    }
-    const orientation: window.Orientation = isOn
-      ? window.Orientation.AUTO_ROTATION_RESTRICTED
-      : window.Orientation.PORTRAIT
-    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
-      Logger.e('fail', `applyAutoRotateOrientation 设置窗口方向 code=${err.code}`, err)
-    })
-  }
-
   /**
-   * 视频剧集列表：按线路分节，节标题可折叠（复用 CollapsibleSection）
-   */
+    * 视频剧集列表：按线路分节，节标题可折叠（复用 CollapsibleSection）
+    */
   @Builder EpisodeList() {
     ForEach(this.viewModel.videoDetailInfo.episodes, (episodeList: EpisodeList, episodeListIndex: number) => {
       if (episodeList.title != '') {

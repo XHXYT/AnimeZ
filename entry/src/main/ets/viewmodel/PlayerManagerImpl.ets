@@ -737,6 +737,9 @@ export default class PlayerManagerImpl implements IPlayerManager {
     if (this.fullScreenMode) {
       return
     }
+    // 同步置位：防止紧随的 exitFullScreen 因异步回调未执行而早退，
+    // 状态栏隐藏后无人恢复（自动全屏 + 快速旋转/离开页面场景）
+    this.fullScreenMode = true
     window.getLastWindow(getContext(this), (err, win) => {
       win.setWindowLayoutFullScreen(true)
       // 隐藏状态栏
@@ -756,7 +759,6 @@ export default class PlayerManagerImpl implements IPlayerManager {
         ? window.Orientation.AUTO_ROTATION_RESTRICTED
         : window.Orientation.AUTO_ROTATION_LANDSCAPE
       win.setPreferredOrientation(orientation)
-      this.fullScreenMode = true
       this.listeners.forEach((listener) => {
         console.log('PlayerManagerlmpl #enterFullScreen isFullScreen：', this.isFullScreen())
         listener.onFullScreenChanged(true)
@@ -768,6 +770,8 @@ export default class PlayerManagerImpl implements IPlayerManager {
     if (!this.fullScreenMode) {
       return
     }
+    // 同步复位（理由同 enterFullScreen）
+    this.fullScreenMode = false
     window.getLastWindow(getContext(this), (err, win) => {
       win.setWindowLayoutFullScreen(true)
       // 显示状态栏
@@ -781,7 +785,6 @@ export default class PlayerManagerImpl implements IPlayerManager {
       }
       // 设置窗口方向为自动但受系统锁定
       win.setPreferredOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED)
-      this.fullScreenMode = false
       this.listeners.forEach((listener) => {
         console.log('PlayerManagerlmpl #exitFullScreen isFullScreen：', this.isFullScreen())
         listener.onFullScreenChanged(false)

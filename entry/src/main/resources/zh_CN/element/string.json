@@ -15,6 +15,66 @@
     {
       "name": "datasync_desc",
       "value": "视频进度接续"
+    },
+    {
+      "name": "save",
+      "value": "保存"
+    },
+    {
+      "name": "select_all",
+      "value": "全选"
+    },
+    {
+      "name": "select_none",
+      "value": "全不选"
+    },
+    {
+      "name": "select_inverse",
+      "value": "反选"
+    },
+    {
+      "name": "select_range",
+      "value": "选中区间"
+    },
+    {
+      "name": "delete_selected_with_count",
+      "value": "删除(%d)"
+    },
+    {
+      "name": "range_hint_empty",
+      "value": "请选择项目"
+    },
+    {
+      "name": "range_hint_one",
+      "value": "已选择1项，请继续选择"
+    },
+    {
+      "name": "range_hint_all_selected",
+      "value": "已经全选了哦"
+    },
+    {
+      "name": "range_hint_will_select",
+      "value": "将选中区间 %d 到 %d"
+    },
+    {
+      "name": "range_hint_selected",
+      "value": "已选中区间 %d 到 %d"
+    },
+    {
+      "name": "range_hint_canceled",
+      "value": "已取消区间 %d 到 %d"
+    },
+    {
+      "name": "range_select_failed",
+      "value": "区间选择失败"
+    },
+    {
+      "name": "range_need_select_mode",
+      "value": "请先进入选择模式"
+    },
+    {
+      "name": "range_need_two_items",
+      "value": "请至少选择两个项目来创建区间"
     }
   ]
 }

@@ -17,20 +17,11 @@ struct Index {
 
   /** 深色模式监听 */
   DarkModeListener: mediaQuery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(dark-mode: true)')
-  /**手机横屏监听*/
-  PhoneLandscapeListener: mediaQuery.MediaQueryListener = this.getUIContext().getMediaQuery().matchMediaSync('(320vp< height <= 500vp) and (640vp< width <= 1000vp)')
 
   aboutToAppear() {
     this.DarkModeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
       AnimeState.darkModeImage = mediaQueryResult.matches as boolean
     })
-    if (deviceInfo.deviceType === 'phone') {
-      this.PhoneLandscapeListener.on('change', (mediaQueryResult: mediaQuery.MediaQueryResult) => {
-        AnimeState.isPhoneLandscape = mediaQueryResult.matches
-        console.info(`#媒体查询#手机横屏状态改变 结果: ${mediaQueryResult.matches}`)
-      })
-      AnimeState.isPhoneLandscape = this.PhoneLandscapeListener.matches
-    }
   }
 
   onDidBuild(): void {
@@ -45,7 +36,6 @@ struct Index {
 
   aboutToDisappear(): void {
     this.DarkModeListener.off('change')
-    this.PhoneLandscapeListener.off('change')
   }
 
 

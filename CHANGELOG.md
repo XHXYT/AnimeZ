@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.3] - 2026-10-11
+
+### 新增
+- ✨ 接入后台播放
+- ✨ 优化小窗播放
+- ✨ 处理流量播放
+
 ## [1.1.2] - 2026-10-10
 
 ### 新增

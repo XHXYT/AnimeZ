@@ -1,8 +1,10 @@
 import { bundleManager } from "@kit.AbilityKit"
+import { window } from "@kit.ArkUI"
+import { BusinessError } from "@kit.BasicServicesKit"
 import { SortType } from "../viewmodel/VideoSourcesViewModel"
 import { preferenceUtil } from "../utils/PreferenceUtil"
 import Logger from "../utils/Logger"
-import { _AnimeState } from "./AnimeState"
+import { _AnimeState, AnimeState } from "./AnimeState"
 import { VideoFit } from "../player/model/IPlayerManager"
 
 const SETTINGS_KEY = 'app_settings'
@@ -50,9 +52,17 @@ export class AppConfigs {
    */
   @Trace color_mode: number = ThemeColorMode.SYSTEM
   /**
-   * 自动旋转
+   * 自动全屏：手机/平板横屏（进入详情时已横屏/播放中转横屏）自动进入全屏
    */
-  @Trace auto_sensor_rotate: boolean = false
+  @Trace auto_fullscreen: boolean = false
+  /**
+   * 自由旋转：应用跟随传感器自由旋转（默认开启；关闭则锁定到关闭瞬间的屏幕方向）
+   */
+  @Trace free_rotate: boolean = true
+  /**
+   * 自由旋转关闭时锁定的窗口方向（关闭开关瞬间捕获：横屏锁横屏、竖屏锁竖屏）
+   */
+  @Trace locked_orientation: window.Orientation = window.Orientation.PORTRAIT
   /**
    * 视频目录页列表类型
    */
@@ -236,7 +246,17 @@ export class AppConfigs {
     // VideoPlayer（Video 组件）后端已移除：存量选择迁移到 AVPlayer
     this.default_player = savedPlayer === 'video' ? 'av' : savedPlayer
     this.color_mode = (json["color_mode"] as number) ?? this.color_mode
-    this.auto_sensor_rotate = (json["auto_sensor_rotate"] as boolean) ?? this.auto_sensor_rotate
+    // 旧版单开关 auto_sensor_rotate 拆分为自动全屏/自由旋转两个开关：
+    // 自动全屏沿用旧值迁移；自由旋转「默认开启」版本一次性重置（此前版本写入的 false 不保留），
+    // 迁移后写入 free_rotate_default_on 标记，用户后续手动关闭可正常持久化
+    const legacyRotate: boolean | undefined = json["auto_sensor_rotate"] as boolean
+    this.auto_fullscreen = (json["auto_fullscreen"] as boolean) ?? legacyRotate ?? this.auto_fullscreen
+    if ((json["free_rotate_default_on"] as boolean) === true) {
+      this.free_rotate = (json["free_rotate"] as boolean) ?? true
+    } else {
+      this.free_rotate = true
+    }
+    this.locked_orientation = (json["locked_orientation"] as window.Orientation) ?? this.locked_orientation
     this.category_UI_type = (json["category_UI_type"] as number) ?? this.category_UI_type
     this.episodes_order = (json["episodes_order"] as 'asc' | 'desc') ?? this.episodes_order
     this.video_sources_order = (json["video_sources_order"] as SortType) ?? this.video_sources_order
@@ -296,7 +316,15 @@ export class AppConfigs {
         this.max_downloading_count = (legacy["max_downloading_count"] as number) ?? this.max_downloading_count
         this.default_player = (legacy["default_player"] as string) ?? this.default_player
         this.color_mode = (legacy["color_mode"] as number) ?? this.color_mode
-        this.auto_sensor_rotate = (legacy["auto_sensor_rotate"] as boolean) ?? this.auto_sensor_rotate
+        // 旧版单开关 auto_sensor_rotate 拆分为自动全屏/自由旋转两个开关：
+        // 自动全屏沿用旧值迁移；自由旋转「默认开启」版本一次性重置（此后手动关闭正常持久化）
+        const legacyRotate: boolean | undefined = legacy["auto_sensor_rotate"] as boolean
+        this.auto_fullscreen = (legacy["auto_fullscreen"] as boolean) ?? legacyRotate ?? this.auto_fullscreen
+        if ((legacy["free_rotate_default_on"] as boolean) === true) {
+          this.free_rotate = (legacy["free_rotate"] as boolean) ?? true
+        } else {
+          this.free_rotate = true
+        }
         this.category_UI_type = (legacy["category_UI_type"] as number) ?? this.category_UI_type
         this.episodes_order = (legacy["episodes_order"] as 'asc' | 'desc') ?? this.episodes_order
         this.video_sources_order = (legacy["video_sources_order"] as SortType) ?? this.video_sources_order
@@ -322,7 +350,7 @@ export class AppConfigs {
    */
   @Monitor('auto_play_next_episode', 'key_homepage_source', 'auto_play_on_no_wifi', 'metered_prompt_disabled',
     'auto_resume_download_on_wifi', 'need_blur', 'max_downloading_count', 'default_player',
-    'color_mode', 'auto_sensor_rotate', 'category_UI_type', 'episodes_order',
+    'color_mode', 'auto_fullscreen', 'free_rotate', 'locked_orientation', 'category_UI_type', 'episodes_order',
     'video_sources_order', 'video_sources_group_filter', 'video_sources_group_filter_manager',
     'video_source_import_overwrite', 'pip_auto_outside', 'pip_auto_inside', 'pip_default_size',
     'danmaku_enabled', 'danmaku_opacity', 'danmaku_font_scale', 'danmaku_bold', 'danmaku_speed', 'danmaku_area',
@@ -347,7 +375,10 @@ export class AppConfigs {
         "max_downloading_count": this.max_downloading_count,
         "default_player": this.default_player,
         "color_mode": this.color_mode,
-        "auto_sensor_rotate": this.auto_sensor_rotate,
+        "auto_fullscreen": this.auto_fullscreen,
+        "free_rotate": this.free_rotate,
+        "locked_orientation": this.locked_orientation,
+        "free_rotate_default_on": true,
         "category_UI_type": this.category_UI_type,
         "episodes_order": this.episodes_order,
         "video_sources_order": this.video_sources_order,
@@ -391,6 +422,33 @@ export class AppConfigs {
   }
 
   /**
+   * 按自由旋转设置应用窗口方向（全应用统一策略，任意页面即时调用）：
+   * 开启（默认）→ 跟随传感器旋转；关闭 → 锁定到关闭开关时捕获的方向
+   */
+  public applyOrientation(): void {
+    const windowClass = _AnimeState.window
+    if (!windowClass) {
+      return
+    }
+    const orientation: window.Orientation = this.free_rotate
+      ? window.Orientation.AUTO_ROTATION_RESTRICTED
+      : this.locked_orientation
+    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
+      Logger.e('fail', `applyOrientation 设置窗口方向 code=${err.code}`, err)
+    })
+  }
+
+  /**
+   * 关闭自由旋转时调用：捕获当前窗口方向作为锁定方向（横屏锁横屏、竖屏锁竖屏），
+   * 之后 applyOrientation / 重启后均按此方向锁定，直到重新开启自由旋转
+   */
+  public lockCurrentOrientation(): void {
+    this.locked_orientation = AnimeState.windowWidth > AnimeState.windowHeight
+      ? window.Orientation.AUTO_ROTATION_LANDSCAPE
+      : window.Orientation.AUTO_ROTATION_PORTRAIT
+  }
+
+  /**
    * 清理数据 还原默认值
    */
   public async reset(): Promise<void> {
@@ -404,7 +462,9 @@ export class AppConfigs {
     this.max_downloading_count = 3
     this.default_player = 'av'
     this.color_mode = ThemeColorMode.SYSTEM
-    this.auto_sensor_rotate = false
+    this.auto_fullscreen = false
+    this.free_rotate = true
+    this.locked_orientation = window.Orientation.PORTRAIT
     this.category_UI_type = 0
     this.episodes_order = 'asc'
     this.video_sources_order = SortType.CUSTOM

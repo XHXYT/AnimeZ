@@ -1992,12 +1992,13 @@ export struct VideoPlayerController {
         }
         .width('100%')
 
+        // 旋屏开关（手机/平板通用）：自动全屏=进入详情/横屏自动全屏；自由旋转=跟随传感器旋转（默认开）
         Row() {
           Column() {
             Text('自动全屏')
               .fontSize(this.isFullScreen ? 16 : 13)
               .fontColor(Color.White)
-            Text('手机横屏时自动进入全屏')
+            Text('进入详情页时自动全屏')
               .fontSize(this.isFullScreen ? 12 : 10)
               .fontColor('#99ffffff')
               .margin({ top: 2 })
@@ -2006,9 +2007,34 @@ export struct VideoPlayerController {
 
           Blank()
 
-          Toggle({ type: ToggleType.Switch, isOn: appSettings.auto_sensor_rotate })
+            Toggle({ type: ToggleType.Switch, isOn: appSettings.auto_fullscreen })
+              .onChange((isOn: boolean) => {
+                appSettings.auto_fullscreen = isOn
+                // 开启时若当前已横屏，立即进入全屏（与进入详情/播放中旋转触发同款逻辑）
+                if (isOn && AnimeState.isLandscape) {
+                  this.playerManager.enterFullScreen(true)
+                }
+              })
+        }
+        .width('100%')
+
+        Row() {
+          Column() {
+            Text('自由旋转')
+              .fontSize(this.isFullScreen ? 16 : 13)
+              .fontColor(Color.White)
+            Text('应用跟随传感器自由旋转')
+              .fontSize(this.isFullScreen ? 12 : 10)
+              .fontColor('#99ffffff')
+              .margin({ top: 2 })
+          }
+          .alignItems(HorizontalAlign.Start)
+
+          Blank()
+
+          Toggle({ type: ToggleType.Switch, isOn: appSettings.free_rotate })
             .onChange((isOn: boolean) => {
-              appSettings.auto_sensor_rotate = isOn
+              appSettings.free_rotate = isOn
               this.applyAutoRotateOrientation(isOn)
             })
         }
@@ -2658,24 +2684,18 @@ export struct VideoPlayerController {
   }
 
   /**
-   * 自动全屏开关联动窗口方向：
-   * 开启 → 跟随传感器旋转（横屏时由媒体查询自动触发全屏）；
-   * 关闭 → 视频页锁定竖屏，旋转手机不再改变布局
+   * 自由旋转开关联动窗口方向（全应用统一策略）：
+   * 开启 → 跟随传感器旋转（横屏时自动触发全屏）；关闭 → 锁定到关闭瞬间的屏幕方向
    */
   private applyAutoRotateOrientation(isOn: boolean): void {
+    // 关闭自由旋转：先捕获当前方向（横屏锁横屏、竖屏锁竖屏）再关
+    if (!isOn) {
+      appSettings.lockCurrentOrientation()
+    }
     if (this.playerManager.isFullScreen()) {
       return
     }
-    const windowClass = _AnimeState.window
-    if (!windowClass) {
-      return
-    }
-    const orientation: window.Orientation = isOn
-      ? window.Orientation.AUTO_ROTATION_RESTRICTED
-      : window.Orientation.PORTRAIT
-    windowClass.setPreferredOrientation(orientation).catch((err: BusinessError) => {
-      Logger.e('fail', `applyAutoRotateOrientation 设置窗口方向 code=${err.code}`, err)
-    })
+    appSettings.applyOrientation()
   }
 
   private closeController() {

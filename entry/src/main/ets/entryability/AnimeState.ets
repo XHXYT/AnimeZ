@@ -23,6 +23,14 @@ export class _AnimeState {
   /** 窗口宽度 -vp */
   @Trace windowWidth: number = 0
 
+  /**
+   * 窗口横屏状态（宽>高，含手机/平板，随窗口尺寸变化响应式更新）
+   */
+  @Computed
+  get isLandscape(): boolean {
+    return this.windowWidth > this.windowHeight
+  }
+
   /** 全局路由栈（侧边栏内） */
   @Trace pageStack: NavPathStack = new NavPathStack()
   /** 全屏路由栈（PC 模式下视频详情/本地播放等全屏页面） */
@@ -38,8 +46,6 @@ export class _AnimeState {
 
   /** 系统深色模式（mediaQuery 监听，用于图标/图片资源切换） */
   @Trace darkModeImage: boolean = false
-  /** 手机横屏状态 */
-  @Trace isPhoneLandscape: boolean = false
   /** 窗口模式 true为PC窗口模式 false为普通窗口模式 */
   @Trace windowMode: boolean = false
   /** 窗口模式右上角系统三键区域避让宽度（vp） */

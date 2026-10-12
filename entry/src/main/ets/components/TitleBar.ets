@@ -10,7 +10,7 @@ export interface TitleBarButton {
   /** 图片图标资源（优先于 symbol） */
   image?: ResourceStr
   /** 文字按钮文本 */
-  text?: string
+  text?: ResourceStr
   /** 图标大小，默认 24vp */
   iconSize?: number
   /** 按钮宽度，默认 36vp */

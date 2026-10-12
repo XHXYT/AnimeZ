@@ -15,6 +15,66 @@
     {
       "name": "datasync_desc",
       "value": "Video progress resume"
+    },
+    {
+      "name": "save",
+      "value": "Save"
+    },
+    {
+      "name": "select_all",
+      "value": "Select All"
+    },
+    {
+      "name": "select_none",
+      "value": "Deselect All"
+    },
+    {
+      "name": "select_inverse",
+      "value": "Invert"
+    },
+    {
+      "name": "select_range",
+      "value": "Select Range"
+    },
+    {
+      "name": "delete_selected_with_count",
+      "value": "Delete(%d)"
+    },
+    {
+      "name": "range_hint_empty",
+      "value": "Select items"
+    },
+    {
+      "name": "range_hint_one",
+      "value": "1 selected, keep selecting"
+    },
+    {
+      "name": "range_hint_all_selected",
+      "value": "All items selected"
+    },
+    {
+      "name": "range_hint_will_select",
+      "value": "Will select range %d to %d"
+    },
+    {
+      "name": "range_hint_selected",
+      "value": "Selected range %d to %d"
+    },
+    {
+      "name": "range_hint_canceled",
+      "value": "Deselected range %d to %d"
+    },
+    {
+      "name": "range_select_failed",
+      "value": "Range selection failed"
+    },
+    {
+      "name": "range_need_select_mode",
+      "value": "Enter selection mode first"
+    },
+    {
+      "name": "range_need_two_items",
+      "value": "Select at least two items to create a range"
     }
   ]
 }

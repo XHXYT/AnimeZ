@@ -63,6 +63,11 @@ export class VideoHistoryTable extends AutoTable<VideoHistoryInfo> {
    */
   async save(item: VideoHistoryInfo): Promise<number> {
     Logger.d(this, 'save item=' + JSON.stringify(item))
+    // link 是 upsert 业务键：为空说明详情未加载完成，拒绝落库防止插入全空记录
+    if (!item.link) {
+      Logger.w(this, 'save rejected: empty link')
+      return 0
+    }
     let existingItem = await this.queryByLink(item.link)
     Logger.d(this, 'save existingItem = ' + JSON.stringify(existingItem))
     let result;
@@ -169,6 +174,15 @@ export class VideoHistoryTable extends AutoTable<VideoHistoryInfo> {
   async deleteByLink(link: string): Promise<number> {
     Logger.d(this, 'deleteByLink link=' + link)
     return this.deleteItem(this.getPredicates().equalTo('link', link))
+  }
+
+  /**
+   * 清理 link 为空的无效记录
+   * 修复：详情加载完成前离开播放页曾插入全空记录
+   */
+  async deleteEmptyLinkRows(): Promise<number> {
+    Logger.d(this, 'deleteEmptyLinkRows')
+    return this.deleteItem(this.getPredicates().equalTo('link', ''))
   }
 
   /**

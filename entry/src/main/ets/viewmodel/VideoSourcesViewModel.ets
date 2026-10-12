@@ -102,6 +102,8 @@ export class VideoSourcesViewModel {
     sources = this.applySorting(sources)
     // 应用分组
     this.videoSources = this.applyGrouping(sources)
+    // 列表变化后同步选择计数与全选状态（避免筛选/搜索后残留旧状态）
+    this.refreshSelectionState()
   }
 
   // 加载自定义分组
@@ -375,14 +377,7 @@ export class VideoSourcesViewModel {
 
   // 获取过滤后的源（用于全选判断）
   public getFilteredSources(): DataSourceConfig[] {
-    let sources = dataSourceManager.getAllDataSourceConfigs()
-    if (this.searchText) {
-      sources = sources.filter(source =>
-      source.name.toLowerCase().includes(this.searchText.toLowerCase()) ||
-      source.key.toLowerCase().includes(this.searchText.toLowerCase())
-      )
-    }
-    return sources
+    return this.videoSources
   }
 
   // 排序逻辑
@@ -452,6 +447,13 @@ export class VideoSourcesViewModel {
     this.selectionManager.toggleSelectionMode()
   }
 
+  // 同步选择计数与全选状态（全选口径统一为当前可见列表）
+  refreshSelectionState(): void {
+    this.selectCount = this.selectionManager.getSelectionCount()
+    const total = this.videoSources.length
+    this.hasSelectAll = total > 0 && this.selectCount === total
+  }
+
   // 切换项选择状态
   toggleItemSelection(item: DataSourceConfig) {
     this.selectionManager.toggleSelectItem(item)
@@ -462,22 +464,61 @@ export class VideoSourcesViewModel {
     if (this.hasSelectAll) {
       this.selectionManager.clearSelections()
     } else {
-      this.selectionManager.selectItems(this.getFilteredSources())
+      this.selectionManager.selectItems(this.videoSources)
     }
+    this.refreshSelectionState()
+  }
+
+  /**
+   * 检测当前选中项是否恰好构成可见列表中的一个连续区间
+   * @returns 区间索引列表（升序），非连续或选中数不足时返回 null
+   */
+  private getSelectedRangeIndices(): number[] | null {
+    const selectedCount = this.selectionManager.getSelectionCount()
+    if (selectedCount < 2) {
+      return null
+    }
+    const indices: number[] = []
+    for (let i = 0; i < this.videoSources.length; i++) {
+      if (this.selectionManager.isSelect(this.videoSources[i])) {
+        indices.push(i)
+      }
+    }
+    if (indices.length !== selectedCount) {
+      return null
+    }
+    const lo = indices[0]
+    const hi = indices[indices.length - 1]
+    if (hi - lo + 1 !== indices.length) {
+      return null
+    }
+    return indices
   }
 
   /**
    * 执行智能区间选择
-   * 根据当前选中项自动确定区间并选中
+   * 根据当前选中项自动确定区间并选中；已是连续区间时再次点击取消该区间
    */
   executeRangeSelection(): void {
     if (!this.selectionManager.isSelectionMode()) {
-      ToastUtil.showToast({ message: "请先进入选择模式" })
+      ToastUtil.showToast({ message: $r('app.string.range_need_select_mode') })
       return
     }
     const selectedCount = this.selectionManager.getSelectionCount()
     if (selectedCount < 2) {
-      ToastUtil.showToast({ message: "请至少选择两个项目来创建区间" })
+      ToastUtil.showToast({ message: $r('app.string.range_need_two_items') })
+      return
+    }
+    // 已是连续区间：再次点击取消该区间
+    const rangeIndices = this.getSelectedRangeIndices()
+    if (rangeIndices !== null) {
+      const lo = rangeIndices[0]
+      const hi = rangeIndices[rangeIndices.length - 1]
+      this.selectionManager.clearSelections()
+      this.refreshSelectionState()
+      ToastUtil.showToast({
+        message: $r('app.string.range_hint_canceled', lo + 1, hi + 1)
+      })
       return
     }
     const success = this.selectionManager.selectRangeBasedOnSelection(this.videoSources)
@@ -486,35 +527,45 @@ export class VideoSourcesViewModel {
       const lastItem = this.selectionManager.getLastSelected()
       const firstIndex = this.videoSources.findIndex(s => s.key === firstItem!.key)
       const lastIndex = this.videoSources.findIndex(s => s.key === lastItem!.key)
+      const lo = Math.min(firstIndex, lastIndex)
+      const hi = Math.max(firstIndex, lastIndex)
       ToastUtil.showToast({
-        message: `已选中区间 ${firstIndex + 1} 到 ${lastIndex + 1}`
+        message: $r('app.string.range_hint_selected', lo + 1, hi + 1)
       })
     } else {
-      ToastUtil.showToast({ message: "区间选择失败" })
+      ToastUtil.showToast({ message: $r('app.string.range_select_failed') })
     }
   }
 
   /**
    * 获取选中项的区间信息（用于提示）
    */
-  getRangeInfo(): string {
-    if (!this.selectionManager.isSelectionMode()) {
-      return ""
-    }
-    const selectedCount = this.selectionManager.getSelectionCount()
+  getRangeInfo(): ResourceStr {
+    // 读取 @Trace 状态以驱动 Text 刷新（selectionManager 非响应式，直接读取不会触发重渲染）
+    const selectedCount = this.selectCount
     if (selectedCount === 0) {
-      return "请选择项目"
+      return $r('app.string.range_hint_empty')
     } else if (selectedCount === 1) {
-      return "已选择1项，请继续选择"
-    } else if (selectedCount === this.videoSources.length) {
-      return "已经全选了哦"
-    }  else {
+      return $r('app.string.range_hint_one')
+    } else if (this.hasSelectAll) {
+      return $r('app.string.range_hint_all_selected')
+    } else {
+      // 已是连续区间：提示当前状态
+      const rangeIndices = this.getSelectedRangeIndices()
+      if (rangeIndices !== null) {
+        return $r('app.string.range_hint_selected', rangeIndices[0] + 1, rangeIndices[rangeIndices.length - 1] + 1)
+      }
+      // 非连续：提示按下按钮将执行的区间
       const firstItem = this.selectionManager.getFirstSelected()
       const lastItem = this.selectionManager.getLastSelected()
       if (firstItem && lastItem) {
         const firstIndex = this.videoSources.findIndex(s => s.key === firstItem.key)
         const lastIndex = this.videoSources.findIndex(s => s.key === lastItem.key)
-        return `将选中区间 ${firstIndex + 1} 到 ${lastIndex + 1}`
+        if (firstIndex > -1 && lastIndex > -1) {
+          const flo = Math.min(firstIndex, lastIndex)
+          const fhi = Math.max(firstIndex, lastIndex)
+          return $r('app.string.range_hint_will_select', flo + 1, fhi + 1)
+        }
       }
     }
     return ""
@@ -524,37 +575,22 @@ export class VideoSourcesViewModel {
    * 反选功能
    */
   toggleInverseSelection(): void {
-    // 获取当前过滤后的所有数据源
-    const filteredSources = this.getFilteredSources()
-    // 获取当前已选中的数据源
-    const selectedSources = Array.from(this.selectionManager.getSelections())
-    // 清除所有选中状态
-    this.selectionManager.clearSelections()
-    // 选中之前未被选中的项
+    // 基于当前可见列表反选（与全选口径一致）
+    const visibleSources = this.videoSources
     const toSelect: DataSourceConfig[] = []
-    for (let i = 0; i < filteredSources.length; i++) {
-      const source = filteredSources[i]
-      let isSelected = false
-      // 检查是否在已选中列表中
-      for (let j = 0; j < selectedSources.length; j++) {
-        if (selectedSources[j].key === source.key) {
-          isSelected = true
-          break
-        }
-      }
-      // 如果之前未被选中，则添加到待选中列表
-      if (!isSelected) {
-        toSelect.push(source)
+    for (let i = 0; i < visibleSources.length; i++) {
+      if (!this.selectionManager.isSelect(visibleSources[i])) {
+        toSelect.push(visibleSources[i])
       }
     }
+    // 清除所有选中状态
+    this.selectionManager.clearSelections()
     // 批量选中
     if (toSelect.length > 0) {
       this.selectionManager.selectItems(toSelect)
     }
-    // 更新状态
-    this.selectCount = toSelect.length
-    this.hasSelectAll = toSelect.length === filteredSources.length
-    Logger.i(this, `DataSourceManager.toggleInverseSelection Inverse selection completed: selected ${toSelect.length} items`)
+    this.refreshSelectionState()
+    Logger.i(this, `VideoSourcesViewModel.toggleInverseSelection Inverse selection completed: selected ${toSelect.length} items`)
   }
 
   /**

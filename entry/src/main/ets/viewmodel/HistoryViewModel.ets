@@ -35,7 +35,11 @@ export class HistoryViewModel {
    * 查询全部历史记录（按访问时间倒序，原 MyPage/VideoHistoryPage.loadHistoryList）
    */
   public async loadHistoryList() {
-    const list = await this.getDB().queryAllByAccessTimeDesc()
+    const db = this.getDB()
+    // 自愈：清理历史上误插入的全空记录（link 为空），失败不阻塞查询
+    await db.deleteEmptyLinkRows().catch(() => {
+    })
+    const list = await db.queryAllByAccessTimeDesc()
     if (list) {
       this.historyList = list
     }

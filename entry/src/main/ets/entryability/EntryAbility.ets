@@ -237,6 +237,9 @@ export default class EntryAbility extends UIAbility {
             _AnimeState.Context = this.context
             _AnimeState.window = mainWindow
 
+            // 按自由旋转设置应用初始窗口方向（关闭自由旋转时启动即锁定竖屏；设置已在 load 阶段就绪）
+            appSettings.applyOrientation()
+
             // 初始化通知
             ToastUtil.initContext(uiContext);
 

@@ -49,6 +49,9 @@ export class SelectionManager <T> {
             return false
         }
         this.selectionSet.add(item)
+        if (!this.selectionOrder.includes(item)) {
+            this.selectionOrder.push(item)
+        }
         this.notifySelectionChange(item, true)
         return true
     }
@@ -68,6 +71,10 @@ export class SelectionManager <T> {
     unselectItem(item: T): boolean {
         if (this.selectionSet.has(item)) {
             if (this.selectionSet.delete(item)) {
+                const index = this.selectionOrder.indexOf(item)
+                if (index > -1) {
+                    this.selectionOrder.splice(index, 1)
+                }
                 this.notifySelectionChange(item, false)
                 return true;
             }
@@ -93,21 +100,10 @@ export class SelectionManager <T> {
      * 重写 toggleSelectItem，记录选中顺序
      */
     toggleSelectItem(item: T) {
-        const wasSelected = this.isSelect(item)
-
-        if (this.selectItem(item)) {
-            // 新选中，添加到顺序数组末尾
-            if (!this.selectionOrder.includes(item)) {
-                this.selectionOrder.push(item)
-            }
-            return
-        }
-        if (this.unselectItem(item)) {
-            // 取消选中，从顺序数组中移除
-            const index = this.selectionOrder.indexOf(item)
-            if (index > -1) {
-                this.selectionOrder.splice(index, 1)
-            }
+        if (this.isSelect(item)) {
+            this.unselectItem(item)
+        } else {
+            this.selectItem(item)
         }
     }
 
@@ -158,8 +154,6 @@ export class SelectionManager <T> {
         // 选中区间内的所有项目
         for (let i = minIndex; i <= maxIndex; i++) {
             this.selectItem(allItems[i])
-            // 更新选中顺序
-            this.selectionOrder.push(allItems[i])
         }
         console.info(`SelectionManager.selectRangeBasedOnSelection Selected range ${minIndex} to${maxIndex}`)
         return true

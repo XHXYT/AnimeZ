@@ -72,18 +72,38 @@ struct PlayerControlSettingsPage {
           appSettings.background_play = value as boolean
           BackgroundPlayManager.refresh()
         }
-      }),
-      new CustomItemInfo({
-        id: 'auto_sensor_rotate',
-        title: '启用自动旋屏',
-        subtitle: '跟随传感器自动切换半屏/全屏播放',
-        type: ItemActionType.TOGGLE,
-        value: appSettings.auto_sensor_rotate,
-        onChange: (value) => {
-          appSettings.auto_sensor_rotate = value as boolean
-        }
       })
     ]
+    // 旋屏开关（手机/平板通用）：自动全屏=进入详情/横屏自动全屏；自由旋转=跟随传感器旋转（默认开）
+    items.push(
+      new CustomItemInfo({
+        id: 'auto_fullscreen',
+        title: '自动全屏',
+        subtitle: '进入详情页时自动全屏',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.auto_fullscreen,
+        onChange: (value) => {
+          appSettings.auto_fullscreen = value as boolean
+        }
+      }),
+      new CustomItemInfo({
+        id: 'free_rotate',
+        title: '自由旋转',
+        subtitle: '应用跟随传感器自由旋转',
+        type: ItemActionType.TOGGLE,
+        value: appSettings.free_rotate,
+        onChange: (value) => {
+          const isOn = value as boolean
+          // 关闭自由旋转：先捕获当前方向（横屏锁横屏、竖屏锁竖屏）再关
+          if (!isOn) {
+            appSettings.lockCurrentOrientation()
+          }
+          appSettings.free_rotate = isOn
+          // 全应用策略：拨动后立即生效（开→跟随传感器；关→锁定捕获方向）
+          appSettings.applyOrientation()
+        }
+      })
+    )
     // 小窗播放组：仅支持的播放器后端显示
     if (PiPManager.isPlayerSupported(appSettings.default_player)) {
       items.push(

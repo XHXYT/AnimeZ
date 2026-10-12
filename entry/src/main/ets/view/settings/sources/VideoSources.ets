@@ -32,13 +32,10 @@ struct VideoSources {
     onSelectionModeChange: (isSelectionMode: boolean) => {
       this.selectMode = isSelectionMode
       console.log(`当前编辑状态：${this.selectMode}`)
-      if (!this.selectMode) {
-        this.viewModel.selectCount = 0
-      }
+      this.viewModel.refreshSelectionState()
     },
     onSelectChange: (item: DataSourceConfig, isSelected) => {
-      this.viewModel.selectCount = this.selectionManager.getSelectionCount()
-      this.viewModel.hasSelectAll = this.viewModel.selectCount == this.viewModel.getFilteredSources().length
+      this.viewModel.refreshSelectionState()
     }
   }
 
@@ -120,33 +117,35 @@ struct VideoSources {
 
   @Builder
   VideoSourcesContent() {
-    // 列表内容
-    List({space: 12}) {
-      ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
-        // 普通数据项
-        ListItem() {
-          SourceItem({
-            selectionManager: this.selectionManager,
-            viewModel: this.viewModel,
-            selectMode: this.selectMode,
-            item: item
-          })
-        }
-        .onClick(() => {
-          if (this.selectMode) {
-            this.viewModel.toggleItemSelection(item)
-          } else {
-            // 点击跳转到详情页
-            this.goToSourceDetail(false, item)
+    Column() {
+      // 列表内容
+      List({space: 12}) {
+        ForEach(this.viewModel.videoSources, (item: DataSourceConfig) => {
+          // 普通数据项
+          ListItem() {
+            SourceItem({
+              selectionManager: this.selectionManager,
+              viewModel: this.viewModel,
+              selectMode: this.selectMode,
+              item: item
+            })
           }
+          .onClick(() => {
+            if (this.selectMode) {
+              this.viewModel.toggleItemSelection(item)
+            } else {
+              // 点击跳转到详情页
+              this.goToSourceDetail(false, item)
+            }
+          })
         })
-      })
-    }
-    .layoutWeight(1)
-    .padding({ left: 16, right: 16})
-    // 编辑工具栏
-    if (this.selectMode) {
-      this.EditToolbar()
+      }
+      .layoutWeight(1)
+      .padding({ left: 16, right: 16})
+      // 编辑工具栏
+      if (this.selectMode) {
+        this.EditToolbar()
+      }
     }
   }
 
@@ -154,15 +153,14 @@ struct VideoSources {
   EditToolbar() {
     Row() {
       Row() {
-        Image(this.viewModel.hasSelectAll ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
-          .fillColor(this.viewModel.hasSelectAll ?
-            $r('app.color.primary_color_accent') :
-            $r('app.color.color_text_minor'))
-        Text(this.viewModel.hasSelectAll ? '全不选' : '全选')
+        SymbolGlyph(this.viewModel.hasSelectAll ?
+          $r('sys.symbol.checkmark_circle_fill_1') :
+          $r('sys.symbol.ohos_circle'))
+          .fontSize(this.viewModel.hasSelectAll ? 27 : 23)
+          .fontColor(this.viewModel.hasSelectAll ?
+            [$r('app.color.primary_color')] :
+            [$r('app.color.color_text_minor')])
+        Text(this.viewModel.hasSelectAll ? $r('app.string.select_none') : $r('app.string.select_all'))
           .fontColor($r('app.color.color_text_major'))
           .fontSize(14)
           .margin({ left: 8 })
@@ -170,7 +168,7 @@ struct VideoSources {
       .onClick(() => {
         this.viewModel.toggleSelectAll()
       })
-      Text('反选')
+      Text($r('app.string.select_inverse'))
         .fontColor($r('app.color.color_text_major'))
         .margin({ left: 16})
         .fontSize(14)
@@ -179,8 +177,8 @@ struct VideoSources {
         })
       // 智能区间选择按钮
       Column() {
-        Text('选中区间')
-          .fontColor(this.viewModel.selectionManager.getSelectionCount() >= 2 ?
+        Text($r('app.string.select_range'))
+          .fontColor(this.viewModel.selectCount >= 2 ?
             Color.Orange : $r('app.color.color_text_major'))
           .fontSize(14)
         Text(this.viewModel.getRangeInfo())
@@ -191,7 +189,7 @@ struct VideoSources {
           this.viewModel.executeRangeSelection()
         })
       Blank()
-      Text(`删除(${this.viewModel.selectCount})`)
+      Text($r('app.string.delete_selected_with_count', this.viewModel.selectCount))
         .fontColor(this.viewModel.selectCount == 0 ?
           $r('app.color.color_text_minor') : Color.Red)
         .margin({ right: 3})
@@ -545,11 +543,13 @@ struct SourceItem {
     Row() {
       // 选择框
       if (this.selectMode) {
-        Image(this.isSelected ?
-          $r('app.media.ic_selection_selected') :
-          $r('app.media.ic_selection_none'))
-          .width(24)
-          .height(24)
+        SymbolGlyph(this.isSelected ?
+          $r('sys.symbol.checkmark_circle_fill_1') :
+          $r('sys.symbol.ohos_circle'))
+          .fontSize(this.isSelected ? 27 : 23)
+          .fontColor(this.isSelected ?
+            [$r('app.color.primary_color')] :
+            [$r('app.color.color_text_minor')])
           .margin({ right: 12 })
       }
       // 数据源信息
