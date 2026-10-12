@@ -6,12 +6,11 @@ import Logger from '../utils/Logger';
 import { ToastUtil } from '../utils/ToastUtils';
 import { sortEpisodesByNumber } from '../utils/SortUtils';
 import { appSettings } from '../entryability/Settings';
-import { AVVolumePanel } from '@kit.AudioKit';
 import { window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit'
 import { VolumeAndBrightnessProgress } from '../components/VolumeAndBrightnessProgress';
 import { appContinueModel } from '../viewmodel/AppContinueModel';
-import { audio } from '@kit.AudioKit';
+import { audio, AVVolumePanel } from '@kit.AudioKit';
 import { APP_RESUME_PROGRESS_EVENT, PLAYER_SETTINGS_EVENT, PLAYER_SWITCH_EVENT } from '../utils/EventBus';
 import emitter from '@ohos.events.emitter';
 import { _AnimeState, AnimeState } from '../entryability/AnimeState';
@@ -133,8 +132,12 @@ export struct VideoPlayerController {
   @Local episodeIndex: number = 0
   @Require @Param playerManager: IPlayerManager
   private showControllerTimer: number = -1;
-  /** @description 默认系统音量 */
-  @Local volume: number = 5
+  /** @description 系统媒体音量（0~volumeMax 级）：手势经 AVVolumePanel 绑定调节系统音量，硬件键变化实时回同步 */
+  @Local volume: number = 0
+  /** @description 系统媒体音量最大级数（通常 15，挂载时查询） */
+  private volumeMax: number = 15
+  /** @description 本次竖滑手势功能：brightness=亮度 volume=音量（按左右侧设置解析） */
+  private panAction: string = 'brightness'
   /** @description 是否在屏幕左侧触发手势 */
   private isLeftSideGesture: boolean = false
   /** @description 上一次手势的Y坐标 */
@@ -148,7 +151,8 @@ export struct VideoPlayerController {
   @Local isVolumeAndBrightnessVisible: boolean = false
   /** @description 播放器控制器的高度和宽度 */
   @Local playerControllerArea: IArea = { width: 0, height: 0 }
-  private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager();
+  /** @description 音量管理器：读取/监听系统媒体音量（手势经 AVVolumePanel 调节） */
+  private audioVolumeManager: audio.AudioVolumeManager = audio.getAudioManager().getVolumeManager()
 
   /** @description 弹幕控制中枢 */
   private danmakuCtrl: DanmakuController = new DanmakuController()
@@ -479,12 +483,18 @@ export struct VideoPlayerController {
     // 预创建投播 AVSession（AVCastPicker 组件点击时要求会话已存在）
     this.refreshCastSession()
 
-    // TODO API20 监听系统音频变化
-    this.audioVolumeManager.on('streamVolumeChange', audio.StreamUsage.STREAM_USAGE_MUSIC, (streamVolumeEvent: audio.StreamVolumeEvent) => {
-      console.info(`audioVolumeManager - StreamUsage of stream: ${streamVolumeEvent.streamUsage} `);
-      console.info(`audioVolumeManager - Volume level: ${streamVolumeEvent.volume} `);
-      console.info(`audioVolumeManager - Whether to updateUI: ${streamVolumeEvent.updateUi} `);
-    });
+    // 音量手势走系统媒体音量（AVVolumePanel 绑定即调节系统音量并弹系统音量条）：
+    // 挂载时同步当前系统音量/最大级数，监听硬件键等系统音量变化实时回同步
+    try {
+      this.volume = this.audioVolumeManager.getVolumeByStream(audio.StreamUsage.STREAM_USAGE_MUSIC)
+      this.volumeMax = this.audioVolumeManager.getMaxVolumeByStream(audio.StreamUsage.STREAM_USAGE_MUSIC)
+    } catch (error) {
+      Logger.e('fail', 'getVolumeByStream', error)
+    }
+    this.audioVolumeManager.on('streamVolumeChange', audio.StreamUsage.STREAM_USAGE_MUSIC,
+      (streamVolumeEvent: audio.StreamVolumeEvent) => {
+        this.volume = streamVolumeEvent.volume
+      })
 
     // 初始控制层可见，启动 5 秒无操作自动隐藏
     this.closeController()
@@ -497,7 +507,6 @@ export struct VideoPlayerController {
       this.showControllerTimer = -1;
     }
 
-    this.audioVolumeManager.off('streamVolumeChange')
     this.stopRewind()
     this.stopSpeedBoost()
     this.danmakuCtrl.release()
@@ -510,6 +519,8 @@ export struct VideoPlayerController {
       this.setScreenBrightness(-1)
     }
     this.castManager.destroy()
+    // 页面销毁时移除系统音量变化监听
+    this.audioVolumeManager.off('streamVolumeChange')
   }
 
   onDidBuild(): void {
@@ -664,8 +675,10 @@ export struct VideoPlayerController {
               }
             } else {
               this.panAxis = 1
-              // 纵向：判定侧边（左亮度/右音量），以当前Y为基线
+              // 纵向：按起点所在半区解析手势功能（左/右各自可在设置中配置为亮度或应用内音量），以当前Y为基线
               this.isLeftSideGesture = this.panStartX < this.playerControllerArea.width / 2;
+              this.panAction = (this.isLeftSideGesture ? appSettings.left_swipe_gesture
+                : appSettings.right_swipe_gesture) === 'volume' ? 'volume' : 'brightness'
               this.lastGestureY = currentY;
               return
             }
@@ -684,23 +697,20 @@ export struct VideoPlayerController {
             this.progress = target / duration * 100
             this.currentTime = VideoTimeUtils.stringForTime(target)
           } else {
-            // 纵向：左半区亮度 / 右半区音量
+            // 纵向：按解析出的手势功能调节亮度或应用内音量
             this.isVolumeAndBrightnessVisible = true;
             const deltaY = currentY - this.lastGestureY;
-            if (this.isLeftSideGesture) {
+            if (this.panAction === 'volume') {
+              // 每滑动30px改变1级系统媒体音量，向上滑动增大（AVVolumePanel 绑定同步系统音量）
+              const volumeChange = -deltaY / 30;
+              this.volume = this.getValidValue(this.volume + volumeChange, 0, this.volumeMax)
+            } else {
               // 每滑动100px改变0.1亮度，向上滑动增加亮度
               const brightnessChange = -deltaY / 100;
               let curBrightness = this.screenBrightness + brightnessChange;
               curBrightness = this.getValidValue(curBrightness, 0.0, 1.0);
               this.screenBrightness = curBrightness;
               this.setScreenBrightness(this.screenBrightness);
-            } else {
-              // 每滑动30px改变1级音量，向上滑动增加音量
-              const volumeChange = -deltaY / 30;
-              let curVolume = this.volume + volumeChange;
-              curVolume = curVolume >= 15.0 ? 15.0 : curVolume;
-              curVolume = curVolume <= 0.0 ? 0.0 : curVolume;
-              this.volume = curVolume;
             }
             this.lastGestureY = currentY;
           }
@@ -761,20 +771,16 @@ export struct VideoPlayerController {
   VolumeAndBrightnessBuilder() {
     if (this.isVolumeAndBrightnessVisible) {
       VolumeAndBrightnessProgress({
-        isVolume: !this.isLeftSideGesture,
-        volumeProgress: (this.volume / 15) * 100, // 将音量 0-15 转换为 0-100
+        isVolume: this.panAction === 'volume',
+        volumeProgress: (this.volume / this.volumeMax) * 100, // 将系统媒体音量级数转换为 0-100
         brightnessProgress: this.screenBrightness * 100 // 将亮度 0-1 转换为 0-100
       })
     }
 
-    // 系统音量面板（左侧，基于屏幕全局定位）
+    // 系统音量面板：volumeLevel 变化即调节系统媒体音量并弹出系统音量条
     AVVolumePanel({
       volumeLevel: this.volume,
       volumeParameter: {
-        // position: {
-        //   x: -100,
-        //   y: -200
-        // }
       }
     })
   }
@@ -1051,17 +1057,19 @@ export struct VideoPlayerController {
     }
   }
 
-  /** 键盘步进调节音量（0-15，联动音量面板） */
+  /** 键盘步进调节系统媒体音量（0~volumeMax 级，经 AVVolumePanel 同步系统音量） */
   private adjustVolumeByStep(delta: number): void {
-    this.isLeftSideGesture = false
-    this.volume = this.getValidValue(this.volume + delta, 0, 15)
+    this.panAction = 'volume'
+    this.volume = this.getValidValue(this.volume + delta, 0, this.volumeMax)
+    this.isVolumeAndBrightnessVisible = true
+    this.setHidePanelTimer()
   }
 
   /** 键盘步进调节亮度（0-1，步进 0.05，联动亮度面板） */
   private adjustBrightnessByStep(delta: number): void {
+    this.panAction = 'brightness'
     this.screenBrightness = this.getValidValue(this.screenBrightness + delta, 0.0, 1.0)
     this.setScreenBrightness(this.screenBrightness)
-    this.isLeftSideGesture = true
     this.isVolumeAndBrightnessVisible = true
     this.setHidePanelTimer()
   }
@@ -2865,14 +2873,5 @@ export struct VideoPlayerController {
     } catch (exception) {
       Logger.e('fail', 'getMainWindowSync', exception);
     }
-  }
-
-  /**
-   * @description 监听显示音量面板
-   */
-  @Monitor('volume')
-  private showVolume() {
-    this.isVolumeAndBrightnessVisible = true;
-    this.setHidePanelTimer()
   }
 }

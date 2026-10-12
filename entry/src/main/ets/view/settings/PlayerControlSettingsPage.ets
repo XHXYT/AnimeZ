@@ -181,6 +181,34 @@ struct PlayerControlSettingsPage {
           appSettings.double_tap_seek_rewind = Number(value)
         }
       }),
+      new CustomItemInfo({
+        id: 'left_swipe_gesture',
+        title: '左侧上下滑动',
+        subtitle: '播放器左半区上下滑动的功能',
+        type: ItemActionType.MENU,
+        value: appSettings.left_swipe_gesture,
+        menuOptions: [
+          new MenuOption('brightness', '亮度'),
+          new MenuOption('volume', '音量')
+        ],
+        onChange: (value) => {
+          appSettings.left_swipe_gesture = String(value)
+        }
+      }),
+      new CustomItemInfo({
+        id: 'right_swipe_gesture',
+        title: '右侧上下滑动',
+        subtitle: '播放器右半区上下滑动的功能',
+        type: ItemActionType.MENU,
+        value: appSettings.right_swipe_gesture,
+        menuOptions: [
+          new MenuOption('brightness', '亮度'),
+          new MenuOption('volume', '音量')
+        ],
+        onChange: (value) => {
+          appSettings.right_swipe_gesture = String(value)
+        }
+      }),
 
       // 键盘快捷键组
       new CustomItemInfo({ id: 'group_shortcuts', title: '键盘快捷键', type: ItemActionType.GROUP })

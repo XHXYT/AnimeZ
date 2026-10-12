@@ -148,6 +148,14 @@ export class AppConfigs {
    */
   @Trace video_fit: VideoFit = VideoFit.Contain
   /**
+   * 播放器左侧上下滑动手势功能：brightness=亮度 volume=音量（应用内音量）
+   */
+  @Trace left_swipe_gesture: string = 'brightness'
+  /**
+   * 播放器右侧上下滑动手势功能：brightness=亮度 volume=音量
+   */
+  @Trace right_swipe_gesture: string = 'volume'
+  /**
    * 双击播放器右侧区域快进的秒数，默认 10 秒
    */
   @Trace double_tap_seek_forward: number = 10
@@ -282,6 +290,11 @@ export class AppConfigs {
     this.danmaku_hide_duplicate = (json["danmaku_hide_duplicate"] as boolean) ?? this.danmaku_hide_duplicate
     this.danmaku_block_words = (json["danmaku_block_words"] as string) ?? this.danmaku_block_words
     this.video_fit = (json["video_fit"] as VideoFit) ?? this.video_fit
+    // 左右滑动手势功能：非法值回退默认（左亮度/右音量）
+    this.left_swipe_gesture =
+      (json["left_swipe_gesture"] as string) === 'volume' ? 'volume' : 'brightness'
+    this.right_swipe_gesture =
+      (json["right_swipe_gesture"] as string) === 'brightness' ? 'brightness' : 'volume'
     this.double_tap_seek_forward = (json["double_tap_seek_forward"] as number) ?? this.double_tap_seek_forward
     this.double_tap_seek_rewind = (json["double_tap_seek_rewind"] as number) ?? this.double_tap_seek_rewind
     this.player_shortcuts = (json["player_shortcuts"] as string) ?? this.player_shortcuts
@@ -357,6 +370,7 @@ export class AppConfigs {
     'danmaku_block_scroll', 'danmaku_block_fixed', 'danmaku_block_color', 'danmaku_hide_duplicate',
     'danmaku_block_words',
     'video_fit', 'double_tap_seek_forward', 'double_tap_seek_rewind', 'player_shortcuts',
+    'left_swipe_gesture', 'right_swipe_gesture',
     'search_precise', 'search_block_words', 'search_scope', 'search_scope_groups', 'search_scope_sources',
     'search_result_style', 'download_location', 'download_separate_route', 'schedule_source_key',
     'background_play', 'm3u8_ad_filter')
@@ -403,6 +417,8 @@ export class AppConfigs {
         "double_tap_seek_forward": this.double_tap_seek_forward,
         "double_tap_seek_rewind": this.double_tap_seek_rewind,
         "player_shortcuts": this.player_shortcuts,
+        "left_swipe_gesture": this.left_swipe_gesture,
+        "right_swipe_gesture": this.right_swipe_gesture,
         "search_precise": this.search_precise,
         "search_block_words": this.search_block_words,
         "search_scope": this.search_scope,
@@ -489,6 +505,8 @@ export class AppConfigs {
     this.double_tap_seek_forward = 10
     this.double_tap_seek_rewind = 10
     this.player_shortcuts = ''
+    this.left_swipe_gesture = 'brightness'
+    this.right_swipe_gesture = 'volume'
     this.search_precise = false
     this.search_block_words = ''
     this.search_scope = 'all'
